@@ -1,0 +1,9 @@
+.env
+node_modules/
+*.log
+.env.*
+!.env.example
+tests/screens/
+
+# Quell-Grafiken und Entwuerfe: nur im privaten Repo (dort bleiben schon getrackte Dateien), nie im oeffentlichen
+art/

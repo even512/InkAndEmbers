@@ -1,0 +1,22 @@
+{
+  "name": "even-foreverchronicle",
+  "version": "0.9.0",
+  "private": true,
+  "description": "EveN_ForeverChronicle: Reise-Chronik als WoW-Addon (Sammler) mit Node-Hilfsskripten",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "check": "node scripts/check-lua.mjs",
+    "install-addon": "node scripts/install-addon.mjs",
+    "data": "node scripts/build-todo-data.mjs && node scripts/build-quest-data.mjs --fetch",
+    "types-doc": "node scripts/types-doc.mjs"
+  },
+  "devDependencies": {
+    "fengari": "^0.1.5",
+    "luaparse": "^0.3.1",
+    "vitest": "^5.0.3"
+  }
+}

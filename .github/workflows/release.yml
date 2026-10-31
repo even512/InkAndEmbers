@@ -1,0 +1,37 @@
+# Release to CurseForge with the BigWigs packager.
+#   git tag v0.9.0-beta1 && git push origin v0.9.0-beta1   -> uploaded as BETA   (tag contains "beta")
+#   git tag v0.9.0-alpha1 ...                              -> uploaded as ALPHA  (tag contains "alpha")
+#   git tag v1.0.0 && git push origin v1.0.0               -> uploaded as RELEASE (any other tag)
+# Needs once: the secret CF_API_KEY (CurseForge API token) as an ENVIRONMENT secret of the environment "release"
+# (Settings > Environments > release; add required reviewers there, so no tag uploads without an approval),
+# and the project number in the TOC (## X-Curse-Project-ID in addon/EveN_ForeverChronicle/EveN_ForeverChronicle.toc;
+# 0 = nothing is uploaded). Packaging rules: .pkgmeta. Checks before a tag: npm ci && npm run check && npm test.
+# Actions are pinned to a commit SHA (the tag is named in the comment); update them deliberately, never via a moving tag.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# no permissions by default; the job below asks only for what it needs
+permissions: {}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write # create the GitHub release and attach the package
+    steps:
+      - name: Checkout (full history and tags, the packager needs them)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Package and upload
+        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0 # v2.6.1
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}

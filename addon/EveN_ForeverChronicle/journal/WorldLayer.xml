@@ -1,0 +1,19 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\..\FrameXML\UI.xsd">
+	<!-- K-W (W1): Pin-Vorlagen der Weltkarten-Ebene (journal/WorldLayer.lua). Die Mixins sind globale Tabellen aus WorldLayer.lua
+	     (in der TOC davor); die Basis MapCanvasPinMixin traegt WorldLayer.install nach. Keine geschuetzten Vorlagen. -->
+	<Frame name="EveNChronicleWorldPinTemplate" mixin="EveNChronicleWorldPinMixin" virtual="true">
+		<Size x="20" y="20"/>
+		<Scripts>
+			<OnLoad method="OnLoad"/>
+			<OnEnter method="OnMouseEnter"/>
+			<OnLeave method="OnMouseLeave"/>
+			<OnMouseUp method="OnMouseUp"/>
+		</Scripts>
+	</Frame>
+	<Frame name="EveNChronicleWorldRouteTemplate" mixin="EveNChronicleWorldRouteMixin" virtual="true">
+		<Size x="1" y="1"/>
+		<Scripts>
+			<OnLoad method="OnLoad"/>
+		</Scripts>
+	</Frame>
+</Ui>

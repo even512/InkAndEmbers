@@ -1,0 +1,37 @@
+# BigWigs packager configuration (https://github.com/BigWigsMods/packager/wiki/Preparing-the-PackageMeta-File)
+# The repository keeps the three addons below addon/; the release zip contains them as three top-level folders:
+#   EveN_ForeverChronicle/               main addon (MIT, graphics: all rights reserved)
+#   EveN_ForeverChronicle_QuestData/     quest data (GPL-3.0, LoadOnDemand)
+#   EveN_ForeverChronicle_Data/          enemy and item lists (GPL-3.0, LoadOnDemand)
+package-as: EveN_ForeverChronicle
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+enable-nolib-creation: no
+
+move-folders:
+  EveN_ForeverChronicle/addon/EveN_ForeverChronicle: EveN_ForeverChronicle
+  EveN_ForeverChronicle/addon/EveN_ForeverChronicle_QuestData: EveN_ForeverChronicle_QuestData
+  EveN_ForeverChronicle/addon/EveN_ForeverChronicle_Data: EveN_ForeverChronicle_Data
+
+# Everything outside the addon folders stays out of the zip, plus the development simulation
+# (journal/SimPanel.lua; its TOC line is removed by the #@do-not-package@ block in the TOC).
+ignore:
+  - addon/EveN_ForeverChronicle/journal/SimPanel.lua
+  - .github
+  - .gitignore
+  - .gitattributes
+  - .env.example
+  - art
+  - docs
+  - scripts
+  - tests
+  - node_modules
+  - CHECKPOINT.md
+  - README.md
+  - LICENSE
+  - package.json
+  - package-lock.json
+  - vitest.config.mjs

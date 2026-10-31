@@ -1,0 +1,5 @@
+<Bindings>
+  <Binding name="EVENCHRONICLE_TOGGLE" header="EVENCHRONICLE" category="ADDONS">
+    EveNChronicle_ToggleJournal()
+  </Binding>
+</Bindings>

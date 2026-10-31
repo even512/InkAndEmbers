@@ -1,0 +1,17 @@
+## Interface: 120105, 16001
+## Title: EveN Forever Chronicle - Data
+## Title-deDE: EveN Forever Chronicle - Daten
+## Notes: Enemy and item lists for the to-do goals of EveN Forever Chronicle. Loaded on demand only.
+## Notes-deDE: Gegner- und Gegenstandsliste für die To-Do-Ziele von EveN Forever Chronicle. Wird nur bei Bedarf geladen.
+## Author: EveN
+## Version: @project-version@
+## LoadOnDemand: 1
+## Dependencies: EveN_ForeverChronicle
+## X-QuestieDB-Version: 1.0.9-dev.7901fee
+## X-Attribution: Data: QuestieDB (Questie team and contributors), version 1.0.9-dev.7901fee. License: GPL-3.0 (see LICENSE and LICENSE-NOTE.md). Game world content (c) Blizzard Entertainment.
+## X-License: GPL-3.0
+## X-Source-License: https://github.com/Questie/QuestieDB/blob/master/LICENSE.md
+
+Zones.lua
+Npcs.lua
+Items.lua
