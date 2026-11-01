@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.2
+
+### Changed
+- Retail: the "Open" tab under Quests is turned off in the Retail client and shows a short note instead. Its quest
+  data comes from WoW Forever (classic quests) and does not match the reworked retail zones, so the list would show
+  quests that no longer exist there. The quest data add-on is no longer loaded in Retail at all.
+  WoW Forever is not affected.
+- A Retail source for open quests, based on the game's own quest information, is planned for a later version.
+
 ## 0.9.1
 
 ### New

@@ -1306,6 +1306,7 @@ L.add("enUS", "m.OpenQuests", {
   INTERFACE_VERSION = "Add-on out of date (game version)",
   INCOMPATIBLE = "Add-on doesn't match this game version",
   CORRUPT = "Add-on corrupted",
+  RETAIL = "The quest data comes from WoW Forever and does not match the retail zones",
   BANNED = "blocked by the game",
   INSECURE = "blocked by the game",
   NOT_DEMAND_LOADED = "not load-on-demand (LoadOnDemand missing)",

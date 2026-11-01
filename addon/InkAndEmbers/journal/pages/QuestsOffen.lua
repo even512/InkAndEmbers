@@ -36,6 +36,7 @@ local T = ns.Locale.ns("p.QuestsOffen", {
   empty = "Keine offenen Quests in dieser Zone.", emptyAll = "Keine offenen Quests gefunden.",
   noData = "Questdaten nicht geladen", noDataHint = "Prüfen mit /chronik diag",
   noDataRight = "Die Karte erscheint, sobald die Questdaten geladen sind.",
+  retailHead = "Nur in WoW Forever", retailRight = "Offene Quests gibt es vorerst nur in WoW Forever.",
   noMap = "Für dieses Gebiet liefert der Client keine Karte.", noMapTest = "Testmodus: diese Zone hat keine Retail-Karte.",
   unplaced = "%d Zonen ohne Lage auf dieser Karte",
   pick = "Wählt links eine Quest oder klickt ein ! auf der Karte.",
@@ -713,8 +714,9 @@ function View:Render(keepData)
     ui.pager.label:SetShown(not unavailable)
   end
   if unavailable then
-    W.setText(ui.emptyHead, T.noData)
-    W.setText(ui.emptyBody, OQ.reasonText(res.reason or zones.reason) .. ". " .. T.noDataHint)
+    local reason = res.reason or zones.reason
+    W.setText(ui.emptyHead, reason == "RETAIL" and T.retailHead or T.noData)
+    W.setText(ui.emptyBody, OQ.reasonText(reason) .. "." .. (reason == "RETAIL" and "" or " " .. T.noDataHint))
   else
     local zItems = { { text = T.allZones, count = zones.total.open, value = "all", active = self.zone == "all" } }
     local zoneName
@@ -729,7 +731,8 @@ function View:Render(keepData)
     ui.rowsList:Refresh()
   end
   ui.emptyRight:SetShown(unavailable and true or false)
-  W.setText(ui.emptyRight, unavailable and T.noDataRight or "")
+  local retail = (res.reason or zones.reason) == "RETAIL"
+  W.setText(ui.emptyRight, unavailable and (retail and T.retailRight or T.noDataRight) or "")
   for _, f in ipairs({ ui.num, ui.numLbl, ui.numMore, ui.caption, ui.map, ui.selName, ui.selSub, ui.selWhy, ui.todo, ui.todoMsg }) do
     f:SetShown(not unavailable)
   end

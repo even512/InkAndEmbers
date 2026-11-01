@@ -78,6 +78,7 @@ local T = ns.Locale.ns("m.OpenQuests", {
   INTERFACE_VERSION = "Zusatzaddon veraltet (Spielversion)",
   INCOMPATIBLE = "Zusatzaddon passt nicht zu dieser Spielversion",
   CORRUPT = "Zusatzaddon beschädigt",
+  RETAIL = "Die Questdaten stammen aus WoW Forever und passen nicht zu den Retail-Zonen",
   BANNED = "vom Spiel gesperrt",
   INSECURE = "vom Spiel gesperrt",
   NOT_DEMAND_LOADED = "nicht auf Abruf ladbar (LoadOnDemand fehlt)",
@@ -330,7 +331,16 @@ local function cleanReason(r)
   return r and sub(r, 1, 40) or nil
 end
 
+-- Retail client (same check as Journal.MapSpace.client: Forever has its own WOW_PROJECT_ID): the QuestieDB data does not
+-- match retail zones, so the open quest list stays off there; the test mode (OpenQuests.setTest) and
+-- OpenQuests.ALLOW_RETAIL (tests of the retail map space) keep it on.
+function OpenQuests.retailClient()
+  local id, main = num(rawget(_G, "WOW_PROJECT_ID")), num(rawget(_G, "WOW_PROJECT_MAINLINE"))
+  return id ~= nil and id == main
+end
+
 local function loadData()
+  if not S.test and not OpenQuests.ALLOW_RETAIL and OpenQuests.retailClient() then return fail("RETAIL") end
   if S.data then return true end
   if adopt() then return loaded() end
   if inCombat() then return fail("COMBAT") end
@@ -363,7 +373,7 @@ end
 
 local REASON_KEYS = { DISABLED = true, DEP_DISABLED = true, MISSING = true, DEP_MISSING = true, INTERFACE_VERSION = true,
   INCOMPATIBLE = true, CORRUPT = true, BANNED = true, INSECURE = true, NOT_DEMAND_LOADED = true, COMBAT = true,
-  NOT_LOGGED_IN = true, NO_API = true, NO_DATA = true, ERROR = true, UNKNOWN = true }
+  NOT_LOGGED_IN = true, NO_API = true, NO_DATA = true, ERROR = true, UNKNOWN = true, RETAIL = true }
 OpenQuests.REASONS = setmetatable({}, { __index = function(_, k)
   if type(k) == "string" and REASON_KEYS[k] then return T[k] end
 end })

@@ -238,6 +238,7 @@ L.add("enUS", "p.QuestsOffen", {
   empty = "No open quests in this zone.", emptyAll = "No open quests found.",
   noData = "Quest data not loaded", noDataHint = "Check with /chronik diag",
   noDataRight = "The map appears as soon as the quest data is loaded.",
+  retailHead = "WoW Forever only", retailRight = "Open quests are only available in WoW Forever for now.",
   noMap = "The client provides no map for this area.", noMapTest = "Test mode: this zone has no Retail map.",
   unplaced = "%d zones without a position on this map",
   pick = "Choose a quest on the left or click a ! on the map.",
