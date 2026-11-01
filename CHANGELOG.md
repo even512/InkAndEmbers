@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.1
+
+### New
+- The quick note field and the to-do note now each have a small close button ("x") in the top right corner of their
+  header. It hides only that note; the other one stays where it is. Bring it back with `/chronik note` or
+  `/chronik todo`, or in the add-on settings (Options > AddOns > Ink & Embers).
+
+### Changed
+- First regular release: the version no longer carries a "beta" suffix.
+- The README now links to the CurseForge project page.
+
 ## 0.9.0-beta1 (first public beta)
 
 First public version of Ink & Embers: An Adventurer's Journal: a leveling journal that records your journey while you play.

@@ -25,6 +25,7 @@ TodoTracker.ANIM = 0.24
 TodoTracker.HOVER_GRACE = 0.12
 TodoTracker.GROW_MODES = { "down", "up" }
 TodoTracker.BOOK_W, TodoTracker.BOOK_H = 18, 16
+TodoTracker.CLOSE_W = 14
 TodoTracker.DEFAULTS = { shown = false, style = "pad", locked = false, combatHide = false, hideEmpty = true, marks = true, w = 250, h = 250,
   open = "always", grow = "down" }
 TodoTracker.KINDS = { free = true, place = true, kill = true, item = true }
@@ -63,6 +64,8 @@ TodoTracker.TEXT = ns.Locale.ns("TodoTracker", {
   growLabel = "Aufklappen nach",
   grow = { down = "Unten", up = "Oben" },
   growDesc = "Unten: der Zettel rollt unter dem Kopf auf. Oben: der Kopf bleibt stehen, der Zettel rollt über ihm auf.",
+  close = "Notizzettel ausblenden",
+  closeHint = "/chronik todo blendet ihn wieder ein.",
   openBook = "To Do im Buch öffnen",
   openBookHint = "Öffnet das Reisejournal auf der To-Do-Seite.",
   kind = { free = "Freies Ziel", place = "Ort erreichen", kill = "Gegner töten", item = "Gegenstände finden" },
@@ -632,6 +635,47 @@ end
 
 TodoTracker.fontString, TodoTracker.setFont, TodoTracker.colorOf = fontString, setFont, colorOf
 
+-- Small "x" in the head (shared with QuickNote): hides the note; paint with TodoTracker.paintClose(b, isPad).
+function TodoTracker.newClose(parent, onClick, title, hint)
+  local b = CreateFrame("Button", nil, parent)
+  b:SetSize(TodoTracker.CLOSE_W, 16)
+  b:RegisterForClicks("LeftButtonUp")
+  b.label = fontString(b, "ARTWORK")
+  b.label:SetPoint("CENTER", b, "CENTER", 0, 1)
+  b.label:SetText("x")
+  b:SetScript("OnClick", function()
+    if GameTooltip then GameTooltip:Hide() end
+    if ns.Core then ns.Core.safe(onClick) else onClick() end
+  end)
+  b:SetScript("OnEnter", function(self)
+    self.hover = true
+    TodoTracker.paintClose(self, self.isPad)
+    if GameTooltip then
+      GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+      GameTooltip:AddLine(title, 1, 0.82, 0)
+      if hint then GameTooltip:AddLine(hint, 0.8, 0.8, 0.8, true) end
+      GameTooltip:Show()
+    end
+  end)
+  b:SetScript("OnLeave", function(self)
+    self.hover = false
+    TodoTracker.paintClose(self, self.isPad)
+    if GameTooltip then GameTooltip:Hide() end
+  end)
+  return b
+end
+
+function TodoTracker.paintClose(b, isPad)
+  if not b then return end
+  b.isPad = isPad
+  setFont(b.label, isPad and "hand" or "text", isPad and 18 or 12)
+  local c = isPad and "sepia" or TodoTracker.PLAIN.extra
+  if b.hover then c = isPad and "red" or TodoTracker.PLAIN.hover end
+  b.label:SetTextColor(colorOf(c))
+  if b.label.SetShadowOffset then b.label:SetShadowOffset(isPad and 0 or 1, isPad and 0 or -1) end
+  if b.label.SetShadowColor then b.label:SetShadowColor(0, 0, 0, isPad and 0 or 0.9) end
+end
+
 function TodoTracker.build()
   if st.frame then return st.frame end
   local f = CreateFrame("Frame", TodoTracker.NAME, UIParent)
@@ -781,6 +825,10 @@ function TodoTracker.build()
     if GameTooltip then GameTooltip:Hide() end
   end)
   st.book = book
+  st.close = TodoTracker.newClose(head, function()
+    TodoTracker.setShown(false)
+    say(T.off)
+  end, T.close, T.closeHint)
 
   local grip = CreateFrame("Button", nil, body)
   grip:SetSize(14, 14)
@@ -857,7 +905,7 @@ function TodoTracker.build()
   end)
   -- Hover mode: every child reports enter/leave; collapse only after a short grace period once the mouse is really outside
   -- (the client reports leaving the parent when the mouse moves onto a child frame).
-  for _, w in ipairs({ f, head, chev, lock, book, grip }) do TodoTracker.watch(w) end
+  for _, w in ipairs({ f, head, chev, lock, book, st.close, grip }) do TodoTracker.watch(w) end
   for _, row in ipairs(st.rows) do TodoTracker.watch(row) end
 
   st.frame = f
@@ -913,6 +961,7 @@ function TodoTracker.applyStyle()
   for _, m in ipairs({ st.chev.closed, st.chev.open }) do m:SetVertexColor(colorOf(isPad and "sepia" or TodoTracker.PLAIN.extra)) end
   paintLock(st.lock)
   TodoTracker.paintBook()
+  TodoTracker.paintClose(st.close, isPad)
   paintGrip(st.grip)
   st.style = s.style
 end
@@ -954,7 +1003,7 @@ function TodoTracker.layout()
     local tabL, tabR = S.tab[1] * w, S.tab[2] * w
     local titleR = padL + (num(st.title:GetStringWidth()) or 0)
     local countW = showCount and (num(st.count:GetStringWidth()) or 0) or 0
-    local countL = w - padR + 3 - 16 - 4 - TodoTracker.BOOK_W - 6 - countW
+    local countL = w - padR + 3 - TodoTracker.CLOSE_W - 2 - 16 - 4 - TodoTracker.BOOK_W - 6 - countW
     if titleR > tabL - 4 or countL < tabR + 4 then
       top = max(top, floor((TodoTracker.padY(st.pad, S.tab[3]) or 0) + 2.5))
       below = true
@@ -983,12 +1032,14 @@ function TodoTracker.layout()
     st.head:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
   end
   st.head:SetHeight(top + M.head)
-  st.lock:ClearAllPoints()
+  st.close:ClearAllPoints()
   if up then
-    st.lock:SetPoint("TOPRIGHT", f, "BOTTOMRIGHT", -padR + 3, st.collapsedH - (top + floor((M.head - 18) / 2)))
+    st.close:SetPoint("TOPRIGHT", f, "BOTTOMRIGHT", -padR + 3, st.collapsedH - (top + floor((M.head - 16) / 2)))
   else
-    st.lock:SetPoint("TOPRIGHT", f, "TOPRIGHT", -padR + 3, -(top + floor((M.head - 18) / 2)))
+    st.close:SetPoint("TOPRIGHT", f, "TOPRIGHT", -padR + 3, -(top + floor((M.head - 16) / 2)))
   end
+  st.lock:ClearAllPoints()
+  st.lock:SetPoint("RIGHT", st.close, "LEFT", -2, 0)
   st.book:ClearAllPoints()
   st.book:SetPoint("RIGHT", st.lock, "LEFT", -4, 0)
   at(st.title, padL, top + shift)

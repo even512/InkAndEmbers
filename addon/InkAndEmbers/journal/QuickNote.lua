@@ -32,6 +32,8 @@ QuickNote.TEXT = ns.Locale.ns("QuickNote", {
   off = "Schnellnotiz ausgeblendet. /chronik notiz blendet sie wieder ein.",
   notReadyChar = "Die Schnellnotiz wartet noch auf Euren Charakter.",
   usage = "/chronik notiz [an|aus] - Schnellnotiz ein-/ausblenden",
+  close = "Schnellnotiz ausblenden",
+  closeHint = "/chronik notiz blendet sie wieder ein.",
   openBook = "Notizen im Buch öffnen",
   openBookLast = "Öffnet das Buch bei Eurer zuletzt gespeicherten Notiz.",
   openBookPage = "Öffnet die Notizen-Seite im Buch.",
@@ -298,6 +300,10 @@ function QuickNote.build()
     if GameTooltip then GameTooltip:Hide() end
   end)
   st.button = btn
+  st.close = TT.newClose(head, function()
+    QuickNote.setShown(false)
+    say(T.off)
+  end, T.close, T.closeHint)
   st.status = TT.fontString(head)
   st.status:SetJustifyH("RIGHT")
   st.status:SetWordWrap(false)
@@ -397,8 +403,10 @@ function QuickNote.applyStyle()
   st.title:SetPoint("TOPLEFT", f, "TOPLEFT", padL, -top)
   st.title:SetHeight(headH)
   if st.title.SetJustifyV then st.title:SetJustifyV("MIDDLE") end
+  st.close:ClearAllPoints()
+  st.close:SetPoint("TOPRIGHT", f, "TOPRIGHT", -M.padR + 2, -(top + floor((headH - 16) / 2)))
   st.button:ClearAllPoints()
-  st.button:SetPoint("TOPRIGHT", f, "TOPRIGHT", -M.padR + 2, -(top + floor((headH - QuickNote.BTN_H) / 2)))
+  st.button:SetPoint("RIGHT", st.close, "LEFT", -2, 0)
   st.status:ClearAllPoints()
   st.status:SetPoint("RIGHT", st.button, "LEFT", -5, 0)
   st.status:SetHeight(headH)
@@ -411,6 +419,7 @@ function QuickNote.applyStyle()
   st.placeholder:SetWidth(w - padL - M.padR - 4)
   st.style = s
   QuickNote.paintButton()
+  TT.paintClose(st.close, isPad)
   QuickNote.paintPlaceholder()
 end
 
