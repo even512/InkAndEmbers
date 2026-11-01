@@ -34,7 +34,7 @@ HUD elements that can be moved in the game's Edit Mode. The interface and the te
 
 ## Installation
 
-From CurseForge: install "Ink & Embers: An Adventurer's Journal" with your usual addon manager. It brings all three folders below.
+From [CurseForge](https://www.curseforge.com/wow/addons/ink-embers-an-adventurers-journal): install "Ink & Embers: An Adventurer's Journal" with your usual addon manager. It brings all three folders below.
 
 By hand: copy these three folders from `addon/` into `Interface/AddOns` of your game folder (`_forever_` or `_retail_`):
 
