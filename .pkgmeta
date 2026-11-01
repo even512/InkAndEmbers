@@ -1,9 +1,9 @@
 # BigWigs packager configuration (https://github.com/BigWigsMods/packager/wiki/Preparing-the-PackageMeta-File)
 # The repository keeps the three addons below addon/; the release zip contains them as three top-level folders:
-#   EveN_ForeverChronicle/               main addon (MIT, graphics: all rights reserved)
-#   EveN_ForeverChronicle_QuestData/     quest data (GPL-3.0, LoadOnDemand)
-#   EveN_ForeverChronicle_Data/          enemy and item lists (GPL-3.0, LoadOnDemand)
-package-as: EveN_ForeverChronicle
+#   InkAndEmbers/               main addon (MIT, graphics: all rights reserved)
+#   InkAndEmbers_QuestData/     quest data (GPL-3.0, LoadOnDemand)
+#   InkAndEmbers_Data/          enemy and item lists (GPL-3.0, LoadOnDemand)
+package-as: InkAndEmbers
 
 manual-changelog:
   filename: CHANGELOG.md
@@ -12,14 +12,14 @@ manual-changelog:
 enable-nolib-creation: no
 
 move-folders:
-  EveN_ForeverChronicle/addon/EveN_ForeverChronicle: EveN_ForeverChronicle
-  EveN_ForeverChronicle/addon/EveN_ForeverChronicle_QuestData: EveN_ForeverChronicle_QuestData
-  EveN_ForeverChronicle/addon/EveN_ForeverChronicle_Data: EveN_ForeverChronicle_Data
+  InkAndEmbers/addon/InkAndEmbers: InkAndEmbers
+  InkAndEmbers/addon/InkAndEmbers_QuestData: InkAndEmbers_QuestData
+  InkAndEmbers/addon/InkAndEmbers_Data: InkAndEmbers_Data
 
 # Everything outside the addon folders stays out of the zip, plus the development simulation
 # (journal/SimPanel.lua; its TOC line is removed by the #@do-not-package@ block in the TOC).
 ignore:
-  - addon/EveN_ForeverChronicle/journal/SimPanel.lua
+  - addon/InkAndEmbers/journal/SimPanel.lua
   - .github
   - .gitignore
   - .gitattributes

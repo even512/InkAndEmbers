@@ -1,4 +1,4 @@
-// EveN_ForeverChronicle: Kill-Embleme der Kampf-Seite (Gewoehnlich/Elite/Rar/Boss): Freistellung und Zuschnitt des Bogens
+// InkAndEmbers: Kill-Embleme der Kampf-Seite (Gewoehnlich/Elite/Rar/Boss): Freistellung und Zuschnitt des Bogens
 // art/journal/kill_emblems_v2.jpg (freigegebener Bogen, 2752 x 1536: vier Embleme nebeneinander auf Magenta #FF00FF;
 // Bronze-Wolf, Gold-Drache, Silber-Drache, Eisen-Schaedel, jedes mit leerem Band/leerer Plakette unten fuer die Zahl).
 //

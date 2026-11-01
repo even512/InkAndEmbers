@@ -1,11 +1,11 @@
-// Erzeugt das Datenaddon EveN_ForeverChronicle_Data (To-Do-Ziele, Z2): Gegnerliste und Gegenstandsliste.
+// Erzeugt das Datenaddon InkAndEmbers_Data (To-Do-Ziele, Z2): Gegnerliste und Gegenstandsliste.
 //
 // Aufruf:  node scripts/build-todo-data.mjs [--questie <QuestieDB_Forever.toc>] [--forever <ordner>] [--out <ordner>] [--help]
 //   --questie  QuestieDB im Forever-Stand ("baked" TOC, Vertragsversion 4). Standard: erste vorhandene von
 //              $CHRONICLE_QUESTIE_TOC, <WOW_DIR>\_classic_beta_\...\QuestieDB_Forever.toc, <WOW_DIR>\_forever_\...\QuestieDB_Forever.toc
 //              (WOW_DIR und CHRONICLE_QUESTIE_TOC aus der Umgebung oder .env)
 //   --forever  Forever-Datenbank (Dump von data.morthen.net, siehe README "Questdaten neu erzeugen"). Standard: $CHRONICLE_FOREVER_DB
-//   --out      Zielordner. Standard: addon\EveN_ForeverChronicle_Data (dort liegt auch die feste TOC)
+//   --out      Zielordner. Standard: addon\InkAndEmbers_Data (dort liegt auch die feste TOC)
 // Exit-Codes: 0 = ok, 1 = Fehler (Quelle fehlt/unlesbar, Ergebnis unplausibel oder zu gross, unbekannte Option)
 //
 // Ergebnis (reproduzierbar: sortiert, ohne Zeitstempel; nur aus den lokalen Quellen):
@@ -14,6 +14,12 @@
 //   Items.lua  EveNChronicleTodoData.item  = eine Zeichenkette, je Gegenstand "\n<id>\t<Name>\t<qualitaet>" (qualitaet leer = unbekannt)
 //   Zones.lua  EveNChronicleTodoData.zones = { [gebietsID] = "Name", ... } (nur Gebiete, die in der Gegnerliste vorkommen)
 //   Namen: deDE bevorzugt (Forever-Datenbank, dann QuestieDB-Uebersetzung), sonst Englisch. Sortiert nach Name, dann ID.
+//   Englische Namen (nur fuer englische Addon-Sprache, siehe journal/model/TodoData.lua): je Liste eine zweite Datei,
+//   die nur laeuft, wenn das Hauptaddon vor dem Laden EveNChronicleTodoLang = "enUS" gesetzt hat:
+//   NpcsEn.lua    EveNChronicleTodoData.npcEn    = je Gegner "\n<id>\t<englischer Name>", sortiert nach dem englischen Namen
+//   ItemsEn.lua   EveNChronicleTodoData.itemEn   = je Gegenstand "\n<id>\t<englischer Name>", sortiert nach dem englischen Namen
+//   ZonesEn.lua   EveNChronicleTodoData.zonesEn  = { [gebietsID] = "Name", ... } (nur Gebiete, deren englischer Name vom deutschen abweicht)
+//   Stufe, Rang und Gebiet stehen nur in der deutschen Liste (gleiche IDs); Verknuepfung immer ueber die ID.
 // Gegner-Filter (Heuristik, Recherche "To-Do-Gegnerliste"): mit Spawn, Stufe (max) 1..MAX_LEVEL, nicht freundlich zu beiden Fraktionen,
 //   keine Dienst-Flags (alles ausser Gossip: Questgeber, Haendler, Lehrer, Flugmeister, ...), keine Platzhalter-Namen.
 // Gegenstands-Filter: Beute (Gegner, Objekt, Behaelter) oder Questbelohnung laut QuestieDB, Name bekannt.
@@ -29,7 +35,7 @@ import { fileURLToPath } from "node:url";
 import { inflateSync } from "node:zlib";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-export const DATA_ADDON = "EveN_ForeverChronicle_Data";
+export const DATA_ADDON = "InkAndEmbers_Data";
 const DEFAULT_OUT = path.join(ROOT, "addon", DATA_ADDON);
 const QUESTIE_REL = path.join("Interface", "AddOns", "QuestieDB", "QuestieDB_Forever.toc");
 
@@ -51,7 +57,7 @@ const OBJECT_TABLE_FIELDS = new Set([2, 3, 4, 7]);
 const RANK_NUM = { 0: "", 1: "e", 2: "R", 3: "b", 4: "r" };
 const RANK_TEXT = { Normal: "", Elite: "e", "Rare Elite": "R", Boss: "b", Rare: "r" };
 
-const HELP = `EveN_ForeverChronicle: Datenaddon ${DATA_ADDON} (Gegner- und Gegenstandsliste) erzeugen
+const HELP = `InkAndEmbers: Datenaddon ${DATA_ADDON} (Gegner- und Gegenstandsliste) erzeugen
 
 Aufruf:
   node scripts/build-todo-data.mjs [--questie <QuestieDB_Forever.toc>] [--forever <ordner>] [--out <ordner>]
@@ -323,7 +329,11 @@ export function openForever(dir) {
     const en = zonesEn?.zones?.[String(id)]?.name;
     return typeof deName === "string" && deName ? deName : typeof en === "string" ? en : undefined;
   };
-  return { npc, item, deNpc: de?.npc ?? {}, deItem: de?.item ?? {}, spawns, zoneName };
+  const zoneNameEn = (id) => {
+    const en = zonesEn?.zones?.[String(id)]?.name;
+    return typeof en === "string" ? en : undefined;
+  };
+  return { npc, item, deNpc: de?.npc ?? {}, deItem: de?.item ?? {}, spawns, zoneName, zoneNameEn };
 }
 
 /** Dateinamen eines Ordners (nur echte Dateien, sortiert) */
@@ -379,7 +389,7 @@ export function buildNpcs(q, f) {
     const qRank = int(q.field("Npc", id, NPC.rank));
     const rank = typeof m?.rank === "string" && m.rank in RANK_TEXT ? RANK_TEXT[m.rank] : (RANK_NUM[qRank] ?? "");
     const zone = int(q.field("Npc", id, NPC.zoneID)) || int(m?.zone) || 0;
-    out.push({ id, name: de || en, min, max, rank, zone: zone > 0 ? zone : 0 });
+    out.push({ id, name: de || en, en, min, max, rank, zone: zone > 0 ? zone : 0 });
   }
   return { list: sortByName(out), stats: st };
 }
@@ -397,14 +407,14 @@ export function buildItems(q, f) {
     const de = cleanName(f.deItem[String(id)]) || cleanName(q.deDE("Item", id));
     if (de) st.de++;
     const quality = int(m?.quality);
-    out.push({ id, name: de || en, quality: quality !== undefined && quality >= 0 && quality <= 7 ? quality : undefined });
+    out.push({ id, name: de || en, en, quality: quality !== undefined && quality >= 0 && quality <= 7 ? quality : undefined });
   }
   return { list: sortByName(out), stats: st };
 }
 
-function sortByName(list) {
+function sortByName(list, prop = "name") {
   return list
-    .map((r) => ({ r, k: foldKey(r.name) }))
+    .map((r) => ({ r, k: foldKey(r[prop]) }))
     .sort((a, b) => (a.k < b.k ? -1 : a.k > b.k ? 1 : a.r.id - b.r.id))
     .map((x) => x.r);
 }
@@ -413,6 +423,11 @@ function sortByName(list) {
 
 export function npcBlob(list) {
   return list.map((r) => `\n${r.id}\t${r.name}\t${r.min}\t${r.max === r.min ? "" : r.max}\t${r.rank}\t${r.zone || ""}`).join("") + "\n";
+}
+
+/** Englische Namensliste: je Eintrag "\n<id>\t<englischer Name>", sortiert nach dem englischen Namen (dann ID) */
+export function enBlob(list) {
+  return sortByName(list, "en").map((r) => `\n${r.id}\t${r.en}`).join("") + "\n";
 }
 
 export function itemBlob(list) {
@@ -432,11 +447,14 @@ function luaQuote(s) {
 }
 
 const HEAD = (what, info) =>
-  `-- EveN_ForeverChronicle_Data: ${what}. GENERATED by scripts/build-todo-data.mjs, do not edit by hand.\n` +
+  `-- InkAndEmbers_Data: ${what}. GENERATED by scripts/build-todo-data.mjs, do not edit by hand.\n` +
   "-- License: GPL-3.0 (see LICENSE and LICENSE-NOTE.md). Data: QuestieDB (Questie team and contributors, https://github.com/Questie/QuestieDB; license status: https://github.com/Questie/QuestieDB/blob/master/LICENSE.md); reformatted and extended by scripts/build-todo-data.mjs. Game world content (c) Blizzard Entertainment.\n" +
   `-- Sources: ${info}\n` +
   "-- Loaded on demand only (LoadOnDemand) by journal/model/TodoData.lua of the main addon; format described there.\n" +
   "EveNChronicleTodoData = EveNChronicleTodoData or {}\n";
+
+// Wache der englischen Dateien: laufen nur, wenn das Hauptaddon vor dem Laden EveNChronicleTodoLang = "enUS" gesetzt hat
+const EN_GUARD = 'if EveNChronicleTodoLang ~= "enUS" then return end\n';
 
 async function writeAtomic(file, text) {
   const tmp = `${file}.tmp`;
@@ -468,9 +486,26 @@ export async function build({ questie, forever, out }) {
     "EveNChronicleTodoData.zones = {\n" +
     [...zones.entries()].sort((a, b) => a[0] - b[0]).map(([id, n]) => `  [${id}] = ${luaQuote(n)},\n`).join("") +
     "}\n";
-  const sizes = { npc: Buffer.byteLength(npcText), item: Buffer.byteLength(itemText), zones: Buffer.byteLength(zoneText) };
-  if (sizes.npc > MAX_LIST_BYTES || sizes.item > MAX_LIST_BYTES) {
-    throw new Error(`Liste zu gross (Gegner ${sizes.npc} B, Gegenstaende ${sizes.item} B; Grenze ${MAX_LIST_BYTES} B)`);
+  const zonesEn = new Map();
+  for (const id of zones.keys()) {
+    const n = cleanName(f.zoneNameEn(id));
+    if (n && n !== zones.get(id)) zonesEn.set(id, n);
+  }
+  const zoneLines = (m) => "{\n" + [...m.entries()].sort((a, b) => a[0] - b[0]).map(([id, n]) => `  [${id}] = ${luaQuote(n)},\n`).join("") + "}\n";
+  const npcEnText = HEAD("enemy list, English names", info) + EN_GUARD +
+    `-- Enemies: ${npcs.list.length}\n` +
+    `EveNChronicleTodoData.npcEn = ${luaLong(enBlob(npcs.list))}\n`;
+  const itemEnText = HEAD("item list, English names", info) + EN_GUARD +
+    `-- Items: ${items.list.length}\n` +
+    `EveNChronicleTodoData.itemEn = ${luaLong(enBlob(items.list))}\n`;
+  const zoneEnText = HEAD("zone names of the enemy list, English", info) + EN_GUARD +
+    "EveNChronicleTodoData.zonesEn = " + zoneLines(zonesEn);
+  const sizes = {
+    npc: Buffer.byteLength(npcText), item: Buffer.byteLength(itemText), zones: Buffer.byteLength(zoneText),
+    npcEn: Buffer.byteLength(npcEnText), itemEn: Buffer.byteLength(itemEnText), zonesEn: Buffer.byteLength(zoneEnText),
+  };
+  if (Math.max(sizes.npc, sizes.item, sizes.npcEn, sizes.itemEn) > MAX_LIST_BYTES) {
+    throw new Error(`Liste zu gross (Gegner ${sizes.npc}/${sizes.npcEn} B, Gegenstaende ${sizes.item}/${sizes.itemEn} B; Grenze ${MAX_LIST_BYTES} B)`);
   }
   if (npcs.list.length < 1000 || items.list.length < 1000) {
     throw new Error(`Ergebnis unplausibel klein (Gegner ${npcs.list.length}, Gegenstaende ${items.list.length})`);
@@ -479,7 +514,10 @@ export async function build({ questie, forever, out }) {
   await writeAtomic(path.join(out, "Npcs.lua"), npcText);
   await writeAtomic(path.join(out, "Items.lua"), itemText);
   await writeAtomic(path.join(out, "Zones.lua"), zoneText);
-  return { npcs, items, zones: zones.size, sizes, questieVersion: q.version, badValues: q.stats.badValues };
+  await writeAtomic(path.join(out, "NpcsEn.lua"), npcEnText);
+  await writeAtomic(path.join(out, "ItemsEn.lua"), itemEnText);
+  await writeAtomic(path.join(out, "ZonesEn.lua"), zoneEnText);
+  return { npcs, items, zones: zones.size, zonesEn: zonesEn.size, sizes, questieVersion: q.version, badValues: q.stats.badValues };
 }
 
 export async function main(argv) {
@@ -505,6 +543,7 @@ export async function main(argv) {
   console.log(`Gegner: ${r.npcs.list.length} (deDE ${r.npcs.stats.de} = ${pct(r.npcs.stats.de, r.npcs.list.length)} %), ausgefiltert ${JSON.stringify(r.npcs.stats.skipped)}`);
   console.log(`Gegenstaende: ${r.items.list.length} (deDE ${r.items.stats.de} = ${pct(r.items.stats.de, r.items.list.length)} %), ausgefiltert ${JSON.stringify(r.items.stats.skipped)}`);
   console.log(`Gebiete: ${r.zones}; Dateigroessen: Npcs.lua ${r.sizes.npc} B, Items.lua ${r.sizes.item} B, Zones.lua ${r.sizes.zones} B`);
+  console.log(`Englisch: NpcsEn.lua ${r.sizes.npcEn} B, ItemsEn.lua ${r.sizes.itemEn} B, ZonesEn.lua ${r.sizes.zonesEn} B (${r.zonesEn} abweichende Gebietsnamen)`);
   if (r.badValues) console.log(`Hinweis: ${r.badValues} QuestieDB-Werte nicht dekodierbar (als fehlend behandelt).`);
   console.log(`Ziel: ${out}`);
   return r;

@@ -1,0 +1,55 @@
+Ink & Embers: An Adventurer's Journal - main addon (folder InkAndEmbers)
+
+The source code of this addon (all .lua, .xml and .toc files written for it,
+without the embedded libraries under libs\) is licensed under the MIT License:
+
+---------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2026 EveN
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+---------------------------------------------------------------------------
+
+EXCEPTION: GRAPHICS AND MEDIA
+
+The MIT License above does NOT apply to the graphics and other media of this
+addon, in particular the image files (.tga, .jpg, .png) in the folder Media\
+and its subfolders (pages, polaroids, seals, narrator portraits, icons,
+tutorial images and similar). For these files: all rights reserved, to the
+extent that protection exists. Without written permission of the author they
+may not be copied, redistributed or reused outside of this addon.
+Many of these images were created with the help of AI tools (Google Gemini)
+and processed by the author; this exception applies only to the extent the
+law grants protection to them.
+
+Alle Rechte an den Grafiken und Medien (insbesondere den Bilddateien im Ordner
+Media\) sind vorbehalten, soweit Schutz besteht. Die MIT-Lizenz gilt dafuer nicht.
+
+NOT COVERED EITHER (own licenses, see THIRD-PARTY.md in this folder):
+- the embedded libraries under libs\ (each with its own license file),
+- the fonts under Media\Fonts\ (SIL Open Font License 1.1),
+- the sounds under Media\Sounds\ (CC0 1.0, see Media\Sounds\LICENSES.txt).
+
+The addon data folders InkAndEmbers_QuestData and
+InkAndEmbers_Data are separate works under the GNU GPL v3
+(see the LICENSE file in each of those folders).
+
+World of Warcraft and related names and game content are (c) Blizzard
+Entertainment. This addon is not affiliated with or endorsed by Blizzard.

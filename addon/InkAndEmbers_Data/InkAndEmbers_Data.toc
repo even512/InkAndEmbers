@@ -1,0 +1,20 @@
+## Interface: 120105, 16001
+## Title: Ink & Embers - Data
+## Title-deDE: Ink & Embers - Data
+## Notes: Enemy and item lists for the to-do goals of Ink & Embers. Loaded on demand only.
+## Notes-deDE: Gegner- und Gegenstandsliste für die To-Do-Ziele von Ink & Embers. Wird nur bei Bedarf geladen.
+## Author: EveN
+## Version: @project-version@
+## LoadOnDemand: 1
+## Dependencies: InkAndEmbers
+## X-QuestieDB-Version: 1.0.9-dev.7901fee
+## X-Attribution: Data: QuestieDB (Questie team and contributors), version 1.0.9-dev.7901fee. License: GPL-3.0 (see LICENSE and LICENSE-NOTE.md). Game world content (c) Blizzard Entertainment.
+## X-License: GPL-3.0
+## X-Source-License: https://github.com/Questie/QuestieDB/blob/master/LICENSE.md
+
+Zones.lua
+Npcs.lua
+Items.lua
+ZonesEn.lua
+NpcsEn.lua
+ItemsEn.lua

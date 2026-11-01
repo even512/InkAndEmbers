@@ -2,7 +2,7 @@
 
 ## 0.9.0-beta1 (first public beta)
 
-First public version of EveN Forever Chronicle: a leveling journal that records your journey while you play.
+First public version of Ink & Embers: An Adventurer's Journal: a leveling journal that records your journey while you play.
 
 ### What it does
 - Records the leveling journey in the background: level-ups, kills and fights, deaths, quests and quest text,
@@ -13,6 +13,7 @@ First public version of EveN Forever Chronicle: a leveling journal that records 
   Treasures, Moments, Combat and Notes, with polaroid-style moment pictures, medals and seals.
 - Open quests: lists the quests you can still pick up, with quest givers on the map (optional data add-ons, see below).
 - To-do list on the screen edge: free goals, places, enemies and items; enemy tooltips and the map help you find them.
+  The enemy, item and zone search uses English names when the add-on language is English, German names otherwise.
 - Quick note field and notes with markup; pop-up toasts for new medals and areas; welcome card and a short
   introduction book (`/chronik tutorial`).
 - HUD elements can be moved in the game's Edit Mode.
@@ -22,9 +23,9 @@ First public version of EveN Forever Chronicle: a leveling journal that records 
 - WoW Forever (Interface 16001) and Retail (Interface 120105) from one download.
 
 ### Included add-ons (separate folders in the zip)
-- `EveN_ForeverChronicle` - the main add-on (MIT license; graphics and media: all rights reserved, see `LICENSE`).
-- `EveN_ForeverChronicle_QuestData` - quest list and quest givers, loaded on demand (GPL-3.0, data derived from QuestieDB).
-- `EveN_ForeverChronicle_Data` - enemy and item lists for the to-do goals, loaded on demand (GPL-3.0, data derived from QuestieDB).
+- `InkAndEmbers` - the main add-on (MIT license; graphics and media: all rights reserved, see `LICENSE`).
+- `InkAndEmbers_QuestData` - quest list and quest givers, loaded on demand (GPL-3.0, data derived from QuestieDB).
+- `InkAndEmbers_Data` - enemy and item lists for the to-do goals, loaded on demand (GPL-3.0, data derived from QuestieDB).
 
 ### Notes
 - This is a beta. Please report errors with the exact message (`/console scriptErrors 1` shows Lua errors).

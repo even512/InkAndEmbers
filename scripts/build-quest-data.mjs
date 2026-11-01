@@ -1,4 +1,4 @@
-// Erzeugt das Datenaddon EveN_ForeverChronicle_QuestData (Rubrik "Offene Quests"): Questliste mit Verfuegbarkeitsfeldern und
+// Erzeugt das Datenaddon InkAndEmbers_QuestData (Rubrik "Offene Quests"): Questliste mit Verfuegbarkeitsfeldern und
 // Questgeber mit Kartenpunkten. Daten: QuestieDB (Questie-Team und Beitragende), nur lesend.
 //
 // Aufruf:  node scripts/build-quest-data.mjs [--questie <QuestieDB_Forever.toc>] [--forever <ordner>] [--corrections <QuestieDB-Ordner>]
@@ -15,7 +15,7 @@
 //                  Schnappschuss scripts\data\wago-1.60.1.70170; fehlt der Ordner: Overlays.lua ohne Eintraege (Warnung).
 //   --overlays-retail  dasselbe fuer den Retail-Build (Standard: $CHRONICLE_OVERLAYS_RETAIL, sonst scripts\data\wago-retail-12.1.5.70575)
 //                  fuer die Retail-uiMapIDs aus journal\MapSpace.lua (ZONES); fehlt der Ordner: overlayRetail leer (Retail zeigt dann nur Erkundetes).
-//   --out          Zielordner. Standard: addon\EveN_ForeverChronicle_QuestData (TOC wird mit erzeugt)
+//   --out          Zielordner. Standard: addon\InkAndEmbers_QuestData (TOC wird mit erzeugt)
 //   --fetch        vorher das Skript aus $CHRONICLE_FETCH_SCRIPT (--soft) als Kindprozess ausfuehren (kein eigener Netzcode); offline/ohne Skript ist kein Fehler
 // Exit-Codes: 0 = ok, 1 = Fehler (Quelle fehlt/unlesbar, Vertragsversion != 4, Ergebnis unplausibel klein oder Datei zu gross, unbekannte Option)
 //
@@ -28,7 +28,7 @@
 //   Overlays.lua EveNChronicleQuestData.overlay = je Overlay "\n<uiMapID>\t<Breite>\t<Hoehe>\t<OffsetX>\t<OffsetY>\t<fileDataID>,..."
 //               (Pixel der Kartenebene 1, Kacheln 256 zeilenweise)
 //               EveNChronicleQuestData.overlayRetail = dasselbe Format fuer die Retail-Karten-IDs (nur Retail-Client)
-//   EveN_ForeverChronicle_QuestData.toc (LoadOnDemand, Attribution, Stand)
+//   InkAndEmbers_QuestData.toc (LoadOnDemand, Attribution, Stand)
 //
 // Sicherheit: reine Datenauswertung lokaler Dateien; Netz nur ueber ein optionales, selbst konfiguriertes Download-Skript
 // (feste Argumente, kein Shell-String). Fremddaten mit Grenzen dekodiert (CBOR/zlib wie build-todo-data.mjs); Korrektur-Lua wird mit
@@ -45,15 +45,15 @@ import luaparse from "luaparse";
 import { cleanName, configPath, defaultSources, luaLong, openQuestie } from "./build-todo-data.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-export const QUEST_DATA_ADDON = "EveN_ForeverChronicle_QuestData";
+export const QUEST_DATA_ADDON = "InkAndEmbers_QuestData";
 const DEFAULT_OUT = path.join(ROOT, "addon", QUEST_DATA_ADDON);
 // wago.tools-Tabellen: Umgebung/.env, sonst der mitgelieferte Schnappschuss unter scripts/data (siehe scripts/data/README.md)
 const DEFAULT_OVERLAYS = configPath("CHRONICLE_OVERLAYS") ?? path.join(ROOT, "scripts", "data", "wago-1.60.1.70170");
 const DEFAULT_OVERLAYS_RETAIL = configPath("CHRONICLE_OVERLAYS_RETAIL") ?? path.join(ROOT, "scripts", "data", "wago-retail-12.1.5.70575");
-const MAP_SPACE_FILE = path.join(ROOT, "addon", "EveN_ForeverChronicle", "journal", "MapSpace.lua");
+const MAP_SPACE_FILE = path.join(ROOT, "addon", "InkAndEmbers", "journal", "MapSpace.lua");
 export const OVERLAY_TILE = 256;
 const MAX_CSV_BYTES = 4 * 1024 * 1024;
-const MAIN_TOC = path.join(ROOT, "addon", "EveN_ForeverChronicle", "EveN_ForeverChronicle.toc");
+const MAIN_TOC = path.join(ROOT, "addon", "InkAndEmbers", "InkAndEmbers.toc");
 const FETCH_TIMEOUT_MS = 240_000;
 
 export const MAX_FILE_BYTES = 600 * 1024; // je Datei
@@ -107,7 +107,7 @@ const ALLIANCE_RACES = 1 | 4 | 8 | 64;
 const HORDE_RACES = 2 | 16 | 32 | 128;
 const TWO32 = 4294967296;
 
-const HELP = `EveN_ForeverChronicle: Datenaddon ${QUEST_DATA_ADDON} (offene Quests: Questliste + Questgeber) erzeugen
+const HELP = `InkAndEmbers: Datenaddon ${QUEST_DATA_ADDON} (offene Quests: Questliste + Questgeber) erzeugen
 
 Aufruf:
   node scripts/build-quest-data.mjs [--questie <toc>] [--forever <ordner>] [--corrections <QuestieDB-Ordner>] [--out <ordner>] [--fetch]
@@ -818,14 +818,14 @@ const HEAD = (what, version, info) =>
 export function tocText(version, iface) {
   return [
     `## Interface: ${iface}`,
-    "## Title: EveN Forever Chronicle - Quest data",
-    "## Title-deDE: EveN Forever Chronicle - Questdaten",
-    "## Notes: Open quests and quest givers for EveN Forever Chronicle (data: QuestieDB). Loaded on demand only.",
-    "## Notes-deDE: Offene Quests und Questgeber für EveN Forever Chronicle (Daten: QuestieDB). Wird nur bei Bedarf geladen.",
+    "## Title: Ink & Embers - Quest data",
+    "## Title-deDE: Ink & Embers - Quest data",
+    "## Notes: Open quests and quest givers for Ink & Embers (data: QuestieDB). Loaded on demand only.",
+    "## Notes-deDE: Offene Quests und Questgeber für Ink & Embers (Daten: QuestieDB). Wird nur bei Bedarf geladen.",
     "## Author: EveN",
     "## Version: @project-version@",
     "## LoadOnDemand: 1",
-    "## Dependencies: EveN_ForeverChronicle",
+    "## Dependencies: InkAndEmbers",
     `## X-QuestieDB-Version: ${version}`,
     `## X-Attribution: ${ATTRIBUTION(version)}`,
     "## X-License: GPL-3.0",

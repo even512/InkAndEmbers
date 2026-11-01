@@ -1,4 +1,4 @@
-EveN Forever Chronicle - main addon (folder EveN_ForeverChronicle)
+Ink & Embers: An Adventurer's Journal - main addon (folder InkAndEmbers)
 
 The source code of this addon (all .lua, .xml and .toc files written for it,
 without the embedded libraries under libs\) is licensed under the MIT License:
@@ -47,8 +47,8 @@ NOT COVERED EITHER (own licenses, see THIRD-PARTY.md in this folder):
 - the fonts under Media\Fonts\ (SIL Open Font License 1.1),
 - the sounds under Media\Sounds\ (CC0 1.0, see Media\Sounds\LICENSES.txt).
 
-The addon data folders EveN_ForeverChronicle_QuestData and
-EveN_ForeverChronicle_Data are separate works under the GNU GPL v3
+The addon data folders InkAndEmbers_QuestData and
+InkAndEmbers_Data are separate works under the GNU GPL v3
 (see the LICENSE file in each of those folders).
 
 World of Warcraft and related names and game content are (c) Blizzard

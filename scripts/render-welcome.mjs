@@ -1,4 +1,4 @@
-// EveN_ForeverChronicle: Vorschaubild der Willkommen-Karte (journal/Begleiter.lua + journal/Toast.lua), ohne Spiel.
+// InkAndEmbers: Vorschaubild der Willkommen-Karte (journal/Begleiter.lua + journal/Toast.lua), ohne Spiel.
 //
 // Aufruf:  node scripts/render-welcome.mjs [--lang de|en] [--volk <id>[,<id>...]] [--erst] [--help]
 //

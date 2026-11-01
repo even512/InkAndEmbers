@@ -1,11 +1,12 @@
-// Installiert das Addon EveN_ForeverChronicle und seine Datenaddons EveN_ForeverChronicle_Data (LoadOnDemand, To-Do-Listen) und
-// EveN_ForeverChronicle_QuestData (LoadOnDemand, offene Quests) in den WoW-Ordner (alle bei jedem Lauf, je in ihren eigenen Addon-Ordner).
+// Installiert das Addon InkAndEmbers und seine Datenaddons InkAndEmbers_Data (LoadOnDemand, To-Do-Listen) und
+// InkAndEmbers_QuestData (LoadOnDemand, offene Quests) in den WoW-Ordner (alle bei jedem Lauf, je in ihren eigenen Addon-Ordner).
 //
 // Aufruf:  node scripts/install-addon.mjs [--retail] [--dry-run] [--help]
 //   (ohne Flag)  Ziel: <WOW_DIR>\_forever_\Interface\AddOns\<addon>, Interface-Zeile der kopierten TOCs wird auf 16001 gesetzt
 //   --retail     Ziel: <WOW_DIR>\_retail_\Interface\AddOns\<addon>, Interface-Zeile der kopierten TOCs wird auf 120105 gesetzt
 // In den Quell-TOCs steht fuer das Release "## Interface: 120105, 16001" und "## Version: @project-version@" (ersetzt der Packager);
 // lokal setzt dieses Skript je Spielversion einen einzelnen Interface-Wert und ersetzt @project-version@ durch <package.json-Version>-dev.
+// Alte Ordner EveN_ForeverChronicle* (vor der Umbenennung) im Ziel werden mitentfernt (LEGACY_ADDONS), damit nicht zwei Kopien laufen.
 //   --dry-run    zeigt nur, was passieren wuerde; schreibt und loescht nichts
 // WOW_DIR kommt aus der Datei .env im Projektordner (siehe .env.example).
 // Exit-Codes: 0 = ok, 1 = Fehler (fehlende/ungueltige Config, Quelle fehlt, Schreibfehler, unbekannte Option)
@@ -13,8 +14,8 @@
 // Sicherheit:
 // - Installiert wird inkrementell: unveraenderte Dateien (byte-gleich, echte Datei) werden nicht angefasst, geaenderte/neue geschrieben,
 //   nur Eintraege entfernt, die es in der Quelle nicht (mehr) gibt. So bleibt z. B. eine vom laufenden Client geoeffnete Schrift unberuehrt.
-// - Geschrieben und entfernt wird ausschliesslich in <WOW_DIR>\<_forever_|_retail_>\Interface\AddOns\EveN_ForeverChronicle und
-//   ...\Interface\AddOns\EveN_ForeverChronicle_Data bzw. _QuestData (Allowlist ADDONS; Pfad wird normalisiert, muss innerhalb von WOW_DIR liegen
+// - Geschrieben und entfernt wird ausschliesslich in <WOW_DIR>\<_forever_|_retail_>\Interface\AddOns\InkAndEmbers und
+//   ...\Interface\AddOns\InkAndEmbers_Data bzw. _QuestData (Allowlist ADDONS; Pfad wird normalisiert, muss innerhalb von WOW_DIR liegen
 //   und auf \Interface\AddOns\<addon> enden).
 // - Symlinks/Junctions werden nirgends gefolgt: weder im Zielpfad noch in der Quelle (Symlink im Ziel = Abbruch).
 // - Kopiert werden nur Dateien mit Endung .toc/.lua/.xml/.tga/.ttf/.txt/.ogg/.md (.ttf = Handschrift Caveat, .txt = deren OFL-Lizenz bzw. Klang-Lizenzen, .ogg = CC0-Buchklaenge bis MAX_OGG_BYTES, .md = Lizenz-Notizen) sowie die Datei LICENSE (ohne Endung), jeweils mit harmlosem Namen (Allowlist), Unterordner nur mit harmlosem Namen.
@@ -27,9 +28,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-export const ADDON_NAME = "EveN_ForeverChronicle";
-export const DATA_ADDON_NAME = "EveN_ForeverChronicle_Data";
-export const QUEST_DATA_ADDON_NAME = "EveN_ForeverChronicle_QuestData";
+export const ADDON_NAME = "InkAndEmbers";
+export const DATA_ADDON_NAME = "InkAndEmbers_Data";
+export const QUEST_DATA_ADDON_NAME = "InkAndEmbers_QuestData";
+/** alte Ordnernamen (vor der Umbenennung); werden im Ziel entfernt, sonst liefen zwei Kopien (nur diese drei Namen, exakt) */
+export const LEGACY_ADDONS = Object.freeze(["EveN_ForeverChronicle", "EveN_ForeverChronicle_Data", "EveN_ForeverChronicle_QuestData"]);
 /** einzige Addon-Ordner, in die geschrieben werden darf (Hauptaddon zuerst) */
 export const ADDONS = Object.freeze([ADDON_NAME, DATA_ADDON_NAME, QUEST_DATA_ADDON_NAME]);
 const SOURCE_DIR = path.join(ROOT, "addon", ADDON_NAME);
@@ -46,7 +49,7 @@ const MAX_TGA_BYTES = 1024 * 1024 * 4 + 1024; // 1024 x 1024 x 32 bit + Kopf
 const MAX_DEPTH = 3;
 const KNOWN_FLAGS = new Set(["--retail", "--dry-run", "--help", "-h"]);
 
-const HELP = `EveN_ForeverChronicle: Addon und Datenaddon in den WoW-Ordner installieren
+const HELP = `InkAndEmbers: Addon und Datenaddon in den WoW-Ordner installieren
 
 Aufruf:
   npm run install-addon [-- --retail] [-- --dry-run]
@@ -329,6 +332,24 @@ export async function syncTarget(target, files, opts = {}) {
   return res;
 }
 
+/**
+ * Alte Addon-Ordner (LEGACY_ADDONS) unter <...>\Interface\AddOns entfernen. Nur exakt diese Namen, nur direkt in addonsDir,
+ * Links werden per unlink entfernt und nie gefolgt. Rueckgabe: Anzahl entfernter (bzw. im Trockenlauf gefundener) Ordner.
+ */
+export async function removeLegacy(addonsDir, opts = {}) {
+  const { dry = false, log = () => {} } = opts;
+  let n = 0;
+  for (const name of LEGACY_ADDONS) {
+    const p = path.join(addonsDir, name);
+    if (!isInside(addonsDir, p) || path.dirname(norm(p)) !== norm(addonsDir)) throw new Error(`Ungueltiger Altordner: ${printable(name)}`);
+    if (!(await lstatOrNull(p))) continue;
+    log(`  ${dry ? "wuerde alten Ordner entfernen" : "entferne alten Ordner"}: ${name}`);
+    n++;
+    if (!dry) await removeEntry(p);
+  }
+  return n;
+}
+
 export async function main(argv) {
   const opts = parseArgs(argv);
   if (opts.help) {
@@ -388,6 +409,8 @@ export async function main(argv) {
       `${job.name} fertig${dry ? " (Trockenlauf)" : ""}: ${r.written} neu/geaendert, ${r.unchanged} unveraendert, ${r.removed} entfernt.${dry ? " Es wurde nichts geschrieben oder geloescht." : ""}`,
     );
   }
+  const legacy = await removeLegacy(t.addons, { dry, log: (line) => console.log(line) });
+  if (legacy) console.log(`Alte Ordner ${dry ? "gefunden" : "entfernt"}: ${legacy}.`);
   if (!dry) console.log("Hinweis: Bei NEUEN Dateien oder einem neuen Addon-Ordner das Spiel komplett neu starten, sonst reicht /reload.");
 }
 

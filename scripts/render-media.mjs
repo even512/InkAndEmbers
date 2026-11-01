@@ -1,6 +1,6 @@
 // Rendert die Texturen des Reisejournals (Buch, Reiter, Kartenzeichen, Koernung ...) aus dem Claude-Design im
 // Headless-Browser und legt sie als TGA (32 bit, unkomprimiert, Kantenlaengen als Zweierpotenz, hoechstens 1024 px)
-// unter addon/EveN_ForeverChronicle/Media/ ab. Die TGA-Dateien liegen im Repo; dieses Skript braucht man nur, wenn
+// unter addon/InkAndEmbers/Media/ ab. Die TGA-Dateien liegen im Repo; dieses Skript braucht man nur, wenn
 // sich das Aussehen aendern soll.
 //
 // Aufruf:  node scripts/render-media.mjs [--only <Name>] [--check] [--keepout] [--fire-areas] [--help]
@@ -23,7 +23,7 @@ import { cutAtlas, cutSingle, MAP_ICON_ATLAS, MAP_ICONS_FILE, MAP_ICONS_SRC } fr
 import { cutEmblems, EMBLEM_ATLAS, EMBLEMS_FILE, EMBLEMS_SRC } from "./cut-emblems.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-export const MEDIA_DIR = path.join(ROOT, "addon", "EveN_ForeverChronicle", "Media");
+export const MEDIA_DIR = path.join(ROOT, "addon", "InkAndEmbers", "Media");
 
 // ---------------------------------------------------------------------------------------------------------------
 // Gemeinsame Bausteine aus dem Design (Main.dc.html / Stilblatt.dc.html)
@@ -861,7 +861,7 @@ export function fireNoteArea(rgba, w, h, A = FIRE_AREA) {
   return { x, y, w: Number((floor4((r.x + r.w) / w) - x).toFixed(4)), h: Number((floor4((r.y + r.h) / h) - y).toFixed(4)) };
 }
 
-export const FIRE_AREAS_LUA = path.join(ROOT, "addon", "EveN_ForeverChronicle", "journal", "FireNoteAreas.lua");
+export const FIRE_AREAS_LUA = path.join(ROOT, "addon", "InkAndEmbers", "journal", "FireNoteAreas.lua");
 
 export function fireAreasLua(areas) {
   const f = (v) => Number(v.toFixed(4)).toString();
@@ -2833,7 +2833,7 @@ export function runKeepout(browser, tmp, { luaFile = KEEPOUT_LUA, screens = KEEP
   return map;
 }
 
-export const KEEPOUT_LUA = path.join(ROOT, "addon", "EveN_ForeverChronicle", "journal", "DecorKeepout.lua");
+export const KEEPOUT_LUA = path.join(ROOT, "addon", "InkAndEmbers", "journal", "DecorKeepout.lua");
 export const KEEPOUT_SCREENS = path.join(ROOT, "tests", "screens");
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -3014,7 +3014,7 @@ Aufruf:
   --help       diese Hilfe
 
 Browser: Chrome oder Edge, Pfad optional ueber die Umgebungsvariable CHROME_PATH.
-Ziel: addon/EveN_ForeverChronicle/Media/<Name>.tga. Neue Texturen erkennt WoW erst nach einem Spielneustart.`;
+Ziel: addon/InkAndEmbers/Media/<Name>.tga. Neue Texturen erkennt WoW erst nach einem Spielneustart.`;
 
 export function main(argv) {
   const known = new Set(["--only", "--check", "--keepout", "--fire-areas", "--help", "-h"]);

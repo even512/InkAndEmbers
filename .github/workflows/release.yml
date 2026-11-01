@@ -4,8 +4,8 @@
 #   git tag v1.0.0 && git push origin v1.0.0               -> uploaded as RELEASE (any other tag)
 # Needs once: the secret CF_API_KEY (CurseForge API token) as an ENVIRONMENT secret of the environment "release"
 # (Settings > Environments > release; add required reviewers there, so no tag uploads without an approval),
-# and the project number in the TOC (## X-Curse-Project-ID in addon/EveN_ForeverChronicle/EveN_ForeverChronicle.toc;
-# 0 = nothing is uploaded). Packaging rules: .pkgmeta. Checks before a tag: npm ci && npm run check && npm test.
+# and the project number in the TOC (## X-Curse-Project-ID in addon/InkAndEmbers/InkAndEmbers.toc;
+# 0 = nothing is uploaded; currently 1777406). Packaging rules: .pkgmeta. Checks before a tag: npm ci && npm run check && npm test.
 # Actions are pinned to a commit SHA (the tag is named in the comment); update them deliberately, never via a moving tag.
 name: Release
 

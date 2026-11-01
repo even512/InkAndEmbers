@@ -1,4 +1,4 @@
-// EveN_ForeverChronicle: Bilder der Willkommens-Einfuehrung (journal/Tutorial.lua) aus echten Ausschnitten des Addons.
+// InkAndEmbers: Bilder der Willkommens-Einfuehrung (journal/Tutorial.lua) aus echten Ausschnitten des Addons.
 //
 // Aufruf:  node scripts/render-tutorial.mjs [--lang deDE|enUS] [--vorschau] [--roh-behalten] [--lua] [--help]
 //

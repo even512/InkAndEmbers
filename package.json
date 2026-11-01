@@ -2,7 +2,7 @@
   "name": "even-foreverchronicle",
   "version": "0.9.0",
   "private": true,
-  "description": "EveN_ForeverChronicle: Reise-Chronik als WoW-Addon (Sammler) mit Node-Hilfsskripten",
+  "description": "Ink & Embers: a leveling journal addon for World of Warcraft, with Node helper scripts",
   "type": "module",
   "engines": {
     "node": ">=20"

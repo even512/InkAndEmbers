@@ -1,6 +1,6 @@
 # Schnappschuss der wago.tools-Tabellen
 
-Eingaben fuer die Karten-Overlays (`Overlays.lua` im Datenaddon `EveN_ForeverChronicle_QuestData`), damit
+Eingaben fuer die Karten-Overlays (`Overlays.lua` im Datenaddon `InkAndEmbers_QuestData`), damit
 `node scripts/build-quest-data.mjs` diesen Teil ohne Netz und ohne weitere Quelle reproduzieren kann
 (Standard-Pfade des Generators; ueberschreibbar mit `--overlays`/`--overlays-retail` bzw. `CHRONICLE_OVERLAYS`/`CHRONICLE_OVERLAYS_RETAIL`).
 

@@ -1,4 +1,4 @@
-// EveN_ForeverChronicle: Vorschau der Kartensymbole (Media/MapIcons.tga, MapKill.tga, MapCurrent.tga) auf Pergament, ohne Spiel.
+// InkAndEmbers: Vorschau der Kartensymbole (Media/MapIcons.tga, MapKill.tga, MapCurrent.tga) auf Pergament, ohne Spiel.
 //
 // Aufruf:  node scripts/preview-map-icons.mjs [--help]
 // Ergebnis: tests/screens/map-icons.png. Obere Reihe: alle Symbole in Spielgroesse (Theme.MARKER_SIZE bzw. Map.*_SIZE), mittlere

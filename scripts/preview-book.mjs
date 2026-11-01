@@ -1,4 +1,4 @@
-// EveN_ForeverChronicle: Vorschaubilder aller Doppelseiten mit Probedaten (B2b), ohne Spiel.
+// InkAndEmbers: Vorschaubilder aller Doppelseiten mit Probedaten (B2b), ohne Spiel.
 //
 // Aufruf:  node scripts/preview-book.mjs [--only <reiter>[,<reiter>...]] [--profil voll|frisch|zehn] [--lang de|en] [--sperren] [--buch] [--todo] [--help]
 //
@@ -84,7 +84,7 @@ export const SUBVIEWS = [
   ["notizen", "edit", 'NS.Journal.NotizenPage:SetMode("edit")', 'NS.Journal.NotizenPage:SetMode("read")'],
 ];
 // Offene Quests: das echte Datenaddon (wird erst beim Oeffnen der Rubrik gelesen), Kartenkunst als Platzhalter-Kachel
-const QUEST_DATA_DIR = path.join(ROOT, "addon", "EveN_ForeverChronicle_QuestData");
+const QUEST_DATA_DIR = path.join(ROOT, "addon", "InkAndEmbers_QuestData");
 export const OPEN_QUESTS_LUA = (zone, after = "") => `
   if not REAL_QUEST_DATA then
     REAL_QUEST_DATA = function()
@@ -247,7 +247,7 @@ function readTga(file) {
 }
 
 const texCache = new Map();
-/** Addon-Textur (Interface\\AddOns\\EveN_ForeverChronicle\\Media\\X) -> data-URL (PNG) | null */
+/** Addon-Textur (Interface\\AddOns\\InkAndEmbers\\Media\\X) -> data-URL (PNG) | null */
 function texUrl(tex) {
   const m = /Media\\(.+)$/i.exec(tex || "");
   if (!m) return null;
