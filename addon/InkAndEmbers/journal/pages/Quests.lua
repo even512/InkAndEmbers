@@ -22,6 +22,8 @@ local T = ns.Locale.ns("p.Quests", {
   subHistoryTip = "Abgeschlossene Quests mit Questtext, Lebenslauf und Belohnung",
   subOpen = "Offen",
   subOpenTip = "Quests, die Ihr jetzt annehmen könnt, mit Karte der Questgeber (Daten: QuestieDB)",
+  subTrain = "Lehrplan",
+  subTrainTip = "Was Euch der Klassenlehrer ab welcher Stufe beibringt (nur WoW Forever)",
   pageOf = "Seite %d von %d", prevPage = "Vorige Seite", nextPage = "Nächste Seite", level = "Stufe %s",
   filterName = "Name „%s“", filterArea = "Gebiet %s", filterLevel = "Stufe %s",
   countOf = "%s von %s Quests", count_one = "%s Quest", count_other = "%s Quests", questLevel = "Questlevel %s",
@@ -1397,6 +1399,7 @@ function Quests.Refresh(self, data)
   end
   self:Render()
   if self.openView and self.openOpen then self.openView:Refresh() end
+  if self.trainView and self.trainOpen then self.trainView:Refresh() end
 end
 
 -- sub-bookmarks (contract journal/Pages.lua): history · open (open quests, pages/QuestsOffen.lua). Labels are read late
@@ -1410,12 +1413,33 @@ end
 Quests.subs = {
   subTab("historie", "subHistory", "subHistoryTip"),
   subTab("offen", "subOpen", "subOpenTip"),
+  subTab("lehrplan", "subTrain", "subTrainTip"),
 }
 
-function Quests:GetSub() return self.openOpen and "offen" or "historie" end
+function Quests:GetSub()
+  if self.trainOpen then return "lehrplan" end
+  return self.openOpen and "offen" or "historie"
+end
 
 function Quests:ShowSub(key)
   if key == self:GetSub() then return end
+  -- trainer plan (pages/QuestsLehrplan.lua): its own view over the table, like "Offen"
+  if key == "lehrplan" then
+    local V = Journal.LehrplanView
+    if not (V and self.mainL) then return end
+    if self.openView and self.openOpen then self.openView:Close() end
+    self.openOpen = false
+    if not self.trainView then self.trainView = V.new(self, self.holderL, self.holderR) end
+    self.drop = nil
+    if self.ui and self.ui.pop then self.ui.pop:Hide() end
+    self.mainL:Hide()
+    self.mainR:Hide()
+    self.trainOpen = true
+    self.trainView:Open()
+    return
+  end
+  if self.trainView and self.trainOpen then self.trainView:Close() end
+  self.trainOpen = false
   if key == "offen" then
     local V = Journal.OpenQuestsView
     if not (V and self.mainL) then return end
@@ -1442,6 +1466,9 @@ end
 function Quests.OnHide(self)
   local ui = self.ui
   if not ui then return end
+  if self.trainView then
+    for _, r in ipairs(self.trainView.ui.rowsList.rows) do W.hideTip(r) end
+  end
   if self.openView then
     for _, r in ipairs(self.openView.ui.rowsList.rows) do W.hideTip(r) end
     self.openView.ui.pins:ReleaseAll()
@@ -1467,3 +1494,9 @@ Quests.kit = { pager = newPager, airyArrow = airyArrow, label = label, sortButto
 
 Journal.QuestsPage = Quests -- handle for tests and the diagnostics (ui, book, sel, filter, sort)
 Pages.register("quests", Quests)
+
+-- Retail: the trainer plan (Lehrplan) exists only in WoW Forever, so its bookmark stays out ("Offen" stays: own retail source)
+Pages.hideSub("quests", "lehrplan", function()
+  local L = Journal.Lehrplan
+  return L ~= nil and type(L.active) == "function" and L.active() == false
+end)

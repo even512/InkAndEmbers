@@ -217,10 +217,53 @@ local function num(v)
   return v
 end
 
-function MapSpace.client()
+-- Retail client? Doubly checked: WOW_PROJECT_ID == WOW_PROJECT_MAINLINE AND interface version >= 100000. WoW Forever runs
+-- on the retail engine and may report the same project id as Retail, but its interface version is 16001.
+MapSpace.RETAIL_MIN_INTERFACE = 100000
+function MapSpace.retailClient()
   local id, main = num(rawget(_G, "WOW_PROJECT_ID")), num(rawget(_G, "WOW_PROJECT_MAINLINE"))
-  if not id then return nil end
-  if main and id == main then return "retail" end
+  if not (id and main and id == main) then return false end
+  if type(GetBuildInfo) ~= "function" then return false end
+  local ok, _, _, _, interface = pcall(GetBuildInfo)
+  interface = ok and num(interface) or nil
+  return interface ~= nil and interface >= MapSpace.RETAIL_MIN_INTERFACE
+end
+
+-- Highest player level of the client: WoW Forever always 60; Retail asks GetMaxLevelForPlayerExpansion (the expansion the
+-- account owns), else GetMaxPlayerLevel. Every call under pcall, secret/odd values ignored; fallback 60.
+MapSpace.FOREVER_MAX_LEVEL = 60
+MapSpace.MAX_LEVEL_CAP = 200 -- plausibility limit for the client answer
+local MAX_LEVEL_APIS = { "GetMaxLevelForPlayerExpansion", "GetMaxPlayerLevel" }
+function MapSpace.maxLevel()
+  local base = MapSpace.FOREVER_MAX_LEVEL
+  if not MapSpace.retailClient() then return base end
+  for _, name in ipairs(MAX_LEVEL_APIS) do
+    local fn = rawget(_G, name)
+    if type(fn) == "function" then
+      local ok, v = pcall(fn)
+      v = ok and num(v) or nil
+      if v and v == floor(v) and v >= base and v <= MapSpace.MAX_LEVEL_CAP then return v end
+    end
+  end
+  return base
+end
+
+-- Campfire talk (Campfire.lua, FireNotes.lua) only recognizes the Forever auras, so in Retail it never starts: the interface hides
+-- everything about it there (options, tutorial page, Chronik tab "Am Feuer"). Exception: the development simulation (/chronik sim)
+-- is running, then the campfire parts stay visible. MapSpace.ALLOW_FIRE_RETAIL = true: never hide (tests).
+function MapSpace.fireTalkHidden()
+  if MapSpace.ALLOW_FIRE_RETAIL or not MapSpace.retailClient() then return false end
+  local C = ns.Campfire
+  if C and type(C.isSim) == "function" then
+    local ok, on = pcall(C.isSim)
+    if ok and on == true then return false end
+  end
+  return true
+end
+
+function MapSpace.client()
+  if not num(rawget(_G, "WOW_PROJECT_ID")) then return nil end
+  if MapSpace.retailClient() then return "retail" end
   return "data"
 end
 

@@ -18,8 +18,9 @@
 --   killSeries    { size, b = { minute buckets }, c = { cumulative kills } } for ALL kills; query via Index.killsBetween
 --   xp            { total, n, rested, unclear, source[src] = { n, amount, rested }, level[level][src] = amount }; src =
 --                 kill | quest | explore | other
---   money         { source[src] = { gain, loss, n }, level[level] = { gain, loss, out[src] }, first / last / peak = {
---                 t, balance } }
+--   money         { source[src] = { gain, loss, n }, level[level] = { gain, loss, out[src] },
+--                 hold[level] = { top = highest balance in the level (incl. the balance carried in), last = balance at its last
+--                 GD line }, first / last / peak = { t, balance } }
 --   skills[name] = { rank, max, t }     ah[action] = { n, deposit, price }     restT, restInnT, restFireT = rest times
 --                                       (RA); restKinds = { inn, fire }
 --   questObj[questID]  flat array, Index.QOBJ_STRIDE slots per objective from (idx-1)*STRIDE: have, need (0 = unknown),
@@ -187,7 +188,7 @@ local function newState(db, guid, char)
       npcUnknown = 0, map = {}, mapCount = 0, day = {}, dayCount = 0, group = 0, withPos = 0, heat = {}, heatMaps = 0,
       pts = {}, ptsN = 0, npcMapTotal = 0, fight = {}, fightN = 0 },
     xp = { total = 0, n = 0, rested = 0, unclear = 0, source = {}, level = {} },
-    money = { source = {}, level = {}, first = nil, last = nil, peak = nil },
+    money = { source = {}, level = {}, hold = {}, first = nil, last = nil, peak = nil },
     skills = {}, skillN = 0,
     pendLn = {}, pendT = {}, pendN = 0, -- rare kills still waiting for their KF (line number, time)
     ah = {},
@@ -458,8 +459,23 @@ end
 H.GD = function(S, t)
   local m = S.money
   local delta, balance = toNum(SF[1]), toNum(SF[2])
+  local lv = toNum(SF[4])
+  if lv and lv >= 1 and lv <= 200 then lv = floor(lv) else lv = nil end
   local keep = false
   if balance then
+    -- holdings per level: highest balance (top) and balance at the last line (last). The first line of a level also counts
+    -- the balance carried in from the level before (what was in the purse when the level began).
+    if lv and balance >= 0 then
+      local h = m.hold[lv]
+      if not h then
+        local before = m.last and m.last.balance or 0
+        h = { top = before > balance and before or balance, last = balance }
+        m.hold[lv] = h
+      else
+        if balance > h.top then h.top = balance end
+        h.last = balance
+      end
+    end
     if not m.first then m.first = { t = t, balance = balance } end
     m.last = { t = t, balance = balance }
     if not m.peak or balance > m.peak.balance then m.peak = { t = t, balance = balance } end
@@ -474,10 +490,8 @@ H.GD = function(S, t)
     m.source[src] = s
   end
   s.n = s.n + 1
-  local lv = toNum(SF[4])
   local l
-  if lv and lv >= 1 and lv <= 200 then
-    lv = floor(lv)
+  if lv then
     l = m.level[lv]
     if not l then
       l = { gain = 0, loss = 0, out = {} }

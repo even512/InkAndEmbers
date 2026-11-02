@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.9.3
+
+### New
+- **Training (WoW Forever):** new "Training" tab under Quests. It lists what your class trainer teaches at which
+  level, marks what you already know, sums up what you can learn now against the gold in your bags, and shows the
+  next levels, free talent points, the training fees paid so far and the nearest trainer you have visited ("As to-do"
+  adds a place goal). After a level-up with new spells, a "To the trainer" to-do appears and ticks itself off once
+  everything is learned (setting under To Do). Free talent points get a small pop-up once per level or session
+  (setting under Pop-ups). `/chronik training` opens the tab, `training status` prints the state. Off on Retail.
+- **Open quests in Retail:** the list and map pins now come from the game's own world map (quests you can accept
+  right now, shown by quest line). Quest givers and locked quests with reasons are not available in Retail.
+- **Away time (AFK):** the chronicle now tracks the time you spend marked as away. The profile card shows the total
+  with a tooltip for breaks and the longest break, and the Moments page lists it under Curiosities. Reloads continue
+  a break; logging out or a crash ends it cleanly.
+- **Gold holdings:** the gold flow chart in Treasures has a new "Holdings" view showing the most gold you held in your
+  purse at each level, as a staircase with the all-time peak highlighted and the biggest jump between two levels.
+  It also works for levels you have already played.
+
+### Changes
+- Moments page: moments are now small handwritten diary notes instead of polaroid pictures. Each note shows the
+  symbol of its kind, the title, a short diary line and the day and time in handwriting, slightly tilted and taped
+  into the album. Collecting, the filter chips, paging, tooltips, the play-time clock, the library and curiosities
+  work as before. The polaroid picture files were removed from the add-on, which makes the download smaller.
+- Journey: short zone visits without anything of note no longer start a new chapter. They are listed as
+  "Detours: X, Y" in the running chapter, their trail is still drawn, and returning simply continues the chapter.
+  A visit becomes a chapter once something happens there (kill, quest, level, death, discovery, instance, notable
+  find, ...). Applies to existing journeys too.
+- Retail: the max level is read from the client (80/90) - level ring, "Journey's End" medal, forecast, chapter
+  highlight and gear timeline now go up to it; WoW Forever stays at 60.
+- Retail: the campfire conversation options, tutorial page and the Chronicle "By the Fire" tab are hidden, since the
+  conversation never starts there.
+- Retail: WoW Forever-only parts (trainer plan tab, trainer to-do and talent hint options) are hidden, and the
+  introduction no longer mentions level 60 or the campfire.
+- Retail: the foe/item search for to-dos now shows names only; level and zone from the Classic/Forever data are
+  hidden there. Kill and loot goals still count and complete as before.
+- Retail detection now also checks the interface version, so WoW Forever is never mistaken for Retail.
+
+### Fixes
+- Journey map: the route line no longer breaks or jumps when you cross between a zone and a neighbouring or sub-area
+  map (e.g. leaving Deathknell), and it now runs seamlessly up to your arrow instead of lagging behind it.
+- Medals already earned by a character's existing state on its first login with the add-on (gold, level, professions,
+  guild, gear) are added quietly to the book instead of popping a toast.
+- The welcome tutorial's first picture (minimap button) still showed the old minimap icon with the "W"; it now shows
+  the current book icon.
+
 ## 0.9.2
 
 ### Changed

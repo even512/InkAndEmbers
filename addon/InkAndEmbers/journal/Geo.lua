@@ -296,10 +296,12 @@ function Geo.zoneProjector(zoneID)
     local e = memo[mapID]
     if e == nil then
       local a, b, c, d = Geo.zoneAffine(mapID, zoneID)
-      e = a and { a, b, c, d } or false
+      -- Only successes are kept: a failure (map data not ready yet, Geo's own retry cache) must not hide a map's route and the
+      -- player arrow for the whole life of the scene.
+      if not a then return nil end
+      e = { a, b, c, d }
       memo[mapID] = e
     end
-    if not e then return nil end
     return e[1], e[2], e[3], e[4]
   end
   local fn = function(mapID, x, y)

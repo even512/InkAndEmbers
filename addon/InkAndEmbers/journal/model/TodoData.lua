@@ -10,6 +10,11 @@
 -- name for an id the German one is used. Entries are linked by id, never by name.
 -- Source 2 (fallback and supplement): the character SV, npcs[npcID] = name and snapshots.items[itemID] = { name,
 -- quality }. Search keys: lowercase, umlauts as ae/oe/ue/ss, no accents.
+-- Retail client (TodoData.retailClient, Journal.MapSpace.retailClient): the lists come from QuestieDB
+-- (Classic/Forever), so in Retail only the names are used for the search; level and zone of an enemy are left out (they
+-- are often wrong there: scaling, Cataclysm zones). Counting a goal never depends on these lists (collectors/Plans.lua
+-- matches FC_KILL npcID from the GUID / FC_LOOT itemID from the loot link, or the name). TodoData.ALLOW_RETAIL (tests)
+-- keeps level and zone in Retail.
 local _, ns = ...
 
 local Journal = ns.Journal or {}
@@ -54,6 +59,7 @@ local TX = ns.Locale.ns("m.TodoData", {
   loaded = "%s: geladen (%s)",
   notInData = "%s: nicht geladen: fehlt im Zusatzaddon",
   notLoaded = "%s: nicht geladen: %s",
+  retailNote = " (Retail: nur Namen, ohne Stufe und Gebiet)",
 })
 TodoData.T = TX
 local RANK_KEYS = { e = true, r = true, R = true, b = true }
@@ -73,6 +79,18 @@ TodoData._state = S
 local function isSecret(v)
   return type(issecretvalue) == "function" and issecretvalue(v) == true
 end
+
+-- Retail client? (Journal.MapSpace.retailClient: project id AND interface version >= 100000; Forever is never Retail)
+function TodoData.retailClient()
+  local ms = Journal.MapSpace
+  return ms ~= nil and ms.retailClient() == true
+end
+
+-- names only (no Forever level/zone)?
+local function namesOnly()
+  return not TodoData.ALLOW_RETAIL and TodoData.retailClient()
+end
+TodoData.namesOnly = namesOnly
 
 local function inCombat()
   if type(InCombatLockdown) ~= "function" then return false end
@@ -210,7 +228,8 @@ local function countOf(k)
 end
 
 function TodoData.status()
-  return { loaded = S.data ~= nil, reason = S.reason, tried = S.tried, npc = countOf("npc"), item = countOf("item") }
+  return { loaded = S.data ~= nil, reason = S.reason, tried = S.tried, npc = countOf("npc"), item = countOf("item"),
+    namesOnly = namesOnly() }
 end
 
 local REASON_KEYS = { DISABLED = true, DEP_DISABLED = true, MISSING = true, DEP_MISSING = true, INTERFACE_VERSION = true,
@@ -236,7 +255,7 @@ end
 function TodoData.diagLine(kind)
   local k = KINDS[kind] or "npc"
   local label = k == "item" and TX.listItem or TX.listNpc
-  if S.data and S.data[k] then return TX("loaded", label, countOf(k)) end
+  if S.data and S.data[k] then return TX("loaded", label, countOf(k)) .. (namesOnly() and TX.retailNote or "") end
   if S.data then return TX("notInData", label) end
   return TX("notLoaded", label, TodoData.reasonText(S.reason))
 end
@@ -276,10 +295,12 @@ local function npcRecord(line, d)
   local id, name, min, max, rank, zone = match(line, "^(%d+)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)$")
   if not id then return nil end
   local zid = tonumber(zone)
-  return {
-    id = tonumber(id), name = display(nameEn("npc", id) or name), level = levelText(min, max), rank = TodoData.RANKS[rank],
-    zone = zid and zoneName(d, zid) or nil,
-  }
+  local rec = { id = tonumber(id), name = display(nameEn("npc", id) or name), rank = TodoData.RANKS[rank] }
+  if not namesOnly() then
+    rec.level = levelText(min, max)
+    rec.zone = zid and zoneName(d, zid) or nil
+  end
+  return rec
 end
 
 local function itemRecord(line)

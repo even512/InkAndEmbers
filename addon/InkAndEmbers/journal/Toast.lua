@@ -897,6 +897,27 @@ local function now_()
   return type(time) == "function" and time() or 0
 end
 
+-- Start state of an existing character: on its first login with the addon the collectors write what the character already
+-- has (gold balance GD 'start', played time PL with the level, professions, guild 'seen', gear). Medal tiers proven by
+-- that within Toast.START_GRACE seconds are earned quietly (in the book, no toast). Only if the character came in above
+-- level 1 (Store.fresh.level): a new character (level 1, e.g. every new one in Forever) behaves exactly as before.
+Toast.START_GRACE = 120
+local function quietUntil()
+  local Store = ns.Store
+  local f = Store and Store.fresh
+  if type(f) ~= "table" then return nil end
+  local at, level = tonumber(f.at), tonumber(f.level)
+  if not at or not level or level <= 1 then return nil end
+  return at + Toast.START_GRACE
+end
+
+-- proof time of a tier (s.at) or, for tiers without one (counters), the time of the evaluation
+local function fromStart(s, untilT)
+  if not untilT then return false end
+  local t = type(s.at) == "number" and s.at or now_()
+  return t < untilT
+end
+
 function Toast.rebase()
   known, baseGuid = {}, nil
   watchState = nil
@@ -964,6 +985,7 @@ function Toast.evaluate(index)
   local n = 0
   local baseline = baseGuid ~= index.guid
   local since = loginAt()
+  local quiet = quietUntil()
   if baseline then
     baseGuid = index.guid
     known = {}
@@ -976,6 +998,7 @@ function Toast.evaluate(index)
         if not known[key] then
           known[key] = true
           local announce = not (baseline and silent) and (not baseline or (since ~= nil and type(s.at) == "number" and s.at >= since))
+          if announce and fromStart(s, quiet) then announce = false end
           if announce and Chronik.SEALS[i] and Toast.enqueue(Toast.medalItem(i, Chronik.SEALS[i], s.tier)) then n = n + 1 end
         end
       end
@@ -1103,7 +1126,7 @@ function Toast.relevant(code, f)
       F = F or accessor(code, f)
       if w.value then
         local first = w.first
-        if first == nil then first = x.seal.steps and x.seal.steps[1] or 60 end
+        if first == nil then first = x.seal.steps and x.seal.steps[1] or Journal.Chronik.maxLevel() end
         local v = first and w.value(F)
         if v and v >= first then return true end
       elseif not w.elapsed and (w.always or not w.test or w.test(F)) then

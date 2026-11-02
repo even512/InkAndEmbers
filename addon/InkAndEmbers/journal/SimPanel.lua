@@ -70,6 +70,8 @@ local T = ns.Locale.ns("SimPanel", {
   sexAuto = "automatisch",
   sexM = "männlich",
   sexW = "weiblich",
+  trainerOn = "Entwickler-Schalter Lehrplan: AN (nur diese Sitzung). Der Reiter Training arbeitet auch in Retail, mit den Classic-Klassendaten - „bekannt“ stimmt dort nicht.",
+  trainerOff = "Entwickler-Schalter Lehrplan: AUS (Retail wieder gesperrt).",
   whyNotReady = "nicht bereit",
   whyCombat = "Kampf",
   whyMounted = "beritten",
@@ -268,6 +270,19 @@ local function needCampfire()
   if CF() then return true end
   message(T.msgNoCampfire)
   return false
+end
+
+-- /chronik sim lehrplan: developer switch for the training plan (Journal.Lehrplan.active honours ns.devForceTrainer, so the tab,
+-- page and status lines work in Retail too). Session only; exists only where this file is part of the addon folder (not in the
+-- release package). Returns true when the sim argument was meant for it.
+function SimPanel.devSlash(arg)
+  local word = string.lower(type(arg) == "string" and arg or "")
+  if word ~= "lehrplan" and word ~= "training" then return false end
+  ns.devForceTrainer = ns.devForceTrainer ~= true
+  if ns.Core and ns.Core.print then ns.Core.print(ns.devForceTrainer and T.trainerOn or T.trainerOff) end
+  local view = ns.Journal and ns.Journal.Pages
+  if view and type(view.refresh) == "function" then pcall(view.refresh) end
+  return true
 end
 
 function SimPanel.setSim(on)

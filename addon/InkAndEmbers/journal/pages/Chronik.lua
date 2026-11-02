@@ -52,6 +52,7 @@ local SEAL_DOT_OFF = { 0.55, 0.48, 0.38, 0.45 } -- open tier (pale dot)
 Page.SEAL = { cols = SEAL_COLS, icon = SEAL_ICON, w = SEAL_W, h = SEAL_H, nameH = SEAL_NAME_H, lineH = SEAL_LINE }
 -- level ring: filled strokes in rich dark bronze, fully opaque; unfilled ones pale
 Page.RING_ON, Page.RING_OFF = { 0.50, 0.33, 0.07 }, Theme.C and Theme.C.faint or { 0.80, 0.71, 0.53 }
+Page.RING_THICK = 4 -- stroke width at 60 levels (Forever); more levels (Retail) get proportionally thinner strokes
 local FLOW_H = 100
 local DIARY_ROWS, DIARY_ROW_H = 6, G.line.row   -- 6 rows (mouse wheel scrolls): room for XP + note above the quill
 local BAR_W = 150   -- XP sources: the bar ends before the forecast note (grid 402 wide)
@@ -64,7 +65,7 @@ Page.TEXT = ns.Locale.ns("p.Chronik", {
   seals = "MEDAILLEN DER REISE", flow = "Stufenfluss", flowSub = "Wie lange jede Stufe dauerte",
   legend = "rote Punkte = gestorben", xpTotal = "EP GESAMT", sources = "WOHER DIE ERFAHRUNG KAM",
   noXp = "Noch keine Erfahrung gesammelt.", diaryEmpty = "Noch nichts erlebt – das Tagebuch wartet.",
-  diaryNone = "Aus dem Tagebuch", ofMax = "VON 60", ringStart = "Auf geht's!", prevTip = "Tag davor", nextTip = "Tag danach",
+  diaryNone = "Aus dem Tagebuch", ofMax = "VON %s", ringStart = "Auf geht's!", prevTip = "Tag davor", nextTip = "Tag danach",
   toDiary = "Tagebuch", toDiaryTip = "Das Tagebuch lesen", toDiaryTip2 = "Jeder Spieltag als Eintrag, Tag für Tag",
   toMates = "Weggefährten", toMatesTip = "Weggefährten ansehen", toMatesTip2 = "Wer mit Euch gereist ist",
   toFire = "Am Feuer", toFireTip = "Weggefährten am Feuer", toFireTip2 = "Wer mit Euch am Lagerfeuer gesessen hat",
@@ -146,7 +147,7 @@ local function buildLeft(self, left)
   -- soft bars (Media/ClockBar) instead of rotated colour areas: smooth edges instead of stairs. Filled strokes in rich
   -- bronze ink,
   -- unfilled pale (Chronik.RING_ON / RING_OFF in SetData below).
-  local ring = Widgets.NewRing(left, { size = RING_SIZE, length = 14, thickness = 4, on = "gold", off = "faint",
+  local ring = Widgets.NewRing(left, { size = RING_SIZE, length = 14, thickness = Page.RING_THICK, on = "gold", off = "faint",
     tex = Theme.TEX and Theme.TEX.clockBar, texPad = Theme.CLOCK_BAR_PAD })
   ring.frame:SetPoint("TOPLEFT", left, "TOPLEFT", RING_X, -RING_Y)
   ring.center:SetFont(Widgets.FONT.title, SZ.xl, "")
@@ -154,7 +155,7 @@ local function buildLeft(self, left)
   ring.center:SetPoint("CENTER", ring.frame, "CENTER", 0, 6)
   local of = font(ring.frame, "label", SZ.xs, "sepia", "CENTER")
   of:SetPoint("TOP", ring.center, "BOTTOM", 0, -2)
-  set(of, T.ofMax)
+  set(of, T("ofMax", tostring(Chronik.maxLevel())))
   -- on level 1 (a single stroke) a handwritten "Auf geht's!" in the ring instead of a nearly empty chart
   local st = D.font(ring.frame, "hand", 16, "red")
   st:SetPoint("TOP", of, "BOTTOM", 0, -1)
@@ -177,6 +178,21 @@ local function buildLeft(self, left)
   motto:SetPoint("TOPLEFT", left, "TOPLEFT", x, -(G.slots.title.y + 72))
   motto:SetWidth(CARD_W)
   u.name, u.sub, u.motto = name, sub, motto
+  -- away time (AFK): one small line at the foot of the card (between motto and point lines, beside the ring), hover = details
+  -- (model: profile.afk). Empty below one minute of away time.
+  local afk = font(left, "label", SZ.xs, "sepia", "LEFT")
+  afk:SetPoint("TOPLEFT", left, "TOPLEFT", x, -(G.slots.title.y + 108))
+  afk:SetWidth(CARD_W)
+  afk:SetWordWrap(false)
+  u.afk = afk
+  local afkHit = CreateFrame("Frame", nil, left)
+  afkHit:SetSize(CARD_W, 14)
+  afkHit:SetPoint("TOPLEFT", afk, "TOPLEFT", 0, 1)
+  hover(afkHit, function()
+    local p = self.view and self.view.profile
+    if p and type(p.afk) == "table" and p.afk.text and type(p.afk.tip) == "table" then return p.afk.tip, p.afk.tipColors end
+  end)
+  u.afkHit = afkHit
 
   -- point lines: key left, value right, dotted line in between
   u.leads = {}
@@ -534,8 +550,12 @@ end
 
 local function drawLeft(self, view)
   local u, p, xp = self.L, view.profile, view.xp
-  local lvl = min(tonumber(p.level) or 0, Chronik.MAX_LEVEL)
-  u.ring:SetData(Chronik.MAX_LEVEL, function(i)
+  -- one stroke per level up to the client's highest level (Forever 60, Retail 80/90): thinner strokes for more levels
+  local top = Chronik.maxLevel()
+  local lvl = min(tonumber(p.level) or 0, top)
+  u.ring.thickness = max(2, min(Page.RING_THICK, Page.RING_THICK * Chronik.MAX_LEVEL / top))
+  set(u.ringOf, Page.TEXT("ofMax", Journal.Texts.int(top)))
+  u.ring:SetData(top, function(i)
     if i <= lvl then return Page.RING_ON, 1 end
     return Page.RING_OFF, 0.6
   end)
@@ -545,6 +565,8 @@ local function drawLeft(self, view)
   set(u.name, p.name)
   set(u.sub, p.subtitle)
   set(u.motto, p.motto)
+  set(u.afk, type(p.afk) == "table" and p.afk.text or "")
+  Widgets.fitLine(u.afk, CARD_W) -- English is longer: smaller instead of cut off
   set(u.leads.since, p.since)
   set(u.leads.played, p.played)
   set(u.leads.perDay, p.perDay)
@@ -804,6 +826,7 @@ function Page:OnHide()
     for _, b in ipairs(L.seals) do Widgets.hideTip(b) end
     if L.entriesHit then Widgets.hideTip(L.entriesHit) end
     if L.sealCountHit then Widgets.hideTip(L.sealCountHit) end
+    if L.afkHit then Widgets.hideTip(L.afkHit) end
   end
   -- the next open starts with the overview again
   if self.sub then self:CloseSub() end

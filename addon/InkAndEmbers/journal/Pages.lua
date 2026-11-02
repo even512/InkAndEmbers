@@ -97,13 +97,17 @@ local CHECK = {
   openRepeat = function(v) return type(v) == "boolean" end,
   openClass = function(v) return type(v) == "boolean" end,
   openCategory = function(v) return type(v) == "boolean" end,
+  -- Lehrplan (WoW Forever): automatic to-do "Zum Lehrer" after a level-up, notice about free talent points, list filter
+  trainerTodo = function(v) return type(v) == "boolean" end,
+  talentHint = function(v) return type(v) == "boolean" end,
+  trainFilter = function(v) return v == "now" or v == "next" or v == "learned" or v == "all" end,
   kampfHunted = function(v)
     return v == nil or v == "all" or (type(v) == "number" and v == v and v > 0 and v < 2147483648 and v == math.floor(v))
   end,
 }
 local DEFAULT = { toast = true, toastSound = true, toastMedal = true, toastZone = true, welcome = true, narrator = "own", restReview = true, bookSounds = true, worldMap = true,
   albumFilter = "all", openLocked = false, openGroup = false, openRepeat = false, openClass = true,
-  openCategory = false }
+  openCategory = false, trainerTodo = true, talentHint = true, trainFilter = "now" }
 
 function Pages.setting(key)
   local check = CHECK[key]
@@ -169,10 +173,36 @@ end
 
 local subFns = {}
 
+-- Sub-bookmarks that a client hides (e.g. WoW Forever only parts in Retail): Pages.hideSub(id, key, fn), fn() -> true = hidden.
+-- Read live in Pages.subs; the other bookmarks keep their order. A page with fewer than two visible bookmarks has none.
+local hiddenSubs = {}
+
+function Pages.hideSub(id, key, fn)
+  if type(id) ~= "string" or type(key) ~= "string" or type(fn) ~= "function" then return false end
+  hiddenSubs[id] = hiddenSubs[id] or {}
+  hiddenSubs[id][key] = fn
+  return true
+end
+
+local function subHidden(id, key)
+  local fn = hiddenSubs[id] and hiddenSubs[id][key]
+  if not fn then return false end
+  local ok, hide = pcall(fn)
+  return ok and hide == true
+end
+
 function Pages.subs(id)
   local page = type(id) == "string" and pages[id]
   local list = page and page.subs
-  if type(list) ~= "table" or #list < 2 then return nil end
+  if type(list) ~= "table" then return nil end
+  if hiddenSubs[id] then
+    local shown = {}
+    for _, s in ipairs(list) do
+      if not subHidden(id, s.key) then shown[#shown + 1] = s end
+    end
+    list = shown
+  end
+  if #list < 2 then return nil end
   return list
 end
 

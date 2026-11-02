@@ -553,6 +553,12 @@ ns.Types = {
     { "said", "Zahl der per Zettel gesagten Sätze" },
     { "sim", "1 = Probe-Runde aus der Retail-Simulation (/chronik sim feuer), sonst leer; /chronik sim feuer löschen entfernt nur diese" },
   } },
+  AF = { order = 1720, name = "AFK-Phase", desc = "Eine Phase als abwesend markiert (AFK, von Hand oder automatisch) ist zu Ende. Die Zeile steht erst am Ende der Phase; Phasen unter 10 Sekunden werden nicht geschrieben. Die Summen stehen in counters.afk (seconds, phases), die längste Phase in snapshots.state.afk.longest.", fields = {
+    { "seconds", "Dauer der Phase in Sekunden" },
+    { "level", "Stufe des Charakters" },
+    { "mapID", "Karte (uiMapID) am Ende, leer wenn unbekannt (why = gap)" },
+    { "why", "Ende: end (AFK-Markierung wurde entfernt), logout (Ausloggen) oder gap (Absturz oder Reload ohne Fortsetzung; Ende = letzter bekannter Zeitpunkt)" },
+  } },
   VE = { order = 1800, name = "Vorhaben erfüllt", desc = "Ein eigenes To Do (Vorhaben) wurde erledigt: automatisch (Zone betreten, Ort erreicht, Gegner getötet, Gegenstände gefunden) oder von Hand abgehakt (how = hand). Die Liste selbst steht in chars[guid].vorhaben.", fields = {
     { "id", "Nummer des Vorhabens in der Vorhaben-Liste" },
     { "mapID", "Zielkarte des Vorhabens (uiMapID)" },
@@ -684,7 +690,8 @@ function Store.login()
   local char = sub(db.chars, guid)
   for _, k in ipairs(Store.CHAR_TABLES) do sub(char, k) end
   local info, now = char.info, time()
-  if not info.firstSeen then info.firstSeen = now end
+  local fresh = not info.firstSeen
+  if fresh then info.firstSeen = now end
   info.name = text(UnitName("player")) or info.name
   info.realm = text(GetRealmName and GetRealmName()) or info.realm
   local raceName, raceFile = UnitRace("player")
@@ -696,6 +703,14 @@ function Store.login()
   info.lastSeen = now
   if type(char.lineCount) ~= "number" then char.lineCount = 0 end
   Store.guid, Store.current, Store.loginAt = guid, char, now
+  -- first session of this character with the addon: time and level at that login (journal/Toast.lua keeps medals
+  -- earned by the start state of an existing character quiet); memory only, nil on every later login
+  local level = nil
+  if fresh and type(UnitLevel) == "function" then
+    local ok, v = pcall(UnitLevel, "player")
+    if ok and not isSecret(v) and finite(v) then level = v end
+  end
+  Store.fresh = fresh and { at = now, level = level } or nil
   Store.sizes = {}
   Store.openBlock()
 end

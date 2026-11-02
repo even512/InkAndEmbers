@@ -1419,6 +1419,59 @@ end
 
 function Map.zoomed(m) return m.userT ~= nil end
 
+-- Live tail: the trail is sampled every 3-6 s and the model is rebuilt at most every 2.5 s, so the drawn route ends a few
+-- metres behind the arrow and then jumps forward. A thin line from the last route point (scene.route.tail) to the arrow
+-- closes that gap on every live step. Only while the whole route is shown (no playback), when the last trail point is recent
+-- (Map.TAIL_MAX_AGE s: no line across a teleport, hearth or logout) and the arrow is near it (Map.TAIL_MAX_VIEW of the view).
+Map.TAIL_MAX_AGE = 30
+Map.TAIL_MAX_VIEW = 0.25
+-- A step of the arrow farther than max(Map.JUMP_MIN_YD, Map.JUMP_SPEED * seconds) yards is a blink/teleport, not walking (fastest
+-- skyriding is ~80 yd/s): the tail of that trail point is switched off, a new trail point brings it back.
+Map.JUMP_MIN_YD = 15
+Map.JUMP_SPEED = 110
+-- The tail must join the last drawn route segment without a visible seam (same pixel within Map.TAIL_JOIN_PX).
+Map.TAIL_JOIN_PX = 2
+
+local function lastWalk(m)
+  for i = #(m.segs or {}), 1, -1 do
+    if m.segs[i].kind ~= "flight" then return m.segs[i] end
+  end
+  return nil
+end
+
+function Map.placeTail(m)
+  local scene = m.scene
+  local tail = scene and scene.route and scene.route.tail
+  local cur = scene and scene.current
+  local show = false
+  local x1, y1, x2, y2
+  if tail and cur and m.T and (m.p == nil or m.p == huge) and type(time) == "function" and m.tailOffT ~= tail.t then
+    local age = time() - (tail.t or 0)
+    local dx, dy = cur.vx - tail.vx, cur.vy - tail.vy
+    if age >= 0 and age <= Map.TAIL_MAX_AGE and dx * dx + dy * dy <= Map.TAIL_MAX_VIEW ^ 2 and (dx ~= 0 or dy ~= 0) then
+      x1, y1 = Map.toPixel(m.T, tail.vx, tail.vy)
+      x2, y2 = Map.toPixel(m.T, cur.vx, cur.vy)
+      show = x1 ~= nil and x2 ~= nil
+      -- starts exactly where the last drawn segment ends (else the route was cut: no loose piece)
+      local ls = show and lastWalk(m)
+      if show and not (ls and math.abs(ls.x2 - x1) <= Map.TAIL_JOIN_PX and math.abs(ls.y2 - y1) <= Map.TAIL_JOIN_PX) then
+        show = false
+      elseif show then
+        x1, y1 = ls.x2, ls.y2
+      end
+    end
+  end
+  if not show then
+    if m.tailLine then m.tailLine:Hide() end
+    return false
+  end
+  if not m.tailLine then
+    m.tailLine = m.content:CreateLine(nil, "ARTWORK", nil, 3)
+    styleRoute(m.tailLine, "walk")
+  end
+  return drawLine(m, m.tailLine, x1, y1, x2, y2)
+end
+
 -- Player arrow at scene.current (position, heading: the player's facing if known, else the end of the route). Also used by
 -- the live tick, which moves only the arrow; cp = clip in pixels (default: the visible clip of the last draw).
 function Map.placeCurrent(m, cp)
@@ -1435,6 +1488,7 @@ function Map.placeCurrent(m, cp)
   else
     m.current:Hide()
   end
+  Map.placeTail(m)
 end
 
 -- Live arrow: while the map with a live scene (scene.live) is visible, a tick (Map.LIVE_INTERVAL) moves the arrow to the
@@ -1460,11 +1514,21 @@ function Map.liveStep(m)
     if not scene.current then return false end
     scene.current = nil
     m.current:Hide()
+    Map.placeTail(m)
     return true
   end
   if type(vx) ~= "number" or type(vy) ~= "number" then return false end
   local cur = scene.current
   if cur and cur.vx == vx and cur.vy == vy and cur.facing == facing then return false end
+  -- a sudden step (blink, port without event) switches the tail of the current trail point off
+  local tail, yd = scene.route and scene.route.tail, scene.yards
+  if cur and tail and yd then
+    local now = type(GetTime) == "function" and GetTime() or nil
+    local dt = (now and m.liveT) and (now - m.liveT) or 0
+    local dx, dy = (vx - cur.vx) * yd[1], (vy - cur.vy) * yd[2]
+    if sqrt(dx * dx + dy * dy) > max(Map.JUMP_MIN_YD, Map.JUMP_SPEED * dt) then m.tailOffT = tail.t end
+  end
+  m.liveT = type(GetTime) == "function" and GetTime() or nil
   scene.current = { vx = vx, vy = vy, facing = facing }
   Map.placeCurrent(m)
   return true
@@ -1806,6 +1870,7 @@ function Map.setProgress(m, p)
     m.walker:Hide()
     m.current:SetAlpha(1)
   end
+  Map.placeTail(m)
 end
 
 function Map.counts(m)

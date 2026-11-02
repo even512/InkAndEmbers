@@ -43,6 +43,7 @@ L.add("enUS", "Core", {
   helpTodo = "/chronik todo - show/hide open to-dos at the screen edge (\"todo reset\" restores position and size)",
   helpNote = "/chronik note - show/hide the quick note field (Enter adds a note)",
   helpOpen = "/chronik open - open quests (\"Open\" tab under Quests); \"open test\" turns on Retail test mode (\"test off\" ends it)",
+  helpTrain = "/chronik training - your class training plan (\"Training\" tab under Quests, WoW Forever only); \"training status\" shows the state",
   helpLanguage = "/chronik language - choose language: \"language auto\", \"language de\" or \"language en\" (takes effect after /reload)",
   helpReset = "/chronik reset - reset the size and position of the travel journal",
   helpSave = "/chronik save - open the save window (saving reloads the interface)",
@@ -77,6 +78,17 @@ L.add("enUS", "Core", {
   aurasMissing = "Auras: Rest collector not loaded.",
   coinsMissing = "Coins: travel journal not loaded, no coin source chosen.",
   tutorialMissing = "Introduction: travel journal not loaded.",
+  helpDiagQuests = "/chronik diag retailquests [map ID] - probe the game's quest interfaces on the current map (result in EveNChronicleDB.diag.retailQuests)",
+  rqCombat = "Quest interfaces: please run this out of combat.",
+  rqNoMap = "Quest interfaces: no map found (give a map ID, e.g. /chronik diag retailquests 37).",
+  rqNoApi = "Quest interfaces: C_QuestLine is missing on this client (map %d saved).",
+  rqAsked = "Quest interfaces: map %d requested, results in at most %d s …",
+  rqResult = "Quest interfaces map %d (%s): %d quest lines, %d quests, %d force-visible, %d bonus objectives (%s).",
+  rqViaEvent = "answer received",
+  rqViaTimeout = "no answer, after waiting",
+  rqViaNow = "at once",
+  rqError = "Quest interfaces: error while reading (%s).",
+  rqDetails = "Details in EveNChronicleDB.diag.retailQuests[%d] (in the file after /reload).",
   unknownCommand = "Unknown command \"%s\". /chronik help lists all commands.",
 })
 
@@ -123,6 +135,23 @@ L.add("enUS", "col.Rest", {
   dateFmt = "%m/%d/%Y %H:%M",
   idPart = " ID %s",
   fireStatus = "Campfire: known IDs %s, last detected %s.",
+})
+
+-- collectors/Trainer.lua
+L.add("enUS", "col.Trainer", {
+  todo_one = "To the trainer: %s new spell (%s)",
+  todo_other = "To the trainer: %s new spells (%s)",
+  talentHead = "Talent Points",
+  talent_one = "%s point is waiting for you",
+  talent_other = "%s points are waiting for you",
+  talentSub = "Spend them in the talent window",
+  diag = "Training: %s",
+  diagRetail = "off (Retail: class spells come by themselves)",
+  diagOn = "class %s, %s entries, learnable now %s, trainers known %s, visits %s, free talent points %s%s",
+  diagNoData = "no data for class %s",
+  diagShape = ", trainer list: %s",
+  unknown = "?",
+  retailOnly = "The training plan exists in WoW Forever only (on Retail class spells come by themselves).",
 })
 
 L.add("enUS", "col.Campfire", {

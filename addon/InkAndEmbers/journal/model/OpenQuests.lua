@@ -25,6 +25,9 @@
 -- not in the quest log, race and class fit, min level <= level, all preAll are done, one preAny is done and no excl
 -- quest is done or accepted; otherwise "locked".
 -- Beta data unsure: flag u, min level > 30, or (without min level) quest level > 30.
+-- Retail client: list/zones/available/footer/diagLine/clientZone go to Journal.OpenQuestsRetail (runtime source from
+-- the game's world map, journal/model/OpenQuestsRetail.lua); the data addon is never loaded there. The test mode and
+-- OpenQuests.ALLOW_RETAIL keep the data addon in the retail map space. Forever is unchanged.
 local _, ns = ...
 
 local Journal = ns.Journal or {}
@@ -78,7 +81,8 @@ local T = ns.Locale.ns("m.OpenQuests", {
   INTERFACE_VERSION = "Zusatzaddon veraltet (Spielversion)",
   INCOMPATIBLE = "Zusatzaddon passt nicht zu dieser Spielversion",
   CORRUPT = "Zusatzaddon beschädigt",
-  RETAIL = "Die Questdaten stammen aus WoW Forever und passen nicht zu den Retail-Zonen",
+  RETAIL = "In Retail kommen die offenen Quests aus der Weltkarte des Spiels",
+  NO_QUESTLINE = "Die Weltkarte des Spiels liefert keine Quest-Angebote (Schnittstelle fehlt)",
   BANNED = "vom Spiel gesperrt",
   INSECURE = "vom Spiel gesperrt",
   NOT_DEMAND_LOADED = "nicht auf Abruf ladbar (LoadOnDemand fehlt)",
@@ -331,13 +335,26 @@ local function cleanReason(r)
   return r and sub(r, 1, 40) or nil
 end
 
--- Retail client (same check as Journal.MapSpace.client: Forever has its own WOW_PROJECT_ID): the QuestieDB data does not
--- match retail zones, so the open quest list stays off there; the test mode (OpenQuests.setTest) and
--- OpenQuests.ALLOW_RETAIL (tests of the retail map space) keep it on.
+-- Retail client (Journal.MapSpace.retailClient: project id AND interface version, so Forever is never taken for Retail): the QuestieDB data does not
+-- match retail zones, so the data addon stays unloaded there and the world map source (Journal.OpenQuestsRetail) answers;
+-- the test mode (OpenQuests.setTest) and OpenQuests.ALLOW_RETAIL (tests of the retail map space) keep the data addon.
 function OpenQuests.retailClient()
-  local id, main = num(rawget(_G, "WOW_PROJECT_ID")), num(rawget(_G, "WOW_PROJECT_MAINLINE"))
-  return id ~= nil and id == main
+  local ms = Journal.MapSpace
+  return ms ~= nil and ms.retailClient() == true
 end
+
+-- Switch for the retail world map source (OpenQuestsRetail, C_QuestLine). ON: tested in the game (Retail 12.1.5, Tirisfal, level 5:
+-- filled list). false = "Open" stays locked in Retail (reason RETAIL) as in 0.9.2. The diagnostic /chronik diag retailquests
+-- does not depend on it.
+OpenQuests.RETAIL_SOURCE = true
+
+-- the retail world map source when it is in charge, else nil
+local function retailSource()
+  if S.test or OpenQuests.ALLOW_RETAIL or not OpenQuests.retailClient() then return nil end
+  local R = Journal.OpenQuestsRetail
+  return (R and R.active and R.active()) and R or nil
+end
+OpenQuests.retailSource = retailSource
 
 local function loadData()
   if not S.test and not OpenQuests.ALLOW_RETAIL and OpenQuests.retailClient() then return fail("RETAIL") end
@@ -359,6 +376,8 @@ local function loadData()
 end
 
 function OpenQuests.available()
+  local R = retailSource()
+  if R then return R.available() end
   if not S.data then loadData() end
   return S.data ~= nil
 end
@@ -373,7 +392,7 @@ end
 
 local REASON_KEYS = { DISABLED = true, DEP_DISABLED = true, MISSING = true, DEP_MISSING = true, INTERFACE_VERSION = true,
   INCOMPATIBLE = true, CORRUPT = true, BANNED = true, INSECURE = true, NOT_DEMAND_LOADED = true, COMBAT = true,
-  NOT_LOGGED_IN = true, NO_API = true, NO_DATA = true, ERROR = true, UNKNOWN = true, RETAIL = true }
+  NOT_LOGGED_IN = true, NO_API = true, NO_DATA = true, ERROR = true, UNKNOWN = true, RETAIL = true, NO_QUESTLINE = true }
 OpenQuests.REASONS = setmetatable({}, { __index = function(_, k)
   if type(k) == "string" and REASON_KEYS[k] then return T[k] end
 end })
@@ -393,6 +412,8 @@ function OpenQuests.status()
 end
 
 function OpenQuests.diagLine()
+  local R = retailSource()
+  if R then return R.diagLine() end
   local d = S.data
   local line
   if d then
@@ -405,6 +426,8 @@ function OpenQuests.diagLine()
 end
 
 function OpenQuests.footer()
+  local R = retailSource()
+  if R then return R.footer() end
   local d = S.data
   if d and d.version then return T("footer", d.version) end
   return T.footerNoVersion
@@ -594,6 +617,7 @@ function OpenQuests.clientZone(id)
   id = num(id)
   if not id then return nil end
   id = floor(id)
+  if retailSource() then return id end -- world map source: every retail uiMapID is its own
   if mapIn(id) then return id end
   local M = mapSpace()
   return M and M.mapToClient and M.mapToClient(id, space()) or nil
@@ -949,6 +973,8 @@ local function emptyResult(scope, mapID, extra)
 end
 
 function OpenQuests.list(scope, opts)
+  local R = retailSource()
+  if R then return R.list(scope, cleanOpts(opts)) end
   opts = cleanOpts(opts)
   local mapID
   if scope ~= "all" then
@@ -1020,6 +1046,8 @@ function OpenQuests.list(scope, opts)
 end
 
 function OpenQuests.zones(opts)
+  local R = retailSource()
+  if R then return R.zones(cleanOpts(opts)) end
   opts = cleanOpts(opts)
   local out = { total = { open = 0, locked = 0 }, zones = {} }
   if not OpenQuests.available() then
@@ -1264,12 +1292,8 @@ function OpenQuests.onNames(fn)
   S.onNames = type(fn) == "function" and fn or nil
 end
 
-local function namesArrived(id)
-  local q = S.pending and S.pending[id]
-  if not q then return end
-  S.pending[id] = nil
-  q.dname = nil
-  S.eval = nil
+-- new content for the view (names arrived, retail world map answered): one redraw after 0.5 s
+local function changed()
   if S.namesQueued or not S.onNames then return end
   S.namesQueued = true
   local function fire()
@@ -1281,6 +1305,16 @@ local function namesArrived(id)
     if ok then return end
   end
   fire()
+end
+OpenQuests._changed = changed
+
+local function namesArrived(id)
+  local q = S.pending and S.pending[id]
+  if not q then return end
+  S.pending[id] = nil
+  q.dname = nil
+  S.eval = nil
+  changed()
 end
 OpenQuests._namesArrived = namesArrived
 
@@ -1412,6 +1446,8 @@ function OpenQuests.onEvent(event, arg)
     local lv = num(arg)
     if lv and lv > 0 then S.levelHint = floor(lv) end
   end
+  local R = retailSource()
+  if R and R.onEvent then R.onEvent(event, arg) end
   OpenQuests.invalidate()
 end
 

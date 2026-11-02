@@ -122,7 +122,8 @@ end
 
 local function copy(p)
   local k = kindOf(p)
-  local c = { id = p.id, text = p.text, kind = k, mapID = p.mapID, created = p.created, done = p.done, doneAt = p.done }
+  local c = { id = p.id, text = p.text, kind = k, mapID = p.mapID, created = p.created, done = p.done, doneAt = p.done,
+    auto = type(p.auto) == "string" and p.auto or nil }
   if k == "place" then c.x, c.y = coord01(p.x), coord01(p.y) end
   if type(p.target) == "table" then
     c.target = { id = validMap(p.target.id), name = type(p.target.name) == "string" and p.target.name or nil }
@@ -369,6 +370,62 @@ function Plans.toggle(id)
   Plans.watchPlaces()
   changed()
   return p.done ~= nil
+end
+
+-- Automatic to-dos (e.g. "Zum Lehrer", collectors/Trainer.lua): a free to-do with a tag (p.auto, lower-case letters). At most one
+-- open to-do per tag: Plans.upsertAuto creates it or updates its text; Plans.finishAuto completes it without a VE line (an
+-- automatic to-do is no own travel goal: medal "Eigene Wege" and diary stay untouched), the done hooks (sound, card) still run.
+local function autoTag(tag)
+  if isSecret(tag) or type(tag) ~= "string" or not string.match(tag, "^%l+$") or #tag > 24 then return nil end
+  return tag
+end
+
+function Plans.findAuto(tag)
+  tag = autoTag(tag)
+  local list = tag and store()
+  if not list then return nil end
+  for _, p in ipairs(list) do
+    if valid(p) and not p.done and p.auto == tag then return p.id end
+  end
+  return nil
+end
+
+function Plans.upsertAuto(tag, text)
+  tag = autoTag(tag)
+  if not tag then return nil, "art" end
+  local clean = Plans.cleanText(text)
+  if not clean then return nil, "leer" end
+  local list = store()
+  if not list then return nil, "nicht-bereit" end
+  local id = Plans.findAuto(tag)
+  if id then
+    local p = find(list, id)
+    if p.text ~= clean then
+      p.text = clean
+      changed()
+    end
+    return id, "update"
+  end
+  local newId, err = Plans.add({ kind = "free", text = clean })
+  if not newId then return nil, err end
+  local p = find(list, newId)
+  if p then p.auto = tag end
+  return newId, "new"
+end
+
+function Plans.finishAuto(tag, how)
+  local id = Plans.findAuto(tag)
+  local list = id and store()
+  local p = list and find(list, id)
+  if not p then return false end
+  p.done = floor(time())
+  p.counted = true
+  local plan = copy(p)
+  plan.how, plan.label = type(how) == "string" and how or "auto", Plans.label(p)
+  for i = 1, #doneHooks do Core.safe(doneHooks[i], plan) end
+  Plans.watchPlaces()
+  changed()
+  return true
 end
 
 function Plans.get(id)

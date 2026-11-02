@@ -1,5 +1,5 @@
 -- Collector 'Trail': position trail by movement.
--- Core.ticker every 3 s, no OnUpdate. A point after 22 yd of movement (UnitPosition, world yards); fallback without world position: map distance > 0.3 % (C_Map.GetPlayerMapPosition).
+-- Core.ticker every 3 s, no OnUpdate. A point after 18 yd of movement (UnitPosition, world yards); fallback without world position: map distance > 0.3 % (C_Map.GetPlayerMapPosition).
 -- Mandatory marked points on zone change (z), death (d), takeoff (f) and landing (l). Paused in flight, continues in combat; without a readable position one TP line per pause.
 local _, ns = ...
 local Core, Store = ns.Core, ns.Store
@@ -23,7 +23,7 @@ local function call(fn, ...)
 end
 
 local TICK = 3          -- seconds per tick (worst case in the size model)
-local MIN_YARDS = 22    -- minimum distance in world yards (~20 m)
+local MIN_YARDS = 18    -- minimum distance in world yards (below running speed 7 yd/s x 3 s = 21: every tick while running)
 local MIN_MAP = 0.003   -- minimum distance as map fraction (0.3 %) when UnitPosition is missing or secret
 local ZONE_DELAY = 0.5  -- seconds after ZONE_CHANGED_NEW_AREA (the map is current by then)
 

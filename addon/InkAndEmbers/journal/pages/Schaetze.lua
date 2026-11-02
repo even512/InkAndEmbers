@@ -1,5 +1,5 @@
--- Schaetze page: bag and ledger on the left; gold flow (columns per level), gear over time, the "Erstes Blau" slip and
--- the counters on the right. Data from journal/model/Schaetze.lua (display-ready texts).
+-- Schaetze page: bag and ledger on the left; gold flow (columns per level, sources, or holdings per level as a staircase),
+-- gear over time, the "Erstes Blau" slip and the counters on the right. Data from journal/model/Schaetze.lua (display-ready texts).
 -- The equipment finds table (pages/SchaetzeFunde.lua) opens via the sub-bookmark "Ausrüstungsfunde" (Page.subs); the
 -- overview sits in its own holders (mainL/mainR). No ticker, no OnUpdate; pools are bounded.
 local _, ns = ...
@@ -69,9 +69,11 @@ Page.TEXT = ns.Locale.ns("p.Schaetze", {
   bagEmpty = "Leerer Beutel",
   ledgerEmpty = "Noch kein Gold bewegt. Beute, Questlohn und Händler tragen sich hier von selbst ein.",
   flowEmpty = "Noch kein Gold bewegt. Sobald Münzen klimpern, zeigt sich hier, woher sie kamen und wohin sie gingen.",
-  gearEmptyHand = "Noch keine Ausrüstung erfasst. Mit jedem angelegten Teil wächst hier die Zeitleiste von Stufe 1 bis 60.",
+  gearEmptyHand = "Noch keine Ausrüstung erfasst. Mit jedem angelegten Teil wächst hier die Zeitleiste von Stufe 1 bis %s.",
   qualityEmpty = "Jeder Fund wird hier nach Güte gezählt.",
   flowLevels = "Ein- und Ausgaben je Stufe", income = "Einnahmen", expense = "Ausgaben", net = "Saldo",
+  toHold = "Besitz", holdTip = "Besitz je Stufe", holdTip2 = "Das meiste Gold im Beutel in jeder Stufe",
+  flowHold = "Höchster Goldbesitz je Stufe", holdPeak = "Höchststand %s · Stufe %s", holdJump = "Größter Sprung +%s · Stufe %s",
   gear = "Ausrüstung im Wandel", gearEmpty = "Noch keine Ausrüstung erfasst.", quality = "FUNDE NACH GÜTE",
   incomeBar = "EINNAHMEN", expenseBar = "AUSGABEN UND BEUTEL", blue = "Erstes Seltenes",
   toOverview = "Übersicht", overviewTip = "Beutel, Haushaltsbuch und Goldfluss",
@@ -423,10 +425,12 @@ local function buildRight(self, right)
     tr:SetSize(STRIP_W, 12)
     u.track[i] = tr
   end
-  -- ticks every 10 levels
+  -- ticks every 10 levels up to the client's highest level (Forever 60: 6 ticks; Retail 80/90: 8/9 ticks, cells >= 3 px)
   u.ticks, u.tickLabels = {}, {}
-  local cell = STRIP_W / Schaetze.MAX_LEVEL
-  for L = 10, Schaetze.MAX_LEVEL, 10 do
+  local top = Schaetze.maxLevel()
+  u.gearTop = top
+  local cell = STRIP_W / top
+  for L = 10, top, 10 do
     local x = STRIP_X + L * cell
     local t = tex(right, "BORDER")
     t:SetColorTexture(Widgets.color("sepia", 0.18))
@@ -748,15 +752,108 @@ local function drawBars(self, flow)
   end
 end
 
+-- legend on top (holdings): peak (gold) and, if it fits, the biggest leap between two levels
+local function holdLegend(u, hold)
+  local T = Page.TEXT
+  local int = Journal.Texts.int
+  local x = 0
+  local entries = { { T("holdPeak", hold.maxText, int(hold.maxLevel or hold.to)), "gold" } }
+  if hold.jump then
+    entries[2] = { T("holdJump", hold.jump.text, int(hold.jump.level)), "sepia" }
+  end
+  for i, e in ipairs(entries) do
+    local item = u.legend:Acquire()
+    if item then
+      local sw = 0
+      item.swatch:SetColorTexture(Widgets.color(e[2], e[2] == "gold" and 1 or 0.55))
+      item.swatch:SetPoint("TOPLEFT", u.flow, "TOPLEFT", x, -2)
+      item.text:SetPoint("LEFT", item.swatch, "RIGHT", 4, 0)
+      item.text:SetTextColor(Widgets.color("ink"))
+      set(item.text, e[1])
+      sw = item.text.GetStringWidth and tonumber(item.text:GetStringWidth()) or 0
+      sw = sw > 0 and sw or #e[1] * 5
+      if i > 1 and x + 8 + 4 + sw > RW then -- does not fit: leave the leap out
+        item:Hide() -- stays in the pool's used list, ReleaseAll resets it
+        break
+      end
+      x = x + 8 + 4 + sw + 16
+    end
+  end
+end
+
+-- staircase of holdings: one column per level from the zero line up (same scale for all), the highest one in gold.
+-- Few levels: wide columns with the amount above; many: narrow and without gaps, the maximum on the axis.
+local function drawHold(self, hold)
+  local u = self.R
+  local cols = hold.cols
+  local n = #cols
+  local showValues = n <= VALUE_MAX
+  local top = PLOT_T + (showValues and VALUE_PAD or 0)
+  local bottom = PLOT_B
+  local h = bottom - top
+  local x0, plotW = AXIS_W, RW - AXIS_W
+  local slot = plotW / max(n, 1)
+  local barW = floor(min(BAR_MAX, max(BAR_MIN, slot - (n <= 12 and 4 or 1))))
+  local sc = hold.max > 0 and h / hold.max or 0
+
+  holdLegend(u, hold)
+  flowRect(u, x0, top, plotW, 1, "sepia", 0.18)
+  flowLabel(u, hold.maxText, x0 - 6, top - 5, "RIGHT", "sepia", AXIS_W - 6)
+  flowRect(u, x0, bottom, plotW, 1, "ink", 0.7)
+  flowLabel(u, "0", x0 - 6, bottom - 5, "RIGHT", "sepia", AXIS_W - 6)
+
+  local step = n <= 12 and 1 or (n <= 30 and 5 or 10)
+  local lastLabel
+  for i, c in ipairs(cols) do
+    local cx = x0 + (i - 0.5) * slot
+    local bx = floor(cx - barW / 2 + 0.5)
+    local bh = c.top > 0 and max(1, floor(c.top * sc + 0.5)) or 0
+    if bh > 0 then
+      flowRect(u, bx, bottom - bh, barW, bh, c.peak and "gold" or "sepia", c.peak and 1 or 0.5)
+      flowRect(u, bx, bottom - bh, barW, 1, "ink", 0.7) -- sharp stair edge
+    end
+    if showValues and c.top > 0 then
+      flowLabel(u, Schaetze.moneyText(c.top, true, false, Schaetze.FONT.label), cx, bottom - bh - 15, "CENTER",
+        c.peak and "ink" or "sepia", max(slot, 60))
+    end
+    local L = c.level
+    if step == 1 or (L % step == 0) or (i == n and (not lastLabel or i - lastLabel >= step / 2)) then
+      flowLabel(u, Journal.Texts.int(L), cx, PLOT_B + 4, "CENTER", "sepia", 30)
+      lastLabel = i
+    end
+    nodeHit(u, x0 + (i - 1) * slot, PLOT_T - 2, slot, PLOT_B - PLOT_T + 14, c.tip)
+  end
+end
+
+local function flowItems(withHold)
+  local T = Page.TEXT
+  local items = { { key = "levels", label = T.toBand }, { key = "bars", label = T.toBars } }
+  if withHold then items[3] = { key = "hold", label = T.toHold, tip = { T.holdTip, T.holdTip2 } } end
+  return items
+end
+
 local function drawFlow(self, view)
   local u = self.R
   local flow = view.flow
   clearFlow(self)
   set(u.flowEmpty, "")
   local T = Page.TEXT
+  local int = Journal.Texts.int
   local series = not flow.empty and flow.levels or nil
-  local mode = (series and self.flowMode == "levels" and not self.levelError) and "levels" or "bars"
-  u.toggle.frame:SetShown(series ~= nil and not self.levelError)
+  local hold = (not flow.empty and not self.holdError) and flow.hold or nil
+  local mode = "bars"
+  if self.flowMode == "hold" and hold and not self.levelError then
+    mode = "hold"
+  elseif (self.flowMode == "levels" or self.flowMode == "hold") and series and not self.levelError then
+    mode = "levels"
+  end
+  -- the third entry (holdings) only while there is a series for it
+  local withHold = hold ~= nil
+  if self.toggleHold ~= withHold then
+    self.toggleHold = withHold
+    u.toggle:SetItems(flowItems(withHold))
+  end
+  u.toggle.frame:SetShown((series ~= nil or hold ~= nil) and not self.levelError)
   u.toggle:SetValue(mode)
   if flow.empty then
     set(u.flowEmpty, T.flowEmpty)
@@ -764,8 +861,16 @@ local function drawFlow(self, view)
     set(u.flowTotal, "")
     return
   end
+  if mode == "hold" then
+    set(u.flowSub, T.flowHold)
+    set(u.flowTotal, hold.from == hold.to and T("level", int(hold.from)) or T("levels", int(hold.from), int(hold.to)))
+    local ok, err = pcall(drawHold, self, hold)
+    if ok then return end
+    -- staircase cannot be drawn: back to the columns per level, the entry disappears
+    self.holdError, self.flowMode = err, "levels"
+    return drawFlow(self, view)
+  end
   if mode == "levels" then
-    local int = Journal.Texts.int
     set(u.flowSub, T.flowLevels)
     set(u.flowTotal, series.from == series.to and T("level", int(series.from))
       or T("levels", int(series.from), int(series.to)))
@@ -782,7 +887,7 @@ local function drawFlow(self, view)
 end
 
 function Page.SetFlow(self, mode)
-  if not self.view or (mode ~= "levels" and mode ~= "bars") then return end
+  if not self.view or (mode ~= "levels" and mode ~= "bars" and mode ~= "hold") then return end
   self.flowMode = mode
   drawFlow(self, self.view)
 end
@@ -797,14 +902,14 @@ function Page:DrawGear(view)
   u.dashes:ReleaseAll()
   u.runHits:ReleaseAll()
   local gear = view.gear
-  local cell = STRIP_W / Schaetze.MAX_LEVEL
+  local cell = STRIP_W / (u.gearTop or Schaetze.maxLevel()) -- same scale as the ticks built with the page
   local empty = not gear or gear.empty
   for _, list in ipairs({ u.slotLbl, u.track, u.ticks, u.tickLabels }) do
     for _, e in ipairs(list) do e:SetShown(not empty) end
   end
   if empty then
     set(u.gearSub, "")
-    set(u.gearEmpty, Page.TEXT.gearEmptyHand)
+    set(u.gearEmpty, Page.TEXT("gearEmptyHand", Journal.Texts.int(u.gearTop or Schaetze.maxLevel())))
     return
   end
   set(u.gearEmpty, "")

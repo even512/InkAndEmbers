@@ -130,10 +130,9 @@ function Theme.emblemCoords(kind)
   return (col * a.cell) / a.size + h, ((col + 1) * a.cell) / a.size - h, (row * a.cell) / a.size + h, ((row + 1) * a.cell) / a.size - h
 end
 
--- Moments page: album tape (art/journal/tape.jpg), icon atlas per moment kind (Media/MomentIcons.tga 512 x 256, 3 x 2 cells of
--- 128 px, 4th column empty; order = MOMENT_ICON_IDS in render-media.mjs) and the soft bar of the play-time clock
--- (Media/ClockBar.tga 32 x 128, white, border CLOCK_BAR_PAD per side, tinted via SetVertexColor).
-Theme.TEX.momentTape = MEDIA .. "MomentTape"
+-- Moments page: icon atlas per moment kind (Media/MomentIcons.tga 512 x 256, 3 x 2 cells of 128 px, 4th column empty; order =
+-- MOMENT_ICON_IDS in render-media.mjs) and the soft bar of the play-time clock (Media/ClockBar.tga 32 x 128, white, border
+-- CLOCK_BAR_PAD per side, tinted via SetVertexColor). The moment notes themselves use the note pad (Theme.TEX.todoPad).
 Theme.TEX.momentIcons = MEDIA .. "MomentIcons"
 Theme.TEX.clockBar = MEDIA .. "ClockBar"
 Theme.MOMENT_ICONS = { level = 0, fight = 1, death = 2, find = 3, place = 4, memory = 5 }
@@ -142,40 +141,6 @@ function Theme.momentIconCoords(name)
   local i = Theme.MOMENT_ICONS[name] or Theme.MOMENT_ICONS.memory
   local col, row = i % 3, math.floor(i / 3)
   return col * 128 / 512, (col + 1) * 128 / 512, row * 128 / 256, (row + 1) * 128 / 256
-end
-
--- Polaroid sheets: one 3 x 3 sheet per theme group (Media/Polaroid_<sheet>.tga, 1024 x 1024); cell i (1..9, row by row) at
--- column (i-1) % 3, row floor((i-1) / 3), edge POLAROID_ATLAS.cell, picture centred, pad px transparent around.
--- HAS_POLAROIDS[sheet] = true once the TGA exists (a test keeps it equal to the Media folder).
-Theme.TEX.polaroidPaper = MEDIA .. "PolaroidPaper"
-Theme.POLAROID_SHEETS = { "orte", "kampf", "funde", "stufen", "zonen1", "zonen2", "zonen3", "zonen4", "zonen5", "zonen6", "start",
-  "aufstieg", "slots1", "slots2", "rares" }
-for _, name in ipairs(Theme.POLAROID_SHEETS) do Theme.TEX["polaroid_" .. name] = MEDIA .. "Polaroid_" .. name end
-Theme.HAS_POLAROIDS = {
-  orte = true, kampf = true, funde = true, stufen = true,
-  zonen1 = true, zonen2 = true, zonen3 = true, zonen4 = true, zonen5 = true, zonen6 = true,
-  start = true, aufstieg = true, slots1 = true, slots2 = true, rares = true,
-}
--- Painted frame Media/PolaroidFrame.tga (512 x 512, crop POLAROID_FRAME; picture area transparent = hole). The page puts the
--- frame OVER the picture, which fills exactly the hole. POLAROID_HOLE: aspect (w / h) of the crop and the hole as share of
--- the crop width (l, r) / height (t, b), computed from the source pixels (a test recomputes).
-Theme.TEX.polaroidFrame = MEDIA .. "PolaroidFrame"
-Theme.HAS_POLAROID_FRAME = true
-Theme.POLAROID_HOLE = { aspect = 953 / 1150, l = 63 / 953, t = 71 / 1150, r = 887 / 953, b = 909 / 1150 }
--- Each cell carries the picture only in the middle (edge cell - 2 * pad = 293 px) with a transparent border of pad px, so the
--- picture can be shown as a truly rotated rectangle (Theme.polaroidTilt): the rotated edges lie in the border, never in the
--- neighbour cell. tiltMax = largest tilt (degrees) the border covers; matches POLAROID_ATLAS in render-media.mjs.
-Theme.POLAROID_ATLAS = { size = 1024, cell = 341, inset = 2, pad = 24, tiltMax = 3 }
-Theme.TEX.polaroidGround = MEDIA .. "PolaroidGround"
-Theme.POLAROID_GROUND = { size = 256, inset = 1, pad = 18 }
--- texcoords of cell i (1..9) of a sheet, inset by inset texture pixels so no neighbour bleeds in
-function Theme.polaroidCoords(i)
-  local a = Theme.POLAROID_ATLAS
-  local idx = math.max(1, math.min(9, math.floor(tonumber(i) or 1))) - 1
-  local col, row = idx % 3, math.floor(idx / 3)
-  local x0, y0 = col * a.cell + a.inset, row * a.cell + a.inset
-  local x1, y1 = (col + 1) * a.cell - a.inset, (row + 1) * a.cell - a.inset
-  return x0 / a.size, x1 / a.size, y0 / a.size, y1 / a.size
 end
 
 -- Tab bookmarks (Media/Bookmarks.tga, one cell per tab id). The label is looked up when read (the language is only known at
@@ -305,29 +270,20 @@ function Theme.rotCoords8(...)
   return ulu, ulv, llu, llv, uru, urv, lru, lrv
 end
 
-function Theme.polaroidQuad(w, h, tiltMax)
-  local a = math.rad(tiltMax or Theme.POLAROID_ATLAS.tiltMax)
+-- Area needed to show a w x h texture tilted by up to tiltMax degrees (room for the corners), whole pixels plus 1 px air per side.
+function Theme.tiltQuad(w, h, tiltMax)
+  local a = math.rad(tonumber(tiltMax) or 3)
   local c, s = math.cos(a), math.sin(a)
   return math.ceil(w * c + h * s) + 2, math.ceil(w * s + h * c) + 2
 end
 
--- Whole texture rotated rigidly. SetRotation shears on a non-square area (polaroid frame), so paper, shadow, photo and ground
--- rotate through the same texcoords on an area of Theme.polaroidQuad(w, h) (room for the corners); nothing lies outside 0..1
--- (the texture is transparent at all four edges).
-function Theme.polaroidTiltFull(w, h, deg)
-  local qw, qh = Theme.polaroidQuad(w, h)
+-- Whole texture rotated rigidly (moment notes). SetRotation shears on a non-square area, so paper and shadow rotate through
+-- their texcoords on an area of Theme.tiltQuad(w, h, tiltMax); outside 0..1 the client clamps to the edge pixel (the texture
+-- is transparent at all four edges).
+function Theme.tiltFull(w, h, deg, tiltMax)
+  local qw, qh = Theme.tiltQuad(w, h, tiltMax)
   local uw, vh = qw / w, qh / h
   return Theme.rotCoords(0.5 - uw / 2, 0.5 + uw / 2, 0.5 - vh / 2, 0.5 + vh / 2, qw, qh, deg, -16, 17, -16, 17)
-end
-
--- Texcoords for a rotated rectangle from a padded cell: the cell carries the picture as a content-px square in the middle,
--- transparent around. Shown on Theme.polaroidQuad(w, h), the picture itself on w x h pixels (no zoom-in); the rotated area
--- corners only sample the transparent border while deg <= tiltMax.
-function Theme.polaroidTilt(bu0, bu1, bv0, bv1, content, size, w, h, deg)
-  local qw, qh = Theme.polaroidQuad(w, h)
-  local cu, cv = (bu0 + bu1) / 2, (bv0 + bv1) / 2
-  local uw, vh = qw * (content / w) / size, qh * (content / h) / size
-  return Theme.rotCoords(cu - uw / 2, cu + uw / 2, cv - vh / 2, cv + vh / 2, qw, qh, deg, bu0, bu1, bv0, bv1)
 end
 
 function Theme.color(region, c, a)

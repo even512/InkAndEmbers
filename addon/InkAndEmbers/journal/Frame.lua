@@ -258,6 +258,12 @@ local function buildCard(parent)
   story:SetPoint("TOPLEFT", card, "TOPLEFT", 0, -58)
   story:SetWidth(L.w)
   story:SetSpacing(3)
+  -- Detour line "Abstecher: X, Y" (Model chapter.detourText) one line under the story; the rule follows it (Frame.setCard)
+  local detour = Theme.fontString(card, "text", S.s or 12, Theme.C.sepia, "OVERLAY", "LEFT")
+  detour:SetPoint("TOPLEFT", story, "BOTTOMLEFT", 0, -4)
+  detour:SetWidth(L.w)
+  detour:SetWordWrap(false)
+  detour:Hide()
   local rule = card:CreateTexture(nil, "ARTWORK")
   rule:SetColorTexture(Theme.C.sepia[1], Theme.C.sepia[2], Theme.C.sepia[3], 0.45)
   rule:SetPoint("TOPLEFT", story, "BOTTOMLEFT", 0, -12)
@@ -282,6 +288,7 @@ local function buildCard(parent)
     anchor = row
   end
   card.label, card.title, card.sub, card.story, card.rule, card.rows = label, title, sub, story, rule, rows
+  card.detour = detour
   card.measure = Theme.fontString(card, "label", S.s or 12, Theme.C.sepia, "OVERLAY", "LEFT")
   card.measureText = Theme.fontString(card, "text", S.s or 12, Theme.C.sepia, "OVERLAY", "LEFT")
   card.measure:SetWordWrap(false)
@@ -413,6 +420,17 @@ function Frame.fitCardLine(card, sub)
   end
 end
 
+-- Detour line under the story: shown only with text, the rule (and with it the values table) moves down by one line
+function Frame.setDetourLine(card, text)
+  local d = card.detour
+  if not d then return end
+  local show = type(text) == "string" and text ~= ""
+  d:SetText(show and text or "")
+  d:SetShown(show)
+  card.rule:ClearAllPoints()
+  card.rule:SetPoint("TOPLEFT", show and d or card.story, "BOTTOMLEFT", 0, show and -8 or -12)
+end
+
 function Frame.setCard(c)
   local card = J.card
   if not card then return end
@@ -424,6 +442,7 @@ function Frame.setCard(c)
   card.sub:SetShown(not unexplored)
   card.story:SetShown(not unexplored)
   card.rule:SetShown(not unexplored)
+  Frame.setDetourLine(card, (not unexplored and not c.total) and c.detourText or nil)
   for _, r in ipairs(card.rows) do r.frame:SetShown(not unexplored) end
   if card.scribble then card.scribble:SetShown(unexplored) end
   if unexplored then

@@ -1,4 +1,4 @@
--- Evaluator for the Momente page: album (polaroids with photo stand-ins), play-time clock, library (read books,
+-- Evaluator for the Momente page: album (handwritten notes, one per moment), play-time clock, library (read books,
 -- letters, signs) and curiosities. Pure read logic over the index and the character SV.
 -- Momente.evaluate(index, opts) -> view = { album, clock, library, curios } | nil; the expensive part is computed once
 -- per index (Momente.static). All view texts are display-ready.
@@ -79,6 +79,7 @@ local TEXT = Loc.ns("m.Momente", {
   guessed = "%s (vermutet)",
   guessedSome = "%s (davon %s vermutet)",
   fish_one = "%s Fisch geangelt", fish_other = "%s Fische geangelt",
+  afkDozed = "%s abwesend",
 })
 Momente.TEXT = TEXT
 
@@ -179,222 +180,6 @@ for id, def in pairs(KINDS) do
   end })
 end
 Momente.KINDS = KINDS
-
--- polaroid image per moment kind: sheet (Theme.POLAROID_SHEETS) and its suitable cells 1..9 (row by row), preferred
--- first. Cells per sheet:
---   orte   1 forest+village, 2 plain+windmill, 3 snow pass, 4 swamp, 5 desert canyon, 6 haunted forest+graveyard, 7
---          coast+lighthouse, 8 dwarven gate in rock, 9 ship at sea
---   kampf  1 wolf pack at night, 2 kobold mine, 3 ogre camp, 4 troll elite warrior, 5 dragon silhouette, 6 boss hall, 7
---          spirit healer/grave, 8 bloody sword in grass, 9 trophy wall
---   funde  1 blue belt, 2 epic blade, 3 backpack, 4 rod+fish, 5 saddle/stable, 6 faction banner, 7 anvil, 8 open chest,
---          9 map+compass
---   stufen 1 campfire, 2 sunrise+wanderer, 3 pillar of light, 4 tavern, 5 gryphon master, 6 book+quill, 7 lantern on
---   the road, 8 summit view, 9 harbour at dawn
--- spare per sheet: fallback cells when a neighbour already carries the same image
-Momente.PHOTOS = {
-  zone = { sheet = "orte", cells = { 1, 2, 3, 4, 5, 6, 7 } },
-  continent = { sheet = "orte", cells = { 9 } },
-  first_dungeon = { sheet = "orte", cells = { 8, 6 } },
-  first_raid = { sheet = "orte", cells = { 6, 8 } },
-  -- named enemies (rare/elite) show no race: own sheet "rares" (docs/polaroid-motive.md 4.11)
-  kill = { sheet = "rares", cells = { 2, 3, 4, 5, 7, 8, 9 } },
-  first_rare = { sheet = "rares", cells = { 1, 6 } },
-  first_elite = { sheet = "kampf", cells = { 4, 3, 2 } },
-  first_boss = { sheet = "kampf", cells = { 6, 5 } },
-  boss = { sheet = "kampf", cells = { 6, 9, 5 } },
-  close_win = { sheet = "kampf", cells = { 8 } },
-  first_death = { sheet = "kampf", cells = { 7 } },
-  first_blue = { sheet = "funde", cells = { 1 } },
-  first_epic = { sheet = "funde", cells = { 2 } },
-  first_bag = { sheet = "funde", cells = { 3 } },
-  first_fish = { sheet = "funde", cells = { 4 } },
-  mount = { sheet = "funde", cells = { 5 } },
-  reputation = { sheet = "funde", cells = { 6 } },
-  profession = { sheet = "funde", cells = { 7 } },
-  other = { sheet = "funde", cells = { 8, 9 } },
-  level = { sheet = "stufen", cells = { 1, 2, 3, 4, 5, 7, 8, 9 } },
-  shot = { sheet = "stufen", cells = { 6, 2, 9 } },
-}
-Momente.PHOTO_SPARE = {
-  orte = { 1, 2, 3, 4, 5, 7 }, kampf = { 9, 1, 3, 4, 2 }, funde = { 8, 9 }, stufen = { 1, 2, 7, 8, 9, 4 },
-}
-
--- motifs by place, level and equipment slot. Everything is assigned at DISPLAY time only (nothing of it is in the log
--- or the SavedVariables).
--- Motifs and cells: docs/polaroid-motive.md. An assignment applies only if its sheet exists (Theme.HAS_POLAROIDS[sheet]);
--- otherwise the polaroid takes the general motif of its kind (Momente.PHOTOS).
-
--- zone moment: ZONE_ART[uiMapID] = { sheet, cell }. Forever (Classic Era IDs, build 1.60.1.70658) and retail (only for
--- tests in the retail client) side by side;
--- the rows follow the zone table of the docs (sheet/cell, Forever ID, retail ID).
-local ZONE_ART = {}
-local function zoneArt(sheet, cell, ...)
-  for i = 1, select("#", ...) do ZONE_ART[select(i, ...)] = { sheet = sheet, cell = cell } end
-end
-zoneArt("zonen1", 1, 1411, 1)      -- Durotar
-zoneArt("zonen1", 2, 1412, 7)      -- Mulgore
-zoneArt("zonen1", 3, 1438, 57)     -- Teldrassil
-zoneArt("zonen1", 4, 1439, 62)     -- Darkshore
-zoneArt("zonen1", 5, 1413, 10, 199) -- The Barrens (retail: Northern Barrens 10 + Southern Barrens 199)
-zoneArt("zonen1", 6, 1442, 65)     -- Stonetalon Mountains
-zoneArt("zonen1", 7, 1440, 63)     -- Ashenvale
-zoneArt("zonen1", 8, 1441, 64)     -- Thousand Needles
-zoneArt("zonen1", 9, 1443, 66)     -- Desolace
-zoneArt("zonen2", 1, 2652)         -- Shen'dralar
-zoneArt("zonen2", 2, 1445, 70)     -- Dustwallow Marsh
-zoneArt("zonen2", 3, 1444, 69)     -- Feralas
-zoneArt("zonen2", 4, 1446, 71)     -- Tanaris
-zoneArt("zonen2", 5, 1447, 76)     -- Azshara
-zoneArt("zonen2", 6, 1448, 77)     -- Felwood
-zoneArt("zonen2", 7, 1449, 78)     -- Un'Goro Crater
-zoneArt("zonen2", 8, 1452, 83)     -- Winterspring
-zoneArt("zonen2", 9, 1451, 81)     -- Silithus
-zoneArt("zonen3", 1, 1450, 80)     -- Moonglade
-zoneArt("zonen3", 2, 2482, 198)    -- Hyjal
-zoneArt("zonen3", 3, 1454, 85)     -- Orgrimmar
-zoneArt("zonen3", 4, 1456, 88)     -- Thunder Bluff
-zoneArt("zonen3", 5, 1457, 89)     -- Darnassus
-zoneArt("zonen3", 6, 2521, 2665)   -- Zephras Island (which of the two IDs the client returns is uncertain)
-zoneArt("zonen3", 7, 1460)         -- Warsong Gulch (reserve, type 6)
-zoneArt("zonen3", 8, 1461)         -- Arathi Basin (reserve, type 6)
-zoneArt("zonen3", 9, 1459)         -- Alterac Valley (reserve, type 6)
-zoneArt("zonen4", 1, 1426, 27)     -- Dun Morogh
-zoneArt("zonen4", 2, 1429, 37)     -- Elwynn Forest
-zoneArt("zonen4", 3, 1420, 18)     -- Tirisfal
-zoneArt("zonen4", 4, 1436, 52)     -- Westfall
-zoneArt("zonen4", 5, 1432, 48)     -- Loch Modan
-zoneArt("zonen4", 6, 1421, 21)     -- Silverpine Forest
-zoneArt("zonen4", 7, 1433, 49)     -- Redridge Mountains
-zoneArt("zonen4", 8, 1431, 47)     -- Duskwood
-zoneArt("zonen4", 9, 1424, 25)     -- Hillsbrad Foothills
-zoneArt("zonen5", 1, 1437, 56)     -- Wetlands
-zoneArt("zonen5", 2, 1416)         -- Alterac Mountains (retail: no map)
-zoneArt("zonen5", 3, 1417, 14)     -- Arathi Highlands
-zoneArt("zonen5", 4, 1434, 224)    -- Stranglethorn Vale
-zoneArt("zonen5", 5, 2548)         -- Flusslande (German name)
-zoneArt("zonen5", 6, 1418, 15)     -- Badlands
-zoneArt("zonen5", 7, 1435, 51)     -- Swamp of Sorrows
-zoneArt("zonen5", 8, 1425, 26)     -- The Hinterlands
-zoneArt("zonen5", 9, 1427, 32)     -- Searing Gorge
-zoneArt("zonen6", 1, 1419, 17)     -- Blasted Lands
-zoneArt("zonen6", 2, 1428, 36)     -- Burning Steppes
-zoneArt("zonen6", 3, 1422, 22)     -- Western Plaguelands
-zoneArt("zonen6", 4, 1423, 23)     -- Eastern Plaguelands
-zoneArt("zonen6", 5, 1430, 42)     -- Deadwind Pass
-zoneArt("zonen6", 6, 1453, 84)     -- Stormwind
-zoneArt("zonen6", 7, 1455, 87)     -- Ironforge
-zoneArt("zonen6", 8, 1458, 90)     -- Undercity
-Momente.ZONE_ART = ZONE_ART
-
--- start areas (sheet "start"). Forever has no map of its own for them: the zone moment of the parent zone gets the cell
--- via the sub-zone name (log line SZ or EX near the ZN, lowercase, deDE and enUS).
--- Retail start maps by ID: Northshire 425, Coldridge 427, Shadowglen 460, Valley of Trials 461, Camp Narache 462, Echo
--- Isles 463, Deathknell 465; Forever Darkspear Isles 2524.
-local START_AREAS = {}
-for cell, names in pairs({
-  { "nordhaintal", "abtei von nordhain", "weinberge von nordhain", "northshire valley", "northshire abbey", "northshire vineyards" },
-  { "das coldridgetal", "coldridgetal", "coldridge valley" },
-  { "deathknell" },
-  { "das tal der prüfungen", "tal der prüfungen", "valley of trials" },
-  { "camp narache" },
-  { "shadowglen" },
-  { "thendal", "dorf thendal", "thendal village" },
-  { "goldhain", "goldshire" },
-}) do
-  for _, name in ipairs(names) do START_AREAS[name] = cell end
-end
-Momente.START_AREAS = START_AREAS
-local START_MAPS = { [425] = 1, [427] = 2, [465] = 3, [461] = 4, [462] = 5, [460] = 6, [463] = 9, [2524] = 9 }
-Momente.START_MAPS = START_MAPS
-Momente.START_WINDOW = 60 -- seconds: the sub-zone line (SZ/EX) must be this close to the zone moment
-
--- find with an item: equip slot (itemEquipLoc from C_Item.GetItemInfoInstant) -> cell in slots1 / slots2
-local SLOT_ART = {
-  INVTYPE_HEAD = { "slots1", 1 }, INVTYPE_NECK = { "slots1", 2 }, INVTYPE_SHOULDER = { "slots1", 3 }, INVTYPE_CLOAK = { "slots1", 4 },
-  INVTYPE_CHEST = { "slots1", 5 }, INVTYPE_ROBE = { "slots1", 5 }, INVTYPE_WRIST = { "slots1", 6 }, INVTYPE_HAND = { "slots1", 7 },
-  INVTYPE_WAIST = { "slots1", 8 }, INVTYPE_BODY = { "slots1", 9 },
-  INVTYPE_LEGS = { "slots2", 1 }, INVTYPE_FEET = { "slots2", 2 }, INVTYPE_FINGER = { "slots2", 3 }, INVTYPE_TRINKET = { "slots2", 4 },
-  INVTYPE_WEAPON = { "slots2", 5 }, INVTYPE_2HWEAPON = { "slots2", 5 }, INVTYPE_WEAPONMAINHAND = { "slots2", 5 },
-  INVTYPE_SHIELD = { "slots2", 6 }, INVTYPE_WEAPONOFFHAND = { "slots2", 6 }, INVTYPE_HOLDABLE = { "slots2", 6 },
-  INVTYPE_RANGED = { "slots2", 7 }, INVTYPE_RANGEDRIGHT = { "slots2", 7 }, INVTYPE_THROWN = { "slots2", 7 },
-  INVTYPE_RELIC = { "slots2", 7 }, INVTYPE_AMMO = { "slots2", 7 },
-  INVTYPE_BAG = { "slots2", 8 }, INVTYPE_QUIVER = { "slots2", 8 }, INVTYPE_TABARD = { "slots2", 9 },
-}
-Momente.SLOT_ART = SLOT_ART
-local SLOT_KINDS = { first_blue = true, first_epic = true, first_bag = true }
-
-local ALL_CELLS = { 1, 2, 3, 4, 5, 6, 7, 8, 9 }
-
-local function sheetReady(sheet)
-  local th = Journal.Theme
-  local has = th and th.HAS_POLAROIDS
-  return type(has) == "table" and has[sheet] == true
-end
-
--- itemEquipLoc of the item (4th return of GetItemInfoInstant); nil for a missing API, invalid ID, secret value or
--- non-equippable item (empty string). No Lua error.
-local function equipLoc(itemID)
-  itemID = posId(itemID)
-  if not itemID then return nil end
-  local fn = type(C_Item) == "table" and C_Item.GetItemInfoInstant or GetItemInfoInstant
-  if type(fn) ~= "function" then return nil end
-  local ok, _, _, _, loc = pcall(fn, itemID)
-  if not ok or type(loc) ~= "string" or isSecret(loc) or not find(loc, "^INVTYPE_[%u%d_]+$") then return nil end
-  return loc
-end
-Momente.equipLoc = equipLoc
-
--- motif candidates of an entry, preferred first: { { sheet, cells, fixed }, ... }; the last is always the general motif
--- of the kind (Momente.PHOTOS).
--- fixed = exactly this cell (if a neighbour uses it, the next candidate applies). nil = unknown kind.
-function Momente.photoCandidates(e)
-  if type(e) ~= "table" then return nil end
-  local kind = e.kind
-  local base = Momente.PHOTOS[kind]
-  if not base then return nil end
-  local out = {}
-  if kind == "zone" then
-    local cell = e.startCell or (e.mapID and START_MAPS[e.mapID])
-    if cell and sheetReady("start") then out[#out + 1] = { sheet = "start", cells = { cell }, fixed = true } end
-    local art = e.mapID and ZONE_ART[e.mapID]
-    if art and sheetReady(art.sheet) then out[#out + 1] = { sheet = art.sheet, cells = { art.cell }, fixed = true } end
-  elseif kind == "level" then
-    if sheetReady("aufstieg") then out[#out + 1] = { sheet = "aufstieg", cells = ALL_CELLS } end
-  elseif SLOT_KINDS[kind] and e.itemID then
-    if e.slotArt == nil then
-      local loc = equipLoc(e.itemID)
-      e.slotArt = loc and SLOT_ART[loc] or false
-    end
-    local art = e.slotArt
-    if art and sheetReady(art[1]) then out[#out + 1] = { sheet = art[1], cells = { art[2] }, fixed = true } end
-  end
-  out[#out + 1] = base
-  return out
-end
-
--- start area cell for zone entries (kind zone): nearest sub-zone line (SZ/EX) with a known start area name
-local function markStartAreas(index, list)
-  local Idx = I()
-  local marks = {}
-  for _, code in ipairs({ "SZ", "EX" }) do
-    for _, r in ipairs(Idx.list(index, code)) do
-      local name = rawStr(Idx.str(r, code, "name"))
-      local cell = name and START_AREAS[lower(name)]
-      if cell and finite(r.t) then marks[#marks + 1] = { t = r.t, cell = cell } end
-    end
-  end
-  if #marks == 0 then return end
-  for _, e in ipairs(list) do
-    if e.kind == "zone" then
-      local best, bestDt
-      for _, m in ipairs(marks) do
-        local dt = math.abs(m.t - e.t)
-        if dt <= Momente.START_WINDOW and (not bestDt or dt < bestDt) then best, bestDt = m, dt end
-      end
-      if best then e.startCell = best.cell end
-    end
-  end
-end
 
 local CLS = { rare = true, rareelite = true, elite = true, worldboss = true }
 local CLS_TITLE = keyed("clsTitle_", CLS)
@@ -601,7 +386,6 @@ local function buildAlbum(index, char)
     return a.ln < b.ln
   end
   tsort(list, cmp)
-  pcall(markStartAreas, index, list)
   local truncated = false
   if #list > Momente.ALBUM_MAX then
     local keep = {}
@@ -910,8 +694,12 @@ local function fallCount(index)
   return n, guessed
 end
 
-local function buildCurios(index, char, seed, falls)
+local function buildCurios(index, char, seed, falls, now)
   local facts = {}
+  -- away time (AFK) from the character SV, read by Chronik.afk (journal/model/Chronik.lua)
+  local Chr = Journal.Chronik
+  local afk = Chr and Chr.afk and Chr.afk(char, now) or nil
+  if afk and afk.seconds >= Chr.AFK_MIN_SHOWN then facts[#facts + 1] = TEXT("afkDozed", Chr.duration(afk.seconds)) end
   local consumed = counterGroup(char, "consumed")
   local meals = sumGroup(consumed, { "food_drink" })
   if meals > 0 then facts[#facts + 1] = plural(meals, "meals") end
@@ -969,6 +757,6 @@ function Momente.evaluate(index, opts)
   return {
     now = now, album = st.album, library = st.library,
     clock = clockView(index, st.clock, db, now),
-    curios = buildCurios(index, st.char, st.seed, st.falls),
+    curios = buildCurios(index, st.char, st.seed, st.falls, now),
   }
 end

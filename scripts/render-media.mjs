@@ -1313,48 +1313,6 @@ const MINIMAP_KEY = (rgba, w, h) => keyMagenta(rgba, w, h);
 const ROUNDRECT_HTML = () => page(64, 64, `<div style="position:absolute;inset:0;border-radius:16px;background:#ffffff"></div>`);
 const RING_HTML = () => page(64, 64, `<div style="position:absolute;inset:1px;border-radius:15px;border:2px solid #ffffff"></div>`);
 
-// Polaroid-Boegen (Nachtrag R4), Beschreibung bei polaroidSheet weiter unten
-// R7-Bilder: zonen1..zonen6 (Zonen-Moment je uiMapID), start (Startgebiete), aufstieg (Stufe), slots1/slots2 (Fund je Ausruestungsplatz);
-// Zuordnung in journal/model/Momente.lua, Motive in docs/polaroid-motive.md. Die Quellen liegen nicht im Repo (Gemini): fehlt
-// art/journal/polaroid_<id>.jpg, wird der Bogen uebersprungen und Theme.HAS_POLAROIDS[id] bleibt false.
-export const POLAROID_SHEET_IDS = ["orte", "kampf", "funde", "stufen",
-  "zonen1", "zonen2", "zonen3", "zonen4", "zonen5", "zonen6", "start", "aufstieg", "slots1", "slots2", "rares"];
-// R12b: pad = durchsichtiger Rand je Seite in der Zelle (Bild nur cell - 2 * pad = 293 px, Farbe des Bildrands fortgesetzt, Alpha 0), damit
-// das Bild als gedrehtes Rechteck gezeigt werden kann (Theme.polaroidTilt); tiltMax = groesste Neigung in Grad, fuer die der Rand reicht
-export const POLAROID_ATLAS = { size: 1024, cell: 341, inset: 2, pad: 24, tiltMax: 3 };
-// Grund des Bildfelds ohne Bogen (Media/PolaroidGround.tga): weisse Flaeche mit gleichem Aufbau (Rand pad px durchsichtig)
-export const POLAROID_GROUND = { size: 256, inset: 1, pad: 18 };
-export const POLAROID_SHEETS = Object.fromEntries(
-  POLAROID_SHEET_IDS.map((id) => [id, { file: `polaroid_${id}.jpg`, trim: 0.012, margin: 0.02, edges: null }]),
-);
-
-// Polaroid-Rahmen (28.10.2026 gemessen, Suchlauf im Browser auf dem 2752 x 1536-Bild): Rahmen x 904..1848, y 195..1336 (Farbsumme
-// < 690, mindestens 20 Pixel je Zeile/Spalte), Zuschnitt mit 4-5 px Rand: x 900, y 191, 953 x 1150. Bildflaeche (reines Magenta
-// #FF00FF, Loch) x 963..1786, y 262..1099 (Pixel inklusive); hole = [x0, y0, x1, y1] in Quellpixeln, x1/y1 exklusiv. Die Anteile
-// davon am Zuschnitt stehen in journal/Theme.lua (Theme.POLAROID_HOLE); ein Test rechnet sie nach.
-export const POLAROID_FRAME = { file: "polaroid_rahmen.jpg", x: 900, y: 191, w: 953, h: 1150, srcW: 2752, srcH: 1536, hole: [963, 262, 1787, 1100] };
-
-/**
- * Rahmen freistellen: Weiss ausserhalb transparent (vom Rand aus, strenger als bei den Pergamenten, denn das Rahmenpapier ist
- * selbst hell), Magenta-Flaeche transparent (Loch; Magentaanteil = min(R, B) - G, weiche Kante), rosa Reste an der Lochkante
- * entfaerbt, dann die Kante (aussen und Loch) 1 Texturpixel eingezogen (frisst helle bzw. rosa Saeume).
- */
-export function polaroidFrameKey(rgba, w, h) {
-  keyWhite(rgba, w, h, { from: 728, to: 752 });
-  for (let i = 0; i < w * h; i++) {
-    const o = i * 4;
-    const r = rgba[o], g = rgba[o + 1], b = rgba[o + 2];
-    const mag = Math.min(r, b) - g;
-    if (mag > 25) {
-      const f = clamp01((mag - 60) / 110);
-      rgba[o + 3] = Math.round(rgba[o + 3] * (1 - f));
-      rgba[o] = Math.min(r, g + 12);
-      rgba[o + 2] = Math.min(b, g + 12);
-    }
-  }
-  return erodeEdge(rgba, w, h, 1);
-}
-
 // ---------------------------------------------------------------------------------------------------------------
 // Baukasten "Tagebuch mit Stickern" (Nachtrag R11, journal/widgets/Diary.lua). Vorlage: Claude-Design Reiter E (zurueckhaltend).
 // Alles im Browser gezeichnet (SVG/CSS, kantengeglaettet). Weisse Teile werden im Spiel per SetVertexColor eingefaerbt
@@ -2062,34 +2020,16 @@ export const TEXTURES = [
   // und hebt rechts duenn ab) und Grabstein des Graeberfelds. Weiss auf durchsichtig, im Spiel per SetVertexColor in Tinte.
   { name: "Stroke", w: 64, h: 16, pixels: () => strokePixels(64, 16) },
   { name: "Grave", w: 32, h: 32, pixels: () => gravePixels(32, 32) },
-  // Momente-Seite (Nachtrag M1): Notizzettel des Albums, Klebestreifen, Zeichen je Momentart, Balken der Spielzeit-Uhr.
-  // Zettel/Klebestreifen/Zeichen aus Gemini-Bildern (art/journal/, weisser Grund, freigestellt); Balken aus Rechnung.
-  { name: "MomentTape", w: 128, h: 64, html: () => ART(MOMENT_TAPE.file, MOMENT_TAPE, 128, 64), post: (rgba, w, h) => MOMENT_TAPE_KEY(rgba, w, h) },
+  // Momente-Seite (Nachtrag M1): Zeichen je Momentart (Gemini-Bild art/journal/moment_icons.jpg, freigestellt) und Balken der
+  // Spielzeit-Uhr (aus Rechnung). Die Zettel selbst nutzen den Notizzettel (TodoPad).
   { name: "MomentIcons", w: 512, h: 256, html: () => MOMENT_ICONS_HTML(), post: (rgba, w, h) => MOMENT_ICONS_KEY(rgba, w, h) },
   { name: "ClockBar", w: 32, h: 128, pixels: () => barPixels(32, 128) },
-  // Momente als Polaroid-Wand (Nachtrag R4): Papier des Polaroids (aus Rechnung) und die vier Bildboegen (optional: fehlt die
-  // Quelle und die TGA, wird der Bogen uebersprungen und `--check` bleibt gruen; die Seite zeigt dann das Zeichen der Momentart).
-  { name: "PolaroidPaper", w: 256, h: 256, pixels: () => polaroidPaperPixels(256, 256) },
-  // Grund des Bildfelds ohne Bogen (R12b): weisse Flaeche, ringsum durchsichtiger Rand, gedreht gezeigt und per SetVertexColor getoent
-  { name: "PolaroidGround", w: POLAROID_GROUND.size, h: POLAROID_GROUND.size, pixels: () => polaroidGroundPixels() },
-  // Gemalter Polaroid-Rahmen (Gemini, art/journal/polaroid_rahmen.jpg, 2752 x 1536, weisser Grund, Bildflaeche magenta): Zuschnitt
-  // POLAROID_FRAME 953 x 1150 auf 512 x 512 gestreckt (im Spiel wieder auf das Seitenverhaeltnis des Zuschnitts). Fehlt die Quelle und
-  // die TGA, wird die Textur uebersprungen; die Seite nimmt dann PolaroidPaper (Theme.HAS_POLAROID_FRAME = false).
-  { name: "PolaroidFrame", w: 512, h: 512, html: () => ART(POLAROID_FRAME.file, POLAROID_FRAME, 512, 512), post: polaroidFrameKey, source: "art/journal/" + POLAROID_FRAME.file },
-  ...POLAROID_SHEET_IDS.map((id) => polaroidSheetTexture(id)),
   ...DIARY_TEXTURES,
 ];
 
 // ---------------------------------------------------------------------------------------------------------------
 // Momente-Seite (Nachtrag M1). Zuschnitte einmal gemessen (28.10.2026, Suchlauf im Browser: Bounding-Box aller Pixel mit
 // Farbsumme < 700, bei den Zeichen < 690), jeweils mit etwas Rand.
-
-// Klebestreifen (art/journal/tape.jpg, 2752 x 1536, gezackte Enden, brauner Umriss): x 212..2537, y 472..1054. Im Spiel
-// leicht durchscheinend (Momente-Seite TAPE_ALPHA 0,85), Seitenverhaeltnis 3,9 : 1.
-export const MOMENT_TAPE = { file: "tape.jpg", x: 202, y: 462, w: 2346, h: 603, srcW: 2752, srcH: 1536 };
-function MOMENT_TAPE_KEY(rgba, w, h) {
-  return erodeEdge(keyWhite(rgba, w, h, { from: 690, to: 745 }), w, h, 1);
-}
 
 // Zeichen je Momentart (art/journal/moment_icons.jpg, 2528 x 1696, 3 x 2 Raster). Atlas Media/MomentIcons.tga 512 x 256,
 // Zellen zu 128 px, 3 Spalten genutzt (4. Spalte leer, Zweierpotenz). Reihenfolge = Theme.MOMENT_ICONS (ein Test haelt
@@ -2157,64 +2097,6 @@ export function barPixels(w, h) {
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
-// ---------------------------------------------------------------------------------------------------------------
-// Polaroid-Wand (Nachtrag R4)
-
-/** Grund des Bildfelds: weisse Flaeche (alle Kanaele 255), ringsum POLAROID_GROUND.pad px durchsichtig (Alpha 0, Farbe weiss) */
-export function polaroidGroundPixels(G = POLAROID_GROUND) {
-  const rgba = Buffer.alloc(G.size * G.size * 4, 255);
-  for (let y = 0; y < G.size; y++) {
-    for (let x = 0; x < G.size; x++) {
-      const inside = x >= G.pad && x < G.size - G.pad && y >= G.pad && y < G.size - G.pad;
-      if (!inside) rgba[(y * G.size + x) * 4 + 3] = 0;
-    }
-  }
-  return rgba;
-}
-
-/**
- * Papier des Polaroids: helles, leicht gealtertes Weiss (zum Rand hin etwas gelblicher), feine Koernung, sehr weicher Rand
- * (gut 2 Texturpixel, kleine Eckrundung), ungetoent. Deterministisch (fester Pseudo-Zufall), ohne Browser.
- */
-export function polaroidPaperPixels(w, h) {
-  const rgba = Buffer.alloc(w * h * 4);
-  const base = [245, 240, 228];
-  const aged = [226, 214, 188];
-  let seed = 1234567;
-  const rnd = () => {
-    seed = (seed * 1103515245 + 12345) % 2147483648;
-    return seed / 2147483648;
-  };
-  const r = 4; // Eckradius (Texturpixel)
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const dx = Math.min(x + 0.5, w - x - 0.5);
-      const dy = Math.min(y + 0.5, h - y - 0.5);
-      // Alter: zum Rand hin gelblicher (Smoothstep ueber die aeusseren 18 %)
-      const u = clamp01(Math.min(dx / w, dy / h) / 0.18);
-      const age = 0.55 * (1 - u * u * (3 - 2 * u));
-      const grain = (rnd() - 0.5) * 7;
-      const o = (y * w + x) * 4;
-      for (let k = 0; k < 3; k++) rgba[o + k] = Math.round(Math.max(0, Math.min(255, base[k] * (1 - age) + aged[k] * age + grain)));
-      let d = Math.min(dx, dy);
-      if (dx < r && dy < r) d = r - Math.hypot(r - dx, r - dy);
-      rgba[o + 3] = Math.round(255 * clamp01((d - 0.5) / 2.2));
-    }
-  }
-  return rgba;
-}
-
-// Bildboegen (Gemini, art/journal/polaroid_<id>.jpg): 3 x 3 quadratische Szenen mit weissen Stegen. Jeder Bogen wird in voller
-// Quellgroesse gerendert; polaroidSheet findet die Stege (helle Spalten/Zeilen), schneidet die neun Szenen ohne Stege aus
-// (je Seite trim Anteil eingezogen, gegen weisse Saeume), macht sie quadratisch (mittig) und legt sie als Zellen zu
-// POLAROID_ATLAS.cell px in Media/Polaroid_<id>.tga (1024 x 1024). Zelle i (1..9) zeilenweise; passt zu Theme.POLAROID_ATLAS
-// und Theme.polaroidCoords (ein Test haelt beide gleich). Erkennt die Steg-Suche nicht genau drei Szenen je Richtung, gilt
-// POLAROID_SHEETS[id].edges (Quellpixel { x: [[x0, x1] x 3], y: [[y0, y1] x 3] }), sonst ein gleichmaessiges Raster mit Rand
-// margin (Anteil). Neues Bild einbauen (auch die zehn R7-Boegen zonen1..6, start, aufstieg, slots1, slots2):
-//   1. Bild als art/journal/polaroid_<id>.jpg ablegen,
-//   2. `node scripts/render-media.mjs --only Polaroid_<id>` (meldet am Ende, was in Theme.lua zu tun ist),
-//   3. Theme.HAS_POLAROIDS.<id> = true (journal/Theme.lua); ein Test haelt Schalter und Media-Ordner gleich.
-// Fehlt die Quelle, ueberspringt der Lauf ohne --only den Bogen; das Addon zeigt dann das allgemeine Motiv der Momentart.
 /** Breite und Hoehe eines JPEG aus dem SOF-Kopf ({ w, h } | null) */
 export function jpegSize(buf) {
   if (buf.length < 4 || buf[0] !== 0xff || buf[1] !== 0xd8) return null;
@@ -2236,154 +2118,6 @@ export function jpegSize(buf) {
     pos += 2 + len;
   }
   return null;
-}
-
-/**
- * Stege eines 3 x 3-Bogens finden: je Richtung die Laeufe nicht-heller Spalten bzw. Zeilen (hell = mindestens white Anteil
- * der Pixel fast weiss). Laeufe unter 5 % der Kantenlaenge zaehlen nicht; sind es mehr als drei, werden die durch die
- * schmalsten Luecken getrennten zusammengelegt. -> { x: [[a, b] x 3], y: [[a, b] x 3] } (b exklusiv) | null
- */
-export function detectGrid(rgba, w, h, { white = 0.9, minLum = 690 } = {}) {
-  const isWhite = (o) => rgba[o] + rgba[o + 1] + rgba[o + 2] >= minLum && Math.min(rgba[o], rgba[o + 1], rgba[o + 2]) >= 215;
-  const axis = (n, m, at) => {
-    const runs = [];
-    let start = -1;
-    for (let i = 0; i <= n; i++) {
-      let gap = true;
-      if (i < n) {
-        let cnt = 0;
-        for (let j = 0; j < m; j++) if (isWhite(at(i, j))) cnt++;
-        gap = cnt >= white * m;
-      }
-      if (!gap && start < 0) start = i;
-      if (gap && start >= 0) {
-        runs.push([start, i]);
-        start = -1;
-      }
-    }
-    const big = runs.filter(([a, b]) => b - a >= 0.05 * n);
-    while (big.length > 3) {
-      let best = 1;
-      for (let k = 2; k < big.length; k++) if (big[k][0] - big[k - 1][1] < big[best][0] - big[best - 1][1]) best = k;
-      big.splice(best - 1, 2, [big[best - 1][0], big[best][1]]);
-    }
-    return big.length === 3 ? big : null;
-  };
-  const x = axis(w, h, (i, j) => (j * w + i) * 4);
-  const y = axis(h, w, (i, j) => (i * w + j) * 4);
-  return x && y ? { x, y } : null;
-}
-
-/** gleichmaessiges 3 x 3-Raster mit Rand margin (Anteil je Seite), ohne Stege */
-export function evenGrid(w, h, margin = 0.02) {
-  const span = (n) => {
-    const m = Math.round(n * margin);
-    const c = (n - 2 * m) / 3;
-    return [0, 1, 2].map((k) => [Math.round(m + k * c), Math.round(m + (k + 1) * c)]);
-  };
-  return { x: span(w), y: span(h) };
-}
-
-/** Bogen (rgba w x h) -> Atlas (POLAROID_ATLAS.size^2, RGBA). cfg = POLAROID_SHEETS[id]; gibt { rgba, grid, how } zurueck */
-export function polaroidSheet(rgba, w, h, cfg = {}) {
-  const A = POLAROID_ATLAS;
-  let how = "erkannt";
-  let grid = detectGrid(rgba, w, h);
-  if (!grid && cfg.edges) {
-    grid = cfg.edges;
-    how = "eingestellt";
-  }
-  if (!grid) {
-    grid = evenGrid(w, h, cfg.margin ?? 0.02);
-    how = "gleichmaessig";
-  }
-  const out = Buffer.alloc(A.size * A.size * 4);
-  const trim = cfg.trim ?? 0.012;
-  for (let i = 0; i < 9; i++) {
-    const [x0, x1] = grid.x[i % 3];
-    const [y0, y1] = grid.y[Math.floor(i / 3)];
-    const tx = Math.round((x1 - x0) * trim);
-    const ty = Math.round((y1 - y0) * trim);
-    let ax = x0 + tx, bx = x1 - tx, ay = y0 + ty, by = y1 - ty;
-    // quadratisch, mittig
-    const side = Math.min(bx - ax, by - ay);
-    ax = Math.round((ax + bx - side) / 2);
-    ay = Math.round((ay + by - side) / 2);
-    const content = A.cell - 2 * A.pad;
-    const s = side / content;
-    const ox = (i % 3) * A.cell;
-    const oy = Math.floor(i / 3) * A.cell;
-    // Flaechenmittel (Box-Filter) je Zielpixel des Bildes (content x content), es sitzt mittig in der Zelle
-    const img = Buffer.alloc(content * content * 3);
-    for (let y = 0; y < content; y++) {
-      const sy0 = ay + y * s;
-      const sy1 = sy0 + s;
-      for (let x = 0; x < content; x++) {
-        const sx0 = ax + x * s;
-        const sx1 = sx0 + s;
-        let r = 0, g = 0, b = 0, n = 0;
-        for (let yy = Math.floor(sy0); yy < Math.max(Math.floor(sy0) + 1, Math.ceil(sy1)); yy++) {
-          for (let xx = Math.floor(sx0); xx < Math.max(Math.floor(sx0) + 1, Math.ceil(sx1)); xx++) {
-            const p = (Math.min(h - 1, Math.max(0, yy)) * w + Math.min(w - 1, Math.max(0, xx))) * 4;
-            r += rgba[p];
-            g += rgba[p + 1];
-            b += rgba[p + 2];
-            n++;
-          }
-        }
-        const o = (y * content + x) * 3;
-        img[o] = Math.round(r / n);
-        img[o + 1] = Math.round(g / n);
-        img[o + 2] = Math.round(b / n);
-      }
-    }
-    // Zelle fuellen: Bild deckend in der Mitte, ringsum Alpha 0 mit der Farbe des naechsten Bildrandpixels (kein dunkler Saum beim Filtern)
-    for (let y = 0; y < A.cell; y++) {
-      const cy = Math.min(content - 1, Math.max(0, y - A.pad));
-      for (let x = 0; x < A.cell; x++) {
-        const cx = Math.min(content - 1, Math.max(0, x - A.pad));
-        const o = ((oy + y) * A.size + ox + x) * 4;
-        const q = (cy * content + cx) * 3;
-        out[o] = img[q];
-        out[o + 1] = img[q + 1];
-        out[o + 2] = img[q + 2];
-        out[o + 3] = x >= A.pad && x < A.cell - A.pad && y >= A.pad && y < A.cell - A.pad ? 255 : 0;
-      }
-    }
-  }
-  return { rgba: out, grid, how };
-}
-
-function polaroidSheetTexture(id) {
-  const cfg = POLAROID_SHEETS[id];
-  const source = "art/journal/" + cfg.file;
-  const size = () => {
-    const s = jpegSize(readFileSync(path.join(ROOT, source)));
-    if (!s) throw new Error(`${source}: Groesse nicht lesbar (kein JPEG?)`);
-    return s;
-  };
-  return {
-    name: `Polaroid_${id}`,
-    w: POLAROID_ATLAS.size,
-    h: POLAROID_ATLAS.size,
-    // Rendergroesse = Quellgroesse (erst beim Rendern gelesen; --check braucht die Quelle nicht)
-    get rw() {
-      return size().w;
-    },
-    get rh() {
-      return size().h;
-    },
-    html: () => {
-      const s = size();
-      return ART(cfg.file, { x: 0, y: 0, w: s.w, h: s.h, srcW: s.w, srcH: s.h }, s.w, s.h);
-    },
-    post: (rgba, w, h) => {
-      const r = polaroidSheet(rgba, w, h, cfg);
-      console.log(`  Polaroid_${id}: Raster ${r.how} (x ${JSON.stringify(r.grid.x)}, y ${JSON.stringify(r.grid.y)})`);
-      return r.rgba;
-    },
-    source,
-  };
 }
 
 /** Tintenstrich: Breite laengs veraenderlich (Aufsetzen, leichtes Schwellen, duenner Abstrich), weiche Kanten */
@@ -3067,10 +2801,6 @@ export function main(argv) {
       const tga = render(browser, tmp, t);
       writeFileSync(path.join(MEDIA_DIR, `${t.name}.tga`), tga);
       console.log(`  ${t.name}.tga  ${t.w}x${t.h}  ${tga.length} Bytes`);
-      const sheet = /^Polaroid_(.+)$/.exec(t.name);
-      if (sheet && POLAROID_SHEET_IDS.includes(sheet[1])) {
-        console.log(`  -> noch zu tun: in journal/Theme.lua Theme.HAS_POLAROIDS.${sheet[1]} = true setzen`);
-      }
     }
   } finally {
     rmSync(tmp, { recursive: true, force: true });

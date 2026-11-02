@@ -28,6 +28,8 @@ Store.lua
 Zone.lua
 Context.lua
 Save.lua
+# Lehrplan data (MIT, from "What's Training?", see data\LICENSE-WhatsTraining.txt and THIRD-PARTY.md)
+data\TrainerSpells.lua
 collectors\Progress.lua
 collectors\Quests.lua
 collectors\Books.lua
@@ -46,8 +48,10 @@ collectors\Social.lua
 collectors\Extras.lua
 collectors\Companions.lua
 collectors\Rest.lua
+collectors\Afk.lua
 collectors\Campfire.lua
 collectors\Plans.lua
+collectors\Trainer.lua
 journal\Fmt.lua
 journal\Geo.lua
 journal\MapSpace.lua
@@ -75,6 +79,8 @@ journal\model\NoteMarkup.lua
 journal\model\Notes.lua
 journal\model\TodoData.lua
 journal\model\OpenQuests.lua
+journal\model\OpenQuestsRetail.lua
+journal\model\Lehrplan.lua
 journal\View.lua
 journal\Theme.lua
 journal\DecorKeepout.lua
@@ -93,6 +99,7 @@ journal\pages\Chronik.lua
 journal\pages\ChronikViews.lua
 journal\pages\Quests.lua
 journal\pages\QuestsOffen.lua
+journal\pages\QuestsLehrplan.lua
 journal\pages\Schaetze.lua
 journal\pages\SchaetzeFunde.lua
 journal\pages\Momente.lua

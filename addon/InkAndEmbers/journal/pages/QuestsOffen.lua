@@ -8,6 +8,9 @@
 -- change; on a zone map the cluster radius follows the zoom (zooming in splits the bundles).
 -- Keep-outs (DecorKeepout quests): the list ends before y 474 on the left; on the right everything stays left of x 446
 -- and above y 578. No ticker; OnUpdate only inside Map.lua while dragging/hovering; pins are pooled.
+-- Retail client: the list comes from the game's world map (OpenQuestsRetail, results have retail = true): a hint line under
+-- the title names the source and what is missing, only the switch "Wiederholbar" stays (nothing locked/group/class/
+-- profession is known), the "giver" is the quest line, and the empty list says loading / in combat / nothing offered.
 local _, ns = ...
 
 local Journal = ns.Journal
@@ -36,7 +39,13 @@ local T = ns.Locale.ns("p.QuestsOffen", {
   empty = "Keine offenen Quests in dieser Zone.", emptyAll = "Keine offenen Quests gefunden.",
   noData = "Questdaten nicht geladen", noDataHint = "Prüfen mit /chronik diag",
   noDataRight = "Die Karte erscheint, sobald die Questdaten geladen sind.",
-  retailHead = "Nur in WoW Forever", retailRight = "Offene Quests gibt es vorerst nur in WoW Forever.",
+  retailHead = "Weltkarte ohne Quest-Angebote", retailRight = "Ohne die Weltkarten-Schnittstelle des Spiels gibt es hier keine Karte.",
+  retailHint = "Aus der Weltkarte des Spiels: nur annehmbare Quests, ohne Questgeber und Sperrgründe",
+  retailLoading = "Quests werden aus der Weltkarte des Spiels geladen …",
+  retailCombat = "Im Kampf – die Weltkarte wird danach gefragt.",
+  retailEmpty = "Die Weltkarte des Spiels zeigt hier gerade keine annehmbaren Quests.",
+  retailEmptyAll = "Die Weltkarte des Spiels zeigt in den geladenen Zonen keine annehmbaren Quests.",
+  lineWord = "Questreihe: ",
   noMap = "Für dieses Gebiet liefert der Client keine Karte.", noMapTest = "Testmodus: diese Zone hat keine Retail-Karte.",
   unplaced = "%d Zonen ohne Lage auf dieser Karte",
   pick = "Wählt links eine Quest oder klickt ein ! auf der Karte.",
@@ -118,12 +127,17 @@ local function buildControls(self, tab)
   end
 end
 
+-- "Geber: " or (world map source in retail) "Questreihe: "
+local function giverWord(g)
+  return g.kind == "line" and T.lineWord or T.giverWord
+end
+
 local function rowTip(q)
   local tip = { q.name }
   tip[#tip + 1] = q.level and (T.levelWord .. int(q.level)) or T.levelUnknown
   if q.minLevel and q.minLevel > 0 then tip[#tip + 1] = T.minWord .. int(q.minLevel) end
   local g = q.givers and q.givers[1]
-  if g then tip[#tip + 1] = T.giverWord .. g.name .. " · " .. (OQ.mapName(g.mapID) or "") end
+  if g then tip[#tip + 1] = giverWord(g) .. g.name .. " · " .. (OQ.mapName(g.mapID) or "") end
   for _, r in ipairs(q.reasons or {}) do tip[#tip + 1] = r.text end
   for _, n in ipairs(q.notes or {}) do tip[#tip + 1] = n end
   if q.unsure then tip[#tip + 1] = OQ.unsureLabel .. ": " .. OQ.unsureTip end
@@ -705,9 +719,17 @@ function View:Render(keepData)
   ui.emptyBody:SetShown(unavailable and true or false)
   ui.rowsList.frame:SetShown(not unavailable)
   ui.zone:SetShown(not unavailable)
+  -- retail world map: only "Wiederholbar" means something; the shown switches are chained again
+  local prevCheck
   for _, c in ipairs(ui.checks) do
-    c.b:SetShown(not unavailable)
+    local shown = not unavailable and (not res.retail or c.key == "openRepeat")
+    c.b:SetShown(shown)
     c.b:SetChecked(setting(c.key) == true, true)
+    if shown then
+      c.b:ClearAllPoints()
+      if prevCheck then c.b:SetPoint("LEFT", prevCheck, "RIGHT", 11, 0) else c.b:SetPoint("LEFT", ui.table, "TOPLEFT", LX, -CHECK_CY) end
+      prevCheck = c.b
+    end
   end
   if ui.pager then
     ui.pager.pair.frame:SetShown(not unavailable)
@@ -715,8 +737,9 @@ function View:Render(keepData)
   end
   if unavailable then
     local reason = res.reason or zones.reason
-    W.setText(ui.emptyHead, reason == "RETAIL" and T.retailHead or T.noData)
-    W.setText(ui.emptyBody, OQ.reasonText(reason) .. "." .. (reason == "RETAIL" and "" or " " .. T.noDataHint))
+    local retailReason = reason == "RETAIL" or reason == "NO_QUESTLINE"
+    W.setText(ui.emptyHead, retailReason and T.retailHead or T.noData)
+    W.setText(ui.emptyBody, OQ.reasonText(reason) .. "." .. (retailReason and "" or " " .. T.noDataHint))
   else
     local zItems = { { text = T.allZones, count = zones.total.open, value = "all", active = self.zone == "all" } }
     local zoneName
@@ -726,17 +749,25 @@ function View:Render(keepData)
     end
     ui.zone:SetItems(zItems)
     ui.zone:SetText(self.zone == "all" and T.allZones or zoneName or OQ.mapName(self.zone))
-    ui.rowsList.opts.empty = self.zone == "all" and T.emptyAll or T.empty
+    if res.retail then
+      ui.rowsList.opts.empty = res.combat and T.retailCombat or res.loading and T.retailLoading
+        or (self.zone == "all" and T.retailEmptyAll or T.retailEmpty)
+    else
+      ui.rowsList.opts.empty = self.zone == "all" and T.emptyAll or T.empty
+    end
     ui.rowsList:SetItems(items)
     ui.rowsList:Refresh()
   end
   ui.emptyRight:SetShown(unavailable and true or false)
-  local retail = (res.reason or zones.reason) == "RETAIL"
+  local why = res.reason or zones.reason
+  local retail = why == "RETAIL" or why == "NO_QUESTLINE"
   W.setText(ui.emptyRight, unavailable and (retail and T.retailRight or T.noDataRight) or "")
   for _, f in ipairs({ ui.num, ui.numLbl, ui.numMore, ui.caption, ui.map, ui.selName, ui.selSub, ui.selWhy, ui.todo, ui.todoMsg }) do
     f:SetShown(not unavailable)
   end
-  W.setText(ui.test, OQ.testLabel() or "")
+  local testText = OQ.testLabel()
+  W.setText(ui.test, testText or (res.retail and T.retailHint) or "")
+  ui.test:SetTextColor(W.color(testText and "red" or "sepia"))
   if unavailable then
     ui.cont.frame:Hide()
     ui.pins:ReleaseAll()
@@ -801,7 +832,7 @@ function View:Render(keepData)
     W.setText(ui.selName, q.name)
     local g = q.givers and q.givers[1]
     local sub = { q.level and (T.levelWord .. int(q.level)) or T.levelUnknown }
-    if g then sub[#sub + 1] = T.giverWord .. g.name .. " · " .. (OQ.mapName(g.mapID) or "") end
+    if g then sub[#sub + 1] = giverWord(g) .. g.name .. " · " .. (OQ.mapName(g.mapID) or "") end
     if q.unsure then sub[#sub + 1] = OQ.unsureLabel end
     W.setText(ui.selSub, table.concat(sub, " · "))
     local why = {}

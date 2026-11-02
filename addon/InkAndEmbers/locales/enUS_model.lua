@@ -31,6 +31,11 @@ L.add("enUS", "m.Texts", {
 })
 
 -- journal/model/ChronikTexts.lua
+-- journal/model/Lehrplan.lua
+L.add("enUS", "m.Lehrplan", {
+  spellFallback = "Spell %s",
+})
+
 L.add("enUS", "m.ChronikTexts", {
   diary_level_zone_dur = "Reached level {=level}, right in the middle of {zone}. Took {=dur}.",
   diary_level_zone = "Reached level {=level} in {zone}.",
@@ -755,7 +760,7 @@ L.add("enUS", "m.Chronik", {
   forecastTitle = "At this pace",
   forecastEarly = "Too early for a forecast",
   forecastNone = "Not enough level times for an estimate yet.",
-  forecastDone = "Level 60 reached. The journey goes on anyway.",
+  forecastDone = "Level %s reached. The journey goes on anyway.",
   src_quest = "Quests", src_kill = "Kills", src_explore = "Exploration", src_other = "Other",
   dm_first_blue = "the first rare piece", dm_first_epic = "the first epic piece", dm_first_bag = "the first bag",
   dm_mount = "the first mount", dm_continent = "a new continent", dm_first_dungeon = "the first dungeon",
@@ -918,7 +923,7 @@ L.add("enUS", "m.Chronik", {
   u_plans_other = "%s goals",
   title_level60 = "Journey's End",
   grid_level60 = "Journey's End",
-  need_level60 = "Reach level 60.",
+  need_level60 = "Reach level %s.",
   u_profession = "skill %s",
   u_fortune = "%s gold",
   u_rested = "%s experience",
@@ -973,6 +978,12 @@ L.add("enUS", "m.Chronik", {
   evIntro = "Everything the chronicle has written down since your first login.",
   evTotal = "Total: %s",
   evLine = "%s: %s",
+  afkLine = "%s away in total",
+  afkTitle = "Away (AFK)",
+  afkIntro = "Time you were marked as away, by hand with /afk or automatically after a few minutes without input. It is part of the time played.",
+  afkTotal = "In total: %s",
+  afkPhases_one = "%s break", afkPhases_other = "%s breaks",
+  afkLongest = "Longest break: %s",
   subtitleFaction = "%s of the %s",
   sinceFmt = "%m/%d/%Y, %H:%M",
   approx = "approx. %s",
@@ -988,7 +999,7 @@ L.add("enUS", "m.Chronik", {
   deaths_one = "%s death",
   deaths_other = "%s deaths",
   over = "over %s hr",
-  forecastHead = "At this pace: level 60 in %s",
+  forecastHead = "At this pace: level %s in %s",
   forecastBody = "rough estimate from the last %s levels",
   fb_level = "A new level.", fb_quest = "Turned in a quest.", fb_loot = "Received something valuable.",
   fb_kill = "A special foe fell.", fb_close = "A narrow victory.", fb_death = "Died.", fb_moment = "A moment for the chronicle.",
@@ -1139,6 +1150,7 @@ L.add("enUS", "m.Momente", {
   guessed = "%s (presumed)",
   guessedSome = "%s (%s of them presumed)",
   fish_one = "%s fish caught", fish_other = "%s fish caught",
+  afkDozed = "%s away",
 })
 
 -- journal/model/Schaetze.lua
@@ -1183,6 +1195,11 @@ L.add("enUS", "m.Schaetze", {
   headLevel = "Level %s",
   day = "Day %s",
   perHour = "approx. %s per hour played",
+  holdTop = "Most held: %s",
+  holdEnd = "At the end of the level: %s",
+  holdNow = "In the purse now: %s",
+  holdJump = "Vs. previous level: %s",
+  holdPeak = "Highest ever held",
   margin_sch_training_1 = "Training at {=level} ruined me: {=amount}.",
   margin_sch_training_2 = "At level {=level} I learned a lot and paid {=amount} for it.",
   margin_sch_repair_1 = "At level {=level} repairs ate up {=amount}.",
@@ -1275,6 +1292,7 @@ L.add("enUS", "m.TodoData", {
   loaded = "%s: loaded (%s)",
   notInData = "%s: not loaded: missing from the add-on",
   notLoaded = "%s: not loaded: %s",
+  retailNote = " (Retail: names only, no level or zone)",
 })
 
 L.add("enUS", "m.OpenQuests", {
@@ -1306,7 +1324,8 @@ L.add("enUS", "m.OpenQuests", {
   INTERFACE_VERSION = "Add-on out of date (game version)",
   INCOMPATIBLE = "Add-on doesn't match this game version",
   CORRUPT = "Add-on corrupted",
-  RETAIL = "The quest data comes from WoW Forever and does not match the retail zones",
+  RETAIL = "In Retail, open quests come from the game's world map",
+  NO_QUESTLINE = "The game's world map provides no quest offers (interface missing)",
   BANNED = "blocked by the game",
   INSECURE = "blocked by the game",
   NOT_DEMAND_LOADED = "not load-on-demand (LoadOnDemand missing)",
@@ -1326,4 +1345,19 @@ L.add("enUS", "m.OpenQuests", {
   testLevelUsage = "Open Quests: /chronik open test level <number>",
   testRaceUsage = "Open Quests: race token, e.g. Scourge, Human, Orc, NightElf, Dwarf, Gnome, Tauren, Troll",
   testClassUsage = "Open Quests: class token, e.g. PALADIN, WARRIOR, MAGE, PRIEST, DRUID",
+})
+
+L.add("enUS", "m.OpenQuestsRetail", {
+  noLine = "No quest line",
+  campaign = "Campaign",
+  legendary = "Legendary",
+  important = "Important",
+  lowLevel = "low level",
+  accountDone = "completed by your Warband",
+  floorAbove = "Entrance one level up",
+  floorBelow = "Entrance one level down",
+  footer = "Data: the game's world map",
+  diagLine = "Open Quests: from the game's world map (%d zones loaded%s)",
+  diagWaiting = ", %d pending",
+  diagNoApi = "Open Quests: Retail, world map interface (C_QuestLine) missing",
 })

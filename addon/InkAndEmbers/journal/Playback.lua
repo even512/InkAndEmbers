@@ -632,6 +632,7 @@ local function chipTip(ui, b)
   end
   if c.stats and type(c.stats.playedText) == "string" then lines[#lines + 1] = T("playedSuffix", c.stats.playedText) end
   if type(c.story) == "string" then lines[#lines + 1] = c.story end
+  if type(c.detourText) == "string" then lines[#lines + 1] = c.detourText end
   return lines
 end
 

@@ -31,7 +31,7 @@ end
 Model.IDLE_GAP = 66                  -- s played without a trail point = standstill (AFK, combat on the spot, trade, offline); thinned straights bridge up to ~63 s
 Model.IDLE_KEEP = 12
 Model.IDLE_FLIGHT_KEEP = 60
-Model.STAY_FLICKER = 30              -- s played: a shorter detour A -> B (-> C ...) -> A (zone border flicker) forms no chapter of its own, nor does such a short stay before the first chapter
+Model.STAY_FLICKER = 30              -- s played: a shorter zone visit (zone border flicker) never forms a chapter of its own and is not named as a detour (buildChapters)
 Model.TRANSIT_PLAY = 180
 Model.MAX_SEGMENTS = 800
 Model.LINE_POOL_MAX = 1000
@@ -75,7 +75,7 @@ do
     mapN = "Karte %s", lvShort = "St. %s", underway = "Unterwegs", levelN = "Stufe %s", unknownPlace = "unbekannter Ort",
     unknown = "unbekannt", zeroMin = "0 Min.", timesN = "%s-mal", whenFmt = "Tag %s, %s",
     firstDeath = "erster Tod", firstDeathIn = "erster Tod in %s", deathsN = "%s Tode", bossDown = "%s bezwungen",
-    rareDown = "%s gestellt", level60 = "Stufe 60, das Ziel", levelReached = "Stufe %s erreicht",
+    rareDown = "%s gestellt", level60 = "Stufe %s, das Ziel", levelReached = "Stufe %s erreicht",
     newHomeAt = "neues Zuhause: %s", newHome = "ein neues Zuhause", firstBlue = "der erste seltene Fund",
     firstEpic = "das erste lila Stück", firstMount = "das erste Reittier", newShores = "neue Ufer",
     visited = "%s besucht", descent = "ein Abstieg in die Tiefe", flightTo = "Flug nach %s", flightColon = "Flug: %s",
@@ -95,7 +95,8 @@ do
     range = " · %s bis %s", stays_one = "%s Zonenaufenthalt", stays_other = "%s Zonenaufenthalte", approx = "ca. ",
     onFoot = "%s km zu Fuß", flights_one = "%s Flug", flights_other = "%s Flüge", totalTitle = "Gesamtreise",
     statsFlights_one = "%s Flug", statsFlights_other = "%s Flüge", statsHearths_one = "%s Ruhestein",
-    statsHearths_other = "%s Ruhesteine", statsDay = "Tag %s",
+    statsHearths_other = "%s Ruhesteine", statsDay = "Tag %s", detours_one = "Abstecher: %s",
+    detours_other = "Abstecher: %s",
   }
   for i, w in ipairs(NUMWORD) do de["num_" .. i] = w end
   for i, w in ipairs(TIMES) do de["times_" .. i] = w end
@@ -432,7 +433,10 @@ H.DB = function(J, t)
   if d and not d.how and t - d.t <= 7200 then d.how = F[1] end
   if F[1] == "spirit" then push(J.spirits, { t = t, map = nz(F[4]), x = nz(F[5]), y = nz(F[6]) }) end
 end
-H.QA = function(J, t) J.qaN = J.qaN + 1 end
+H.QA = function(J, t)
+  J.qaN = J.qaN + 1
+  push(J.evX, t)
+end
 H.QT = function(J, t) push(J.qt, { t = t, qid = nz(F[1]) }) end
 H.SH = function(J, t)
   push(J.shots, { t = t, key = F[1], reasons = F[2], level = nz(F[4]), map = nz(F[5]), x = nz(F[6]), y = nz(F[7]) })
@@ -483,6 +487,12 @@ H.PK = function(J, t) push(J.pk, t) end
 H.BK = function(J, t) if F[5] == "1" then push(J.bk, { t = t, key = F[1] }) end end
 H.TA = function(J, t) if nz(F[3]) == 1 and nz(F[2]) and nz(F[2]) > 0 then push(J.ta, t) end end
 H.SP = function(J, t) push(J.sp, t) end
+H.VE = function(J, t) push(J.evX, t) end
+RAW.LT = function(J, t, rest)
+  -- only finds of note (field 3 quality: 3 blue or better) count as a chapter event (buildChapters)
+  local q = tonumber(match(rest, "^[^~]*~[^~]*~([^~]*)"))
+  if q and q >= 3 then push(J.evX, t) end
+end
 RAW.GD = function(J, t, rest)
   local d, src = match(rest, "^(%d+)~[^~]*~([^~]*)")
   d = tonumber(d)
@@ -536,7 +546,7 @@ end
 -- the new part is read on the next build.
 local LOG_ARRAYS = { "spT0", "spT1", "tzT", "tzV", "sT", "sM", "lv", "kT", "kN", "kL", "kP", "specials", "spirits", "qt", "shots", "hs",
   "hb", "tf", "tl", "fp", "ib", "mo", "sz", "ex", "tb", "rt", "gs", "gm", "gu", "du", "pk", "bk", "ta", "sp", "gT", "gV",
-  "breaks" }
+  "breaks", "evX" }
 local LOG_VALUES = { "firstT", "lastT", "spanOpen", "spanStart", "qaN", "baseLevel" }
 local logCache = nil
 
@@ -726,9 +736,21 @@ local function buildStays(J, blocks)
   return stays
 end
 
--- Chapter = zone stay: each change of the main zone (outermost zone of the map, mainZoneOf) starts a chapter, also a return to
--- a visited zone. Sub-maps, caves and embedded zones stay in it; continent/world maps (nonQual, e.g. ship) belong to the running
--- stay. A detour A -> B (-> C ...) -> A shorter than Model.STAY_FLICKER played seconds stays in A, as does such a short first stay.
+-- Chapter = zone visit with an event ("Abstecher" rule): a visit is a stay in one main zone (outermost zone of the
+-- map, mainZoneOf; sub-maps, caves and embedded zones stay in it; continent/world maps (nonQual, e.g. ship) belong to the
+-- running visit). A visit becomes a chapter of its own only if something of note happens in it, regardless of its length (an
+-- event late in the visit makes the whole visit, from its entry, the chapter):
+--   KI kill (also rare/elite/boss), PK PvP kill, QA quest accepted, QT quest turned in, LV level up, DE death, EX area
+--   discovered, FP new flight point, HB new home, SP spell learned, RT reputation tier, IE instance entered, IB boss
+--   encounter, MO moment (except "continent", that comes just by arriving), LT find of quality blue or better, VE plan done.
+--   Not: ZN/SZ (first arrival), SH (also automatic on a new zone), TF/TL/HS/TB (travel), XP, gold, group and gear lines.
+-- A visit without an event is a detour: it stays in the running chapter (time range, so its trail is still drawn and the
+-- replay never jumps) and is named in chapter.detours (zone IDs, first occurrence order). A return to the chapter zone simply
+-- continues the chapter (A -> B -> C -> A with B, C without event = chapter A with two detours). Visits shorter than
+-- Model.STAY_FLICKER played seconds (zone border flicker) never form a chapter, even with an event, and are not named;
+-- zones only crossed during a flight (TF/TL) are not named either. Visits before the first chapter visit belong to it (it
+-- starts at the start of the journey); a journey without any event is one chapter anchored at the first visit that is not a
+-- short lead-in.
 local function buildChapters(J, stays)
   local chapters = {}
   local function newChapter(z, t0)
@@ -750,9 +772,9 @@ local function buildChapters(J, stays)
     if not J.nonQual[s.z] and (s.t1 > s.t0 or not anyLong) then
       local last = q[#q]
       if last and last.z == s.z then
-        last.act = last.act + s.act
+        last.act, last.t1 = last.act + s.act, s.t1
       else
-        q[#q + 1] = { z = s.z, t0 = s.t0, act = s.act }
+        q[#q + 1] = { z = s.z, t0 = s.t0, t1 = s.t1, act = s.act }
       end
     end
   end
@@ -761,36 +783,106 @@ local function buildChapters(J, stays)
     return chapters
   end
   local flicker = Model.STAY_FLICKER
-  local first = 1
+  local n = #q
+  -- Events: mark each visit in which something of note happened (time t falls into the visit whose t0 is the last <= t;
+  -- before the first visit = first visit). The lists need not be sorted; the cursor only makes sorted input fast.
+  local qT0 = {}
+  for k = 1, n do qT0[k] = q[k].t0 end
+  local qi = 1
+  local function mark(t)
+    if type(t) ~= "number" then return end
+    if not (t >= qT0[qi] and (qi == n or t < qT0[qi + 1])) then
+      qi = bsearch(qT0, t)
+      if qi == 0 then qi = 1 end
+    end
+    q[qi].ev = true
+  end
+  local function markNums(list)
+    for k = 1, #list do
+      if k % 1024 == 0 then pause() end
+      mark(list[k])
+    end
+  end
+  local function markRecs(list, keep)
+    for k, r in ipairs(list) do
+      if k % 1024 == 0 then pause() end
+      if not keep or keep(r) then mark(r.t) end
+    end
+  end
+  markNums(J.kT)                                                  -- KI kill (incl. rare/elite/boss)
+  markNums(J.pk)                                                  -- PK PvP kill
+  markNums(J.ex)                                                  -- EX area discovered
+  markNums(J.sp)                                                  -- SP spell / rank learned (trainer)
+  markNums(J.evX)                                                 -- QA quest accepted, LT find blue or better, VE plan done
+  markRecs(J.qt)                                                  -- QT quest turned in
+  markRecs(J.lv)                                                  -- LV level up
+  markRecs(J.deaths)                                              -- DE death
+  markRecs(J.fp)                                                  -- FP new flight point
+  markRecs(J.hb)                                                  -- HB new home (hearthstone bound)
+  markRecs(J.ib)                                                  -- IB boss encounter won
+  markRecs(J.rt)                                                  -- RT reputation tier
+  markRecs(J.mo, function(m) return m.kind ~= "continent" end)    -- MO moment (not: new continent, comes just by arriving)
+  for k, g in ipairs(J.gaps) do                                   -- IE instance entered
+    -- the middle of the stay inside (IE comes before the first line on the instance map); still inside: entry time
+    if g.kind == "instance" then mark((g.t1 and g.t1 > g.t0) and (g.t0 + (g.t1 - g.t0) / 2) or g.t0) end
+    if k % 1024 == 0 then pause() end
+  end
+  -- Flights (TL: landing time and duration; without duration back to the last TF start): zones only crossed in the air are
+  -- transit, not a detour worth naming.
+  local fa, fb = {}, {}
   do
+    local list, tf, ti = {}, J.tf, 0
+    for _, l in ipairs(J.tl) do
+      local s = (l.sec and l.sec > 0) and (l.t - l.sec) or nil
+      if not s then
+        while tf[ti + 1] and tf[ti + 1].t <= l.t do ti = ti + 1 end
+        s = tf[ti] and tf[ti].t or nil
+      end
+      if s and s <= l.t then list[#list + 1] = { s, l.t } end
+    end
+    tsort(list, function(x, y) return x[1] < y[1] end)
+    for k, f in ipairs(list) do fa[k], fb[k] = f[1], f[2] end
+  end
+  local function inFlight(s)
+    local k = bsearch(fa, s.t0 + 2)
+    return k > 0 and s.t1 <= fb[k] + 2
+  end
+  -- Anchor of the first chapter: the first visit with an event, it starts at the beginning of the journey. Without any
+  -- event the first visit that is not a short lead-in (Model.STAY_FLICKER) anchors it.
+  local first
+  for k = 1, n do
+    if q[k].ev and q[k].act >= flicker then first = k break end
+  end
+  if not first then
+    first = 1
     local sum = 0
-    for i = 1, #q - 1 do
-      sum = sum + q[i].act
+    for k = 1, n - 1 do
+      sum = sum + q[k].act
       if sum >= flicker then break end
-      if q[i + 1].act >= flicker then first = i + 1 break end
+      if q[k + 1].act >= flicker then first = k + 1 break end
     end
   end
-  local out = { { z = q[first].z, t0 = q[first].t0, act = q[first].act } }
-  local i, n = first + 1, #q
-  while i <= n do
-    local prev = out[#out]
-    local sum, j = 0, i
-    while j <= n and q[j].z ~= prev.z do
-      sum = sum + q[j].act
-      if sum >= flicker then break end
-      j = j + 1
-    end
-    if j <= n and j > i and q[j].z == prev.z then
-      prev.act = prev.act + sum + q[j].act
-      i = j + 1
-    else
-      local s = q[i]
-      out[#out + 1] = { z = s.z, t0 = s.t0, act = s.act }
-      i = i + 1
-    end
-    if (i % 1024) == 0 then pause() end
+  local cur
+  local function open(z, t0)
+    newChapter(z, t0)
+    cur = chapters[#chapters]
+    cur.detours, cur.detourSeen = {}, {}
   end
-  for k, s in ipairs(out) do newChapter(s.z, k == 1 and J.firstT or s.t0) end
+  local function detour(s)
+    if s.z == cur.zoneID or s.act < flicker or inFlight(s) or cur.detourSeen[s.z] then return end
+    cur.detourSeen[s.z] = true
+    cur.detours[#cur.detours + 1] = s.z
+  end
+  open(q[first].z, J.firstT)
+  for k = 1, first - 1 do detour(q[k]) end
+  for k = first + 1, n do
+    local s = q[k]
+    if s.z ~= cur.zoneID then
+      if s.ev and s.act >= flicker then open(s.z, s.t0) else detour(s) end
+    end
+    if k % 1024 == 0 then pause() end
+  end
+  for _, c in ipairs(chapters) do c.detourSeen = nil end
   return chapters
 end
 
@@ -1010,8 +1102,10 @@ local function story(J, c, nextC)
   end
   if a.boss then local n = npcName(J, a.boss.npc, a.boss.name) add(95, n and MT("bossDown", n)) end
   if a.rare then local n = npcName(J, a.rare.npc, a.rare.name) add(80, n and MT("rareDown", n)) end
+  local ms = Journal.MapSpace
+  local top = ms and ms.maxLevel and ms.maxLevel() or 60 -- highest level of the client (Forever 60, Retail 80/90)
   for _, l in ipairs(a.lv) do
-    if l.level == 60 then add(98, MT.level60) elseif l.level % 10 == 0 then add(60 + l.level / 10, MT("levelReached", int(l.level))) end
+    if l.level == top then add(98, MT("level60", int(top))) elseif l.level % 10 == 0 then add(60 + l.level / 10, MT("levelReached", int(l.level))) end
   end
   local h = a.hb[#a.hb]
   if h then local b = plain(h.bind) add(65, b and MT("newHomeAt", b) or MT.newHome) end
@@ -1117,7 +1211,8 @@ local function decodeTrail(J, blocks)
       end
       if brk then
         local link
-        if pT and mark == "z" and map ~= pMap and t - pT <= LG and pMark ~= "d" and pMark ~= "f" then
+        -- Any map change within LINK_GAP continues the walk (also a tick that saw the new map before the zone event: no "z" mark).
+        if pT and map ~= pMap and t - pT <= LG and pMark ~= "d" and pMark ~= "f" then
           local k = bsearch(breaks, t)
           if not (k > 0 and breaks[k] > pT) then link = { mapID = pMap, x = pX, y = pY, t = pT } end
         end
@@ -1180,7 +1275,7 @@ local function decodeTrail(J, blocks)
     if c then contPoints[c] = (contPoints[c] or 0) + r.raw end
   end
   J.runs, J.flights, J.yards, J.kmApprox = runs, flights, yards, approx
-  J.lastPoint = pT and { t = pT, x = pX, y = pY, map = pMap } or nil
+  J.lastPoint = pT and { t = pT, x = pX, y = pY, map = pMap, mark = pMark } or nil
   local conts = {}
   for id, n in pairs(contPoints) do conts[#conts + 1] = { id = id, points = n } end
   tsort(conts, function(x, y)
@@ -1456,7 +1551,7 @@ local function newJ(db, char, geo)
     sT = {}, sM = {}, zn = {}, zoneKey = {}, mainKey = {}, startKey = {}, contOf = {}, sizeOf = {}, nonQual = {},
     lv = {}, kT = {}, kN = {}, kL = {}, kP = {}, specials = {}, deaths = {}, spirits = {}, qt = {}, qaN = 0, shots = {}, hs = {}, hb = {},
     tf = {}, tl = {}, fp = {}, gaps = {}, ib = {}, mo = {}, sz = {}, ex = {}, tb = {}, rt = {}, gs = {}, gm = {}, gu = {},
-    du = {}, pk = {}, bk = {}, ta = {}, sp = {}, gT = {}, gV = {}, breaks = {},
+    du = {}, pk = {}, bk = {}, ta = {}, sp = {}, gT = {}, gV = {}, breaks = {}, evX = {},
   }
 end
 
@@ -1523,7 +1618,21 @@ local function build(db, guid, char, snap, opts)
     if c.zoneID and not seenZone[c.zoneID] then seenZone[c.zoneID], firstStay[i] = true, true end
   end
   for i, c in ipairs(chapters) do
+    -- Detours (buildChapters): { zoneID, name } in order, plus the card line "Abstecher: X, Y"
+    local detours, names = {}, {}
+    for _, z in ipairs(c.detours or {}) do
+      local nm = disp(mapName(J, z) or plain(MT("mapN", int(z))), Model.NAME_MAX)
+      if nm then
+        detours[#detours + 1] = { zoneID = z, name = nm }
+        names[#names + 1] = nm
+      end
+    end
+    local detourText = nil
+    if #names > 0 then
+      detourText = disp(MT(ns.Locale.plural(#names, "detours_one", "detours_other"), table.concat(names, ", ")), Model.TEXT_MAX)
+    end
     model.chapters[i] = {
+      detours = detours, detourText = detourText,
       index = i, roman = roman(i), title = c.title, titleKind = c.titleKind, label = c.label, startText = c.startText,
       subtitle = c.label, zoneID = c.zoneID, zoneName = c.zoneName and disp(c.zoneName) or nil,
       continentID = c.continentID, levelFrom = c.levelFrom, levelTo = c.levelTo, t0 = c.t0, t1 = c.t1, p0 = c.p0, p1 = c.p1,
@@ -1950,12 +2059,16 @@ local function route(model, view, opts)
     if y2 > maxY then maxY = y2 end
   end
   local useLink = not view.chapter and not view.zone and not view.map
+  local J = model._J
   for _, r in ipairs(model.runs) do
     if r.n > 0 and inView(view, r.chapter, r.zone, r.continent, r.mapID) then
       local lx, ly, lt
-      if useLink and r.link then
-        lx, ly = proj1(r.link.mapID, r.link.x / 10000, r.link.y / 10000)
-        lt = r.link.t
+      local lk = r.link
+      -- Whole-world views link every map change. Chapter/zone/map views link too, but only if the previous point lies in the
+      -- view itself (a zone/sub-map flip at a border or gate); otherwise a line would reach in from outside.
+      if lk and (useLink or inView(view, chapterIndex(J, lk.t), zoneOf(J, lk.mapID), continentOf(J, lk.mapID), lk.mapID)) then
+        lx, ly = proj1(lk.mapID, lk.x / 10000, lk.y / 10000)
+        lt = lk.t
         if lx then extend(lx, lx, ly, ly) end
       end
       if generic then
@@ -2115,8 +2228,21 @@ local function route(model, view, opts)
     return a.i < b.i
   end)
   for _, s in ipairs(segs) do s.i = nil end
+  -- End of the route in view coordinates (latest run), for the live tail between this point and the player arrow.
+  local tail
+  local lastRun = model.runs[#model.runs]
+  if lastRun and lastRun.n > 0 and inView(view, lastRun.chapter, lastRun.zone, lastRun.continent, lastRun.mapID) then
+    local tt = lastRun.ts[lastRun.n]
+    -- No tail after a break (login, death, release, hearthstone, instance, pause: J.breaks) or from a flight/death point: the
+    -- player is then somewhere else on purpose and the route must not be stitched to the arrow.
+    local lp, br = model._J.lastPoint, model._J.breaks
+    local broken = (br and #br > 0 and br[#br] > tt) or (lp and (lp.mark == "f" or lp.mark == "d"))
+    local tx, ty
+    if not broken then tx, ty = proj1(lastRun.mapID, lastRun.xs[lastRun.n] / 10000, lastRun.ys[lastRun.n] / 10000) end
+    if tx then tail = { vx = tx, vy = ty, t = tt, mapID = lastRun.mapID } end
+  end
   local res = { segments = segs, count = #segs, points = total, tolerance = theta < 0 and 0 or theta, truncated = truncated,
-    partial = affMiss }
+    partial = affMiss, tail = tail }
   if cacheable then
     -- Routes with unprojectable maps are cached only briefly (failures are not cached permanently).
     if affMiss then res._retryAt = clock() + Model.ROUTE_RETRY_SEC * 1000 end

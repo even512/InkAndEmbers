@@ -13,7 +13,7 @@ Journal.Schaetze = Schaetze
 local floor, huge, min, max = math.floor, math.huge, math.min, math.max
 local format, find = string.format, string.find
 
-Schaetze.MAX_LEVEL = 60
+Schaetze.MAX_LEVEL = 60      -- WoW Forever and the fallback; the live value is Schaetze.maxLevel()
 Schaetze.FLOW_NODES = 7      -- nodes per side in the gold flow (rest -> "Weitere")
 Schaetze.FLOW_HEIGHT = 140   -- height of the area (px)
 Schaetze.FLOW_GAP = 5        -- gap between nodes at the sides (px)
@@ -23,6 +23,13 @@ Schaetze.NAME_MAX = 40       -- bytes for item names
 Schaetze.GEAR_MAX = 20000    -- gear changes read
 Schaetze.PER_HOUR_MIN = 600  -- "per play hour" only from 10 min of play time
 Schaetze.LEVEL_COLS = 60     -- max level columns in the gold flow (the newest)
+
+-- highest player level of the client (Journal.MapSpace.maxLevel: Forever 60, Retail 80/90); the gear strip spans 1..maxLevel
+function Schaetze.maxLevel()
+  local ms = Journal.MapSpace
+  local v = ms and ms.maxLevel and ms.maxLevel() or nil
+  return tonumber(v) or Schaetze.MAX_LEVEL
+end
 
 -- locale scope "m.Schaetze" (English in locales/enUS_model.lua); rows, qualities and slots read their labels on access
 -- (metatable)
@@ -68,6 +75,11 @@ local TEXT = Loc.ns("m.Schaetze", {
   headLevel = "Stufe %s",
   day = "Tag %s",
   perHour = "ca. %s je Spielstunde",
+  holdTop = "Höchster Besitz: %s",
+  holdEnd = "Am Stufenende: %s",
+  holdNow = "Jetzt im Beutel: %s",
+  holdJump = "Zur Vorstufe: %s",
+  holdPeak = "Höchststand insgesamt",
 })
 Schaetze.TEXT = TEXT
 
@@ -276,7 +288,8 @@ local function moneyStatic(index, char)
   local outRows, outTotal = sumRows(Schaetze.OUT_ROWS, loss)
   local m = type(index.money) == "table" and index.money or {}
   local last = type(m.last) == "table" and num(m.last.balance) or nil
-  return { inRows = inRows, inTotal = inTotal, outRows = outRows, outTotal = outTotal, last = last, levels = m.level }
+  return { inRows = inRows, inTotal = inTotal, outRows = outRows, outTotal = outTotal, last = last, levels = m.level,
+    hold = m.hold }
 end
 
 -- bag: live (GetMoney), else last balance from the log, else the saved state
@@ -387,7 +400,8 @@ local function gearHistory(index, char, level)
     end
   end
 
-  local cap = min(max(level or 1, 1), Schaetze.MAX_LEVEL)
+  local top = Schaetze.maxLevel()
+  local cap = min(max(level or 1, 1), top)
   local rows = {}
   for _, def in ipairs(Schaetze.GEAR_SLOTS) do
     local obs = {}
@@ -460,7 +474,7 @@ local function gearHistory(index, char, level)
   end
   -- empty: not a single proof (neither snapshot nor change)
   local empty = #snaps == 0 and total == 0
-  return { level = cap, changes = total, changesText = int(total), rows = rows, empty = empty }
+  return { level = cap, maxLevel = top, changes = total, changesText = int(total), rows = rows, empty = empty }
 end
 
 local function firstBlue(index, char)
@@ -798,6 +812,9 @@ local function flowOf(st, beutel, rest, level)
   flow.right = nodesOf(m.outRows, rightTotal, rightExtra)
   flow.mid = Schaetze.layout(flow.left, flow.right, total, Schaetze.FLOW_HEIGHT, Schaetze.FLOW_GAP, Schaetze.FLOW_MIN)
   flow.levels = Schaetze.levelSeries(m.levels, level)
+  -- holdings per level: its own section, a failure here must not take the flow with it
+  local ok, hold = pcall(Schaetze.holdSeries, m.hold, level, beutel)
+  flow.hold = ok and hold or nil
   return flow
 end
 
@@ -840,6 +857,74 @@ function Schaetze.levelSeries(levels, current)
   end
   out.maxGainText = Schaetze.moneyText(out.maxGain, true, false, Schaetze.FONT.label)
   out.maxLossText = Schaetze.moneyText(out.maxLoss, true, false, Schaetze.FONT.label)
+  return out
+end
+
+-- holdings per level: the highest balance in the purse within each level (Index.money.hold, built from the GD lines, so
+-- it reaches back over the whole log). A level without any GD line keeps the balance it started with (carried on from the
+-- last line before); in the current level the live purse counts as well. Gapless from the first logged level to the
+-- current one (at most Schaetze.LEVEL_COLS, the newest).
+-- -> { cols = { { level, top, last, jump, peak, current, tip } }, max, maxLevel, maxText, jump = { level, amount, ... } | nil,
+--      from, to } | nil (no level data)
+function Schaetze.holdSeries(hold, current, bag)
+  if type(hold) ~= "table" then return nil end
+  local lo, hi
+  local data = {}
+  for L, e in pairs(hold) do
+    if type(L) == "number" and L >= 1 and L <= 200 and L == floor(L) and type(e) == "table" then
+      local top = num(e.top)
+      if top and top >= 0 then
+        data[L] = { top = top, last = num(e.last) or top }
+        lo = lo and min(lo, L) or L
+        hi = hi and max(hi, L) or L
+      end
+    end
+  end
+  if not lo then return nil end
+  current = num(current)
+  if current and current >= hi and current <= 200 then hi = floor(current) end
+  bag = num(bag)
+  if bag and bag < 0 then bag = nil end
+  local all, prev = {}, nil
+  for L = lo, hi do
+    local d = data[L]
+    if not d then -- no balance change in this level: it began (and stays) with the balance before
+      d = { top = prev and prev.last or 0, last = prev and prev.last or 0 }
+    end
+    if bag and L == hi and (current == nil or current == hi) then
+      d = { top = max(d.top, bag), last = bag, current = true }
+    end
+    all[L], prev = d, d
+  end
+  if hi - lo + 1 > Schaetze.LEVEL_COLS then lo = hi - Schaetze.LEVEL_COLS + 1 end
+  local out = { cols = {}, max = -1, from = lo, to = hi }
+  for L = lo, hi do
+    local d = all[L]
+    local before = all[L - 1]
+    local col = { level = L, top = d.top, last = d.last, current = d.current == true }
+    if L > lo and before then col.jump = d.top - before.top end
+    out.cols[#out.cols + 1] = col
+    if d.top > out.max then out.max, out.maxLevel = d.top, L end
+    if col.jump and col.jump > 0 and (not out.jump or col.jump > out.jump.amount) then
+      out.jump = { level = L, amount = col.jump }
+    end
+  end
+  for _, col in ipairs(out.cols) do
+    col.peak = col.level == out.maxLevel and out.max > 0
+    local tip = { TEXT("level", int(col.level)), TEXT("holdTop", Schaetze.moneyText(col.top)) }
+    if col.last ~= col.top or col.current then
+      tip[#tip + 1] = TEXT(col.current and "holdNow" or "holdEnd", Schaetze.moneyText(col.last))
+    end
+    if col.jump and col.jump ~= 0 then
+      tip[#tip + 1] = TEXT("holdJump", (col.jump > 0 and "+" or "") .. Schaetze.moneyText(col.jump))
+    end
+    if col.peak then tip[#tip + 1] = TEXT.holdPeak end
+    col.tip = tip
+  end
+  out.maxText = Schaetze.moneyText(out.max, true, false, Schaetze.FONT.label)
+  if out.jump then
+    out.jump.text = Schaetze.moneyText(out.jump.amount, true, false, Schaetze.FONT.label)
+  end
   return out
 end
 

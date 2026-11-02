@@ -38,6 +38,7 @@ local T = ns.Locale.ns("Core", {
   helpTodo = "/chronik todo - offene To Dos am Bildschirmrand ein-/ausblenden (\"todo reset\" setzt Lage und Größe zurück)",
   helpNote = "/chronik notiz - Schnellnotiz-Feld ein-/ausblenden (Enter legt eine Notiz an)",
   helpOpen = "/chronik offene - offene Quests (Rubrik \"Offen\" unter Quests); \"offene test\" schaltet den Retail-Testmodus ein (\"test aus\" beendet ihn)",
+  helpTrain = "/chronik lehrplan - Lehrplan Eurer Klasse (Rubrik \"Lehrplan\" unter Quests, nur WoW Forever); \"lehrplan status\" zeigt den Stand",
   helpLanguage = "/chronik sprache - Sprache wählen: \"sprache auto\", \"sprache de\" oder \"sprache en\" (wirkt nach /reload)",
   helpReset = "/chronik reset - Größe und Position des Reisejournals zurücksetzen",
   helpSave = "/chronik sichern - Sichern-Fenster öffnen (Sichern lädt die Oberfläche neu)",
@@ -72,6 +73,17 @@ local T = ns.Locale.ns("Core", {
   aurasMissing = "Auren: Sammler Rast nicht geladen.",
   coinsMissing = "Münzen: Reisejournal nicht geladen, keine Münzquelle gewählt.",
   tutorialMissing = "Einführung: Reisejournal nicht geladen.",
+  helpDiagQuests = "/chronik diag retailquests [Karten-ID] - Quest-Schnittstellen des Spiels auf der aktuellen Karte prüfen (Ergebnis in EveNChronicleDB.diag.retailQuests)",
+  rqCombat = "Quest-Schnittstellen: bitte außerhalb des Kampfs ausführen.",
+  rqNoMap = "Quest-Schnittstellen: keine Karte bestimmbar (Karten-ID angeben, z. B. /chronik diag retailquests 37).",
+  rqNoApi = "Quest-Schnittstellen: C_QuestLine fehlt auf diesem Client (Karte %d gespeichert).",
+  rqAsked = "Quest-Schnittstellen: Karte %d angefragt, Auswertung in höchstens %d s …",
+  rqResult = "Quest-Schnittstellen Karte %d (%s): %d Questreihen, %d Quests, %d erzwungen sichtbar, %d Bonusziele (%s).",
+  rqViaEvent = "Antwort erhalten",
+  rqViaTimeout = "ohne Antwort, nach Wartezeit",
+  rqViaNow = "sofort",
+  rqError = "Quest-Schnittstellen: Fehler bei der Auswertung (%s).",
+  rqDetails = "Details in EveNChronicleDB.diag.retailQuests[%d] (in der Datei nach /reload).",
   unknownCommand = "Unbekannter Befehl \"%s\". /chronik hilfe zeigt alle Befehle.",
 })
 
@@ -81,6 +93,7 @@ local COMMAND_ALIASES = {
   welcome = "willkommen", rest = "rast", sound = "ton", meter = "messer", note = "notiz",
   language = "sprache", lang = "sprache", save = "sichern", campfire = "feuer", lagerfeuer = "feuer",
   open = "offene", quests = "offene", auras = "auren", buffs = "auren", coins = "muenzen", ["münzen"] = "muenzen",
+  training = "lehrplan", trainer = "lehrplan", lehrer = "lehrplan",
   anleitung = "tutorial", einfuehrung = "tutorial", ["einführung"] = "tutorial", intro = "tutorial",
 }
 
@@ -595,8 +608,8 @@ end
 -- help lines in display order (empty texts are skipped)
 local HELP = {
   "helpTitle", "helpToggle", "helpStatus", "helpOptions", "helpMinimap", "helpToast", "helpSound", "helpWelcome", "helpTutorial", "helpRest",
-  "helpMeter", "helpTodo", "helpNote", "helpOpen", "helpLanguage", "helpReset", "helpSave", "helpHelp", "helpAliases", "helpDebug", "helpDiag",
-  "helpCampfire", "helpSim", "helpAuras", "helpCoins",
+  "helpMeter", "helpTodo", "helpNote", "helpOpen", "helpTrain", "helpLanguage", "helpReset", "helpSave", "helpHelp", "helpAliases", "helpDebug", "helpDiag",
+  "helpDiagQuests", "helpCampfire", "helpSim", "helpAuras", "helpCoins",
 }
 
 -- Development tools (the campfire simulation, /chronik sim) exist only where journal/SimPanel.lua is part of the addon folder;
@@ -605,10 +618,23 @@ function Core.hasDevTools()
   return ns.SimPanel ~= nil
 end
 
+-- Help lines about WoW Forever only parts, left out in Retail: the campfire talk (never starts there) and the trainer plan.
+local function helpHiddenInRetail(key)
+  local J = ns.Journal
+  if key == "helpCampfire" then
+    local ms = J and J.MapSpace
+    return ms ~= nil and type(ms.fireTalkHidden) == "function" and ms.fireTalkHidden() == true
+  elseif key == "helpTrain" then
+    local lp = J and J.Lehrplan
+    return lp ~= nil and type(lp.active) == "function" and lp.active() == false
+  end
+  return false
+end
+
 function Core.printHelp()
   for _, key in ipairs(HELP) do
     local line = T[key]
-    if line ~= "" and (key ~= "helpSim" or Core.hasDevTools()) then Core.print(line) end
+    if line ~= "" and (key ~= "helpSim" or Core.hasDevTools()) and not helpHiddenInRetail(key) then Core.print(line) end
   end
 end
 
@@ -712,6 +738,10 @@ function Core.runDiag()
       db.diag.todoMarks = { seen = s.seen, forbidden = s.forbidden, marked = s.marked, reason = s.reason, how = s.how, anchor = s.anchor }
     end
   end
+  if ns.Trainer and type(ns.Trainer.diagLine) == "function" then
+    local ok, line = pcall(ns.Trainer.diagLine)
+    if ok then Core.print(tostring(line)) end
+  end
   if type(ns.meterStatus) == "function" then
     local ok, line, now, last = pcall(ns.meterStatus)
     Core.print(ok and tostring(line) or T("checkFailed", T.labMeter, tostring(line)))
@@ -742,6 +772,262 @@ function Core.runDiag()
   Core.print(T.details)
 end
 
+-- /chronik diag retailquests [uiMapID]: one-time probe of the runtime quest APIs (C_QuestLine & co.) on the current or
+-- given map, Retail and Forever. Asks RequestQuestLinesForMap, waits for QUESTLINE_UPDATE (at most QPROBE_WAIT s, then
+-- reads anyway), copies every list entry raw (plain values only, secrets as "<secret>") to
+-- EveNChronicleDB.diag.retailQuests[uiMapID] (one record per map, the oldest dropped beyond QPROBE_MAPS) and prints one
+-- summary line. Every API call runs in pcall; a missing function is noted as "MISSING", never an error.
+Core.QPROBE_WAIT = 3     -- seconds to wait for QUESTLINE_UPDATE
+Core.QPROBE_MAPS = 20    -- maps kept in diag.retailQuests
+Core.QPROBE_MAX = 200    -- entries per copied list
+Core.QPROBE_DETAIL = 40  -- quests with extra lookups (classification, difficulty ...)
+Core.QPROBE_LOG = 35     -- quest log entries with objectives
+Core.QPROBE_REASK = 1    -- new requests when QUESTLINE_UPDATE says requestRequired
+
+local function qSecret(v)
+  return type(issecretvalue) == "function" and issecretvalue(v) == true
+end
+
+local function qFn(path)
+  local t = _G
+  for part in string.gmatch(path, "[^%.]+") do
+    if type(t) ~= "table" then return nil end
+    t = t[part]
+  end
+  return type(t) == "function" and t or nil
+end
+
+-- status "OK" | "MISSING" | "ERROR", then the first four results (ERROR: a short message)
+local function qCall(path, ...)
+  local f = qFn(path)
+  if not f then return "MISSING" end
+  local r = { pcall(f, ...) }
+  if not r[1] then return "ERROR", string.sub(errText(r[2]), 1, 120) end
+  return "OK", r[2], r[3], r[4], r[5]
+end
+
+local function qVal(path, ...)
+  local s, a = qCall(path, ...)
+  if s == "OK" then return a end
+  return s
+end
+
+-- plain SV copy: numbers, booleans, short strings, tables up to depth 3 (QPROBE_MAX keys each); no functions, no secrets
+local function qPlain(v, depth)
+  depth = depth or 0
+  if qSecret(v) then return "<secret>" end
+  local tv = type(v)
+  if tv == "number" then return (v == v and v ~= math.huge and v ~= -math.huge) and v or tostring(v) end
+  if tv == "boolean" then return v end
+  if tv == "string" then return ns.Sanitize and ns.Sanitize.field(string.sub(v, 1, 120)) or string.sub(v, 1, 80) end
+  if tv == "table" and depth < 3 then
+    local o, n = {}, 0
+    for k, x in pairs(v) do
+      if not qSecret(k) and (type(k) == "string" or type(k) == "number") and type(x) ~= "function" then
+        n = n + 1
+        if n > Core.QPROBE_MAX then o._cut = true break end
+        o[k] = qPlain(x, depth + 1)
+      end
+    end
+    return o
+  end
+  return nil
+end
+
+local function qNum(v)
+  if qSecret(v) or type(v) ~= "number" or v ~= v then return nil end
+  return v
+end
+
+-- stores a record under its map; beyond QPROBE_MAPS the oldest record (smallest 'at') goes
+local function qStore(mapID, rec)
+  local db = getDb()
+  if not db then return false end
+  db.diag = type(db.diag) == "table" and db.diag or {}
+  local all = type(db.diag.retailQuests) == "table" and db.diag.retailQuests or {}
+  -- old single-record form (no per-map keys): start fresh
+  if all.mapID ~= nil then all = {} end
+  db.diag.retailQuests = all
+  all[mapID] = rec
+  while true do
+    local n, oldKey, oldAt = 0, nil, nil
+    for k, r in pairs(all) do
+      n = n + 1
+      local at = type(r) == "table" and tonumber(r.at) or 0
+      if k ~= mapID and (oldAt == nil or at < oldAt) then oldKey, oldAt = k, at end
+    end
+    if n <= Core.QPROBE_MAPS or oldKey == nil then break end
+    all[oldKey] = nil
+  end
+  return true
+end
+
+-- counts of a quest line list: distinct quest lines, distinct quests
+local function qCounts(list)
+  local lines, quests, nl, nq = {}, {}, 0, 0
+  if type(list) ~= "table" then return 0, 0 end
+  for _, q in ipairs(list) do
+    if type(q) == "table" then
+      local l, id = qNum(q.questLineID), qNum(q.questID)
+      if l and not lines[l] then lines[l] = true nl = nl + 1 end
+      if id and not quests[id] then quests[id] = true nq = nq + 1 end
+    end
+  end
+  return nl, nq
+end
+
+local function qCount(t)
+  return type(t) == "table" and #t or 0
+end
+
+-- reads everything once the wait is over (via = "event" | "timeout" | "now")
+local function qCollect(out, mapID)
+  local s, lines = qCall("C_QuestLine.GetAvailableQuestLines", mapID)
+  out.questLines = { status = s, list = s == "OK" and qPlain(lines) or nil, err = s == "ERROR" and lines or nil }
+  out.extra = {}
+  if s == "OK" and type(lines) == "table" then
+    for i, q in ipairs(lines) do
+      if i > Core.QPROBE_DETAIL then break end
+      local id = type(q) == "table" and qNum(q.questID) or nil
+      if id then
+        out.extra[#out.extra + 1] = { id = id,
+          trivial = qPlain(qVal("C_QuestLog.IsQuestTrivial", id)),
+          class = qPlain(qVal("C_QuestInfoSystem.GetQuestClassification", id)),
+          diff = qPlain(qVal("C_QuestLog.GetQuestDifficultyLevel", id)),
+          done = qPlain(qVal("C_QuestLog.IsQuestFlaggedCompleted", id)),
+          title = qPlain(qVal("C_QuestLog.GetTitleForQuestID", id)) }
+      end
+    end
+    local qlid = type(lines[1]) == "table" and qNum(lines[1].questLineID) or nil
+    if qlid then out.lineQuests = { id = qlid, list = qPlain(qVal("C_QuestLine.GetQuestLineQuests", qlid)) } end
+  end
+  local fs, force = qCall("C_QuestLine.GetForceVisibleQuests", mapID)
+  out.forceVisible = { status = fs, list = fs == "OK" and qPlain(force) or nil, err = fs == "ERROR" and force or nil }
+  out.tasks = qPlain(qVal("C_TaskQuest.GetQuestsOnMap", mapID))
+  out.logOnMap = qPlain(qVal("C_QuestLog.GetQuestsOnMap", mapID))
+  out.log = {}
+  local n = qNum(qVal("C_QuestLog.GetNumQuestLogEntries")) or 0
+  for i = 1, math.min(n, Core.QPROBE_LOG) do
+    local info = qVal("C_QuestLog.GetInfo", i)
+    local id = type(info) == "table" and qNum(info.questID) or nil
+    if id and id > 0 and info.isHeader ~= true then
+      local _, wm, wx, wy = qCall("C_QuestLog.GetNextWaypoint", id)
+      out.log[#out.log + 1] = { id = id, title = qPlain(info.title),
+        objectives = qPlain(qVal("C_QuestLog.GetQuestObjectives", id)), waypoint = qPlain({ wm, wx, wy }) }
+    end
+  end
+end
+
+-- the player and client state of the record
+local function qPlayer()
+  local _, race = qCall("UnitRace", "player")
+  local _, class = qCall("UnitClass", "player")
+  local _, faction, factionName = qCall("UnitFactionGroup", "player")
+  return {
+    level = qPlain(qVal("UnitLevel", "player")), race = qPlain(race), class = qPlain(class),
+    faction = qPlain(faction), factionName = qPlain(factionName),
+    chromie = qPlain(qVal("C_PlayerInfo.IsPlayerInChromieTime")),
+    chromieID = qPlain(qVal("UnitChromieTimeID", "player")),
+    trackHidden = qPlain(qVal("C_Minimap.IsTrackingHiddenQuests")),
+    trackAccount = qPlain(qVal("C_Minimap.IsTrackingAccountCompletedQuests")),
+  }
+end
+
+-- token of the running probe: a new command supersedes the old one (its event/timer then do nothing)
+Core.qprobeToken = 0
+
+function Core.diagRetailQuests(mapArg)
+  if type(InCombatLockdown) == "function" then
+    local ok, v = pcall(InCombatLockdown)
+    if ok and not qSecret(v) and v == true then
+      Core.print(T.rqCombat)
+      return false
+    end
+  end
+  local mapID = qNum(tonumber(mapArg))
+  if not mapID then mapID = qNum(qVal("C_Map.GetBestMapForUnit", "player")) end
+  if not mapID or mapID <= 0 or mapID ~= floor(mapID) or mapID > 2147483647 then
+    Core.print(T.rqNoMap)
+    return false
+  end
+  Core.qprobeToken = Core.qprobeToken + 1
+  local token = Core.qprobeToken
+  local info = qVal("C_Map.GetMapInfo", mapID)
+  local build, buildNumber, interface
+  if type(GetBuildInfo) == "function" then
+    local okB, a, b, _, d = pcall(GetBuildInfo)
+    if okB then build, buildNumber, interface = a, b, d end
+  end
+  local out = {
+    at = time(), mapID = mapID, mapName = type(info) == "table" and qPlain(info.name) or nil,
+    mapType = type(info) == "table" and qPlain(info.mapType) or nil, parentMapID = type(info) == "table" and qPlain(info.parentMapID) or nil,
+    client = { project = qPlain(rawget(_G, "WOW_PROJECT_ID")), mainline = qPlain(rawget(_G, "WOW_PROJECT_MAINLINE")),
+      build = qPlain(build), buildNumber = qPlain(buildNumber), interface = qPlain(interface) },
+    player = qPlayer(), events = {}, requests = 0,
+  }
+  local hasLines = qFn("C_QuestLine.GetAvailableQuestLines") ~= nil
+  local hasRequest = qFn("C_QuestLine.RequestQuestLinesForMap") ~= nil
+  local frame = Core.qprobeFrame
+  local done = false
+
+  local function finish(via)
+    if done or token ~= Core.qprobeToken then return end
+    done = true
+    if frame then pcall(frame.UnregisterAllEvents, frame) end
+    out.via = via
+    out.waited = (type(GetTime) == "function" and out.t0) and (GetTime() - out.t0) or nil
+    local ok, err = pcall(qCollect, out, mapID)
+    if not ok then out.error = string.sub(errText(err), 1, 200) end
+    qStore(mapID, out)
+    if not hasLines then
+      Core.print(T("rqNoApi", mapID))
+    else
+      local nl, nq = qCounts(out.questLines and out.questLines.list)
+      local name = type(out.mapName) == "string" and out.mapName ~= "<secret>" and out.mapName or "?"
+      local viaText = (via == "event" and T.rqViaEvent) or (via == "timeout" and T.rqViaTimeout) or T.rqViaNow
+      Core.print(T("rqResult", mapID, name, nl, nq, qCount(out.forceVisible and out.forceVisible.list), qCount(out.tasks), viaText))
+    end
+    if out.error then Core.print(T("rqError", out.error)) end
+    Core.print(T("rqDetails", mapID))
+  end
+
+  -- without the request API or a timer nothing can be waited for: read at once
+  local canWait = hasRequest and type(C_Timer) == "table" and type(C_Timer.After) == "function" and type(CreateFrame) == "function"
+  if not canWait then
+    if hasRequest then out.request = qCall("C_QuestLine.RequestQuestLinesForMap", mapID) else out.request = "MISSING" end
+    finish("now")
+    return true
+  end
+  if not frame then
+    local okF, f = pcall(CreateFrame, "Frame")
+    if okF and f then frame = f Core.qprobeFrame = f end
+  end
+  if frame then
+    pcall(frame.UnregisterAllEvents, frame)
+    local okR, errR = pcall(frame.RegisterEvent, frame, "QUESTLINE_UPDATE")
+    if not okR then out.eventError = string.sub(errText(errR), 1, 120) end
+    frame:SetScript("OnEvent", function(_, event, requestRequired)
+      if done or token ~= Core.qprobeToken then return end
+      if #out.events < 20 then
+        out.events[#out.events + 1] = { e = event, requestRequired = qPlain(requestRequired), t = type(GetTime) == "function" and GetTime() or nil }
+      end
+      if requestRequired == true and out.requests <= Core.QPROBE_REASK then
+        out.requests = out.requests + 1
+        qCall("C_QuestLine.RequestQuestLinesForMap", mapID)
+        return
+      end
+      Core.safe(finish, "event")
+    end)
+  end
+  out.t0 = type(GetTime) == "function" and GetTime() or nil
+  out.requests = 1
+  out.request = qCall("C_QuestLine.RequestQuestLinesForMap", mapID)
+  Core.print(T("rqAsked", mapID, Core.QPROBE_WAIT))
+  local okT = pcall(C_Timer.After, Core.QPROBE_WAIT, function() Core.safe(finish, "timeout") end)
+  if not okT then finish("now") end
+  return true
+end
+
 function Core.slash(msg)
   local cmd = string.lower(string.match(type(msg) == "string" and msg or "", "^%s*(%S*)") or "")
   cmd = COMMAND_ALIASES[cmd] or cmd
@@ -767,6 +1053,8 @@ function Core.slash(msg)
     ns.Journal.TodoTracker.slash(rest)
   elseif (cmd == "offene" or cmd == "offen") and ns.Journal and ns.Journal.OpenQuests then
     ns.Journal.OpenQuests.slash(string.match(type(msg) == "string" and msg or "", "^%s*%S+%s+(.-)%s*$") or "")
+  elseif cmd == "lehrplan" and ns.Trainer then
+    ns.Trainer.slash(rest)
   elseif cmd == "notiz" and ns.Journal and ns.Journal.QuickNote then
     ns.Journal.QuickNote.slash(rest)
   elseif cmd == "messer" and type(ns.meterSlash) == "function" then
@@ -774,7 +1062,11 @@ function Core.slash(msg)
   elseif cmd == "sprache" and ns.Locale then
     Core.print(ns.Locale.slash(rest))
   elseif cmd == "diag" then
-    Core.runDiag()
+    if string.lower(rest) == "retailquests" then
+      Core.diagRetailQuests(string.match(type(msg) == "string" and msg or "", "^%s*%S+%s+%S+%s+(%d+)"))
+    else
+      Core.runDiag()
+    end
   elseif cmd == "feuer" then
     if ns.Campfire and ns.Campfire.slash then
       ns.Campfire.slash(rest)
@@ -784,7 +1076,9 @@ function Core.slash(msg)
   elseif cmd == "sim" and Core.hasDevTools() then
     -- whole rest of the line (name and class of the dummy guest need several words)
     local all = string.match(type(msg) == "string" and msg or "", "^%s*%S+%s+(.-)%s*$") or ""
-    if all == "" and ns.SimPanel and ns.SimPanel.toggle then
+    if ns.SimPanel and ns.SimPanel.devSlash and ns.SimPanel.devSlash(all) then
+      -- developer switch handled (journal/SimPanel.lua)
+    elseif all == "" and ns.SimPanel and ns.SimPanel.toggle then
       ns.SimPanel.toggle() -- no arguments: simulation window (journal/SimPanel.lua)
     elseif ns.Campfire and ns.Campfire.simSlash then
       ns.Campfire.simSlash(all)

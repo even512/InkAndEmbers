@@ -80,6 +80,10 @@ local TX = ns.Locale.ns("Options", {
   todoLockedTip = "Mini-Zettel lässt sich nicht verschieben oder in der Größe ändern.",
   todoCombatTip = "Mini-Zettel verschwindet während eines Kampfs.",
   todoEmptyTip = "Mini-Zettel nur zeigen, wenn ein To Do offen ist.",
+  trainerTodoLabel = "Zum Lehrer automatisch eintragen",
+  trainerTodoTip = "Nach einem Stufenaufstieg mit neuen Zaubern steht „Zum Lehrer“ als To Do auf der Liste; es hakt sich selbst ab, sobald alles gelernt ist (nur WoW Forever).",
+  talentHintLabel = "Freie Talentpunkte melden",
+  talentHintTip = "Kleine Einblendung, wenn Talentpunkte frei sind – einmal pro Stufe bzw. Sitzung, nie im Kampf (nur WoW Forever).",
   todoResetLabel = "Lage des Mini-Zettels",
   todoResetTip = "Position und Größe des Mini-Zettels auf den Standard (wie /chronik todo reset).",
   quickLabel = "Schnellnotizen zeigen",
@@ -219,6 +223,24 @@ local function reload()
   if Save and type(Save.show) == "function" then call(Save.show) end
 end
 
+-- Parts that only make sense in WoW Forever are hidden in Retail (items and groups with hidden = function; read on registering).
+-- foreverOnly: trainer plan (Lehrplan) items; fireHidden: the campfire talk never starts in Retail (MapSpace.fireTalkHidden).
+local function foreverOnly()
+  local L = Journal.Lehrplan
+  return L ~= nil and type(L.active) == "function" and L.active() == false
+end
+
+local function fireHidden()
+  local ms = Journal.MapSpace
+  return ms ~= nil and type(ms.fireTalkHidden) == "function" and ms.fireTalkHidden() == true
+end
+
+function Options.isHidden(entry)
+  if type(entry.hidden) ~= "function" then return false end
+  local ok, v = pcall(entry.hidden)
+  return ok and v == true
+end
+
 Options.GROUPS = {
   {
     title = "Sprache / Language",
@@ -342,6 +364,10 @@ Options.GROUPS = {
         tip = txp("todoEmptyTip"),
         get = function() return ttSetting("hideEmpty") == true end,
         set = function(v) local T = TT() if T then call(T.setHideEmpty, v) end end },
+      { kind = "check", key = "trainerTodo", hidden = foreverOnly, label = tx("trainerTodoLabel"), default = true,
+        tip = tx("trainerTodoTip"),
+        get = function() local P = Journal.Pages return not P or P.setting("trainerTodo") ~= false end,
+        set = function(v) local P = Journal.Pages if P then P.setSetting("trainerTodo", bool(v)) end end },
       { kind = "button", key = "todoReset", label = tx("todoResetLabel"), button = tx("resetButton"),
         tip = tx("todoResetTip"),
         click = function() local T = TT() if T then call(T.reset) end end },
@@ -380,6 +406,10 @@ Options.GROUPS = {
         tip = tx("toastSoundTip"),
         get = function() local T = Toast() return not T or T.soundOn() end,
         set = function(v) local T = Toast() if T then call(T.setSound, v) end end },
+      { kind = "check", key = "talentHint", hidden = foreverOnly, label = tx("talentHintLabel"), default = true,
+        tip = tx("talentHintTip"),
+        get = function() local P = Journal.Pages return not P or P.setting("talentHint") ~= false end,
+        set = function(v) local P = Journal.Pages if P then P.setSetting("talentHint", bool(v)) end end },
       { kind = "check", key = "welcome", label = tx("welcomeLabel"), default = true,
         tip = tx("welcomeTip"),
         get = function() local B = Journal.Begleiter return not B or B.welcomeOn() end,
@@ -429,7 +459,7 @@ Options.GROUPS = {
     },
   },
   {
-    title = tx("gFire"),
+    title = tx("gFire"), hidden = fireHidden,
     items = {
       { kind = "check", key = "fireNotes", label = tx("fireNotesLabel"), default = true,
         tip = tx("fireNotesTip"),
@@ -612,13 +642,17 @@ function Options.register()
   end
   Options.category = category
   for _, g in ipairs(Options.GROUPS) do
-    if type(CreateSettingsListSectionHeaderInitializer) == "function" then
-      local okH, err = pcall(function() layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(txt(g.title))) end)
-      if not okH then fail(err) end
-    end
-    for _, item in ipairs(g.items) do
-      local okI, err = pcall(register, category, layout, item)
-      if not okI then fail(err) end
+    if not Options.isHidden(g) then
+      if type(CreateSettingsListSectionHeaderInitializer) == "function" then
+        local okH, err = pcall(function() layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(txt(g.title))) end)
+        if not okH then fail(err) end
+      end
+      for _, item in ipairs(g.items) do
+        if not Options.isHidden(item) then
+          local okI, err = pcall(register, category, layout, item)
+          if not okI then fail(err) end
+        end
+      end
     end
   end
   local okR, err = pcall(Settings.RegisterAddOnCategory, category)

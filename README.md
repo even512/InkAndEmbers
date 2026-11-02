@@ -16,9 +16,10 @@ The journal is a book with these pages:
   A To Do sub-page keeps your own goals (a zone, a place, an enemy to kill, items to collect).
 - Chronicle: a diary, a list of travel companions, medals and seals.
 - Quests: what you accepted and turned in, the quest texts and quest chains. The Open tab lists quests you can still
-  pick up, with the quest givers on the map. It needs the optional data add-on `InkAndEmbers_QuestData`.
+  pick up, with the quest givers on the map. It needs the optional data add-on `InkAndEmbers_QuestData`. The Training tab
+  (WoW Forever only) shows what your class trainer teaches at which level, what you can learn now and what it costs.
 - Treasures: the gold flow, notable loot and how your gear changed over the levels.
-- Moments: milestones and screenshots as small polaroid-style pictures.
+- Moments: milestones as small handwritten diary notes, play time by hour of day, books you read and curiosities.
 - Combat: kills, a bestiary and the death reports.
 - Notes: your own notes, with a quick note field on the screen.
 
@@ -58,6 +59,7 @@ New files such as textures and fonts are only picked up after a full restart of 
 | `/chronik todo` | show or hide the open to-dos at the screen edge (`todo reset` restores position and size) |
 | `/chronik note` | show or hide the quick note field |
 | `/chronik open` | open the Open tab under Quests |
+| `/chronik training` | open the Training tab under Quests (WoW Forever only; `training status` prints the state) |
 | `/chronik language` | `auto`, `de` or `en`; takes effect after `/reload` |
 | `/chronik save` | open the save window; saving reloads the interface |
 | `/chronik reset` | reset size and position of the journal |
@@ -99,6 +101,10 @@ timestamps, so the same inputs give identical files. The inputs:
 
 If an input is missing, the generator stops and names the missing path and the option for it.
 
+The training plan (`addon/InkAndEmbers/data/TrainerSpells.lua`) comes from "What's Training?" (MIT, branch `forever`, pinned commit).
+Regenerate it with `node scripts/build-trainer-data.mjs --src <local copy of github.com/fusionpit/WhatsTraining>`; the script checks
+the SHA-256 of every source file against the pinned commit and stops on a difference (`--unpinned` allows it and marks the output).
+
 Releases are built by the BigWigs packager from a tag `v*` (`.pkgmeta`, `.github/workflows/release.yml`). The development
 simulation `journal/SimPanel.lua` is left out of the package.
 
@@ -112,7 +118,8 @@ simulation `journal/SimPanel.lua` is left out of the package.
   That is why the derived data lives in separate add-ons that you can switch off. Details are in `LICENSE` and `LICENSE-NOTE.md`
   in each folder. German names and zone assignments come from the Forever database (data.morthen.net), the map overlay
   numbers from wago.tools.
-- Embedded libraries, fonts (SIL OFL) and sounds (CC0) keep their own licenses, listed in `addon/InkAndEmbers/THIRD-PARTY.md`.
+- Embedded libraries, fonts (SIL OFL), sounds (CC0) and the class trainer data from "What's Training?" (MIT,
+  `addon/InkAndEmbers/data/LICENSE-WhatsTraining.txt`) keep their own licenses, listed in `addon/InkAndEmbers/THIRD-PARTY.md`.
 - World of Warcraft and its game content are (c) Blizzard Entertainment. This addon is not affiliated with or endorsed by Blizzard.
 
 ## AI notice

@@ -78,8 +78,11 @@ export const SUBVIEWS = [
   ["quests", "offen-ostkoenigreiche", () => OPEN_QUESTS_LUA("all", "OV:SetContinent(1415)"), 'NS.Journal.QuestsPage:ShowSub("historie")'],
   ["quests", "offen-durotar", () => OPEN_QUESTS_LUA(1411), 'NS.Journal.QuestsPage:ShowSub("historie")'],
   ["quests", "offen-unterstadt", () => OPEN_QUESTS_LUA(1458), 'NS.Journal.QuestsPage:ShowSub("historie")'],
+  // Lehrplan (Unter-Lesezeichen "Lehrplan", nur Forever): Untoter Paladin Stufe 20, ein Teil gelernt, ein Lehrer bekannt, Talentpunkt frei
+  ["quests", "lehrplan", () => LEHRPLAN_LUA, 'NS.Journal.QuestsPage:ShowSub("historie") LEHRPLAN_RESTORE()'],
   ["schaetze", "funde", "NS.Journal.SchaetzePage:OpenFunde()", "NS.Journal.SchaetzePage:CloseFunde()"],
   ["schaetze", "quellen", 'NS.Journal.SchaetzePage:SetFlow("bars")', 'NS.Journal.SchaetzePage:SetFlow("levels")'],
+  ["schaetze", "besitz", 'NS.Journal.SchaetzePage:SetFlow("hold")', 'NS.Journal.SchaetzePage:SetFlow("levels")'],
   ["momente", "buch", "local P = NS.Journal.MomentePage P:Read(P.view.library.books[1].key)", "NS.Journal.MomentePage:CloseBook()"],
   ["notizen", "edit", 'NS.Journal.NotizenPage:SetMode("edit")', 'NS.Journal.NotizenPage:SetMode("read")'],
 ];
@@ -113,6 +116,32 @@ ${readFileSync(path.join(QUEST_DATA_DIR, "Overlays.lua"), "utf8")}
   OV:SetZone(${JSON.stringify(zone)})
   ${after}
   if OV.items[2] then OV:SelectQuest(OV.items[2].id, true) end`;
+
+// Lehrplan-Vorschau: Zauberbuch-Attrappe (Namen aus Zauber-IDs), ein gelernter Teil bis Stufe 12, ein bekannter Lehrer, 1 Talentpunkt frei
+export const LEHRPLAN_LUA = `
+  local saved = { C_Spell = C_Spell, C_SpellBook = C_SpellBook, GetMoney = GetMoney, C_ClassTalents = C_ClassTalents, C_Traits = C_Traits,
+    level = H.units.player.level }
+  function LEHRPLAN_RESTORE()
+    C_Spell, C_SpellBook, GetMoney, C_ClassTalents, C_Traits = saved.C_Spell, saved.C_SpellBook, saved.GetMoney, saved.C_ClassTalents, saved.C_Traits
+    H.units.player.level = saved.level
+    NS.Store.dropSnapshot("trainers", 5491)
+    NS.Journal.Lehrplan.resetNames()
+  end
+  H.units.player.level = 20; H.units.player.raceFile = "Scourge"; H.units.player.classFile = "PALADIN"; H.units.player.faction = "Horde"
+  LP_NAMES = { [465] = "Aura der Hingabe", [19740] = "Segen der Macht", [20271] = "Richturteil", [498] = "Göttlicher Schutz",
+    [639] = "Heiliges Licht", [679] = "Hammer der Gerechtigkeit", [21082] = "Siegel des Kreuzfahrers", [853] = "Hammer der Gerechtigkeit" }
+  C_Spell = { GetSpellName = function(id) return LP_NAMES[id] or ("Zauberspruch des Lichts " .. id) end,
+    GetSpellSubtext = function(id) return id % 3 == 0 and "Rang 2" or nil end, GetSpellTexture = function(id) return 135900 + id % 50 end,
+    RequestLoadSpellData = function() end }
+  LP_KNOWN = {}
+  for _, e in ipairs(NS.Journal.Lehrplan.parse("PALADIN").list) do if e.level <= 12 then LP_KNOWN[e.id] = true end end
+  C_SpellBook = { IsSpellKnown = function(id) return LP_KNOWN[id] == true end }
+  GetMoney = function() return 31250 end
+  C_ClassTalents = { GetActiveConfigID = function() return 7 end }
+  C_Traits = { GetConfigInfo = function() return { treeIDs = { 11 } } end, GetTreeCurrencyInfo = function() return { { quantity = 1 } } end }
+  NS.Store.putSnapshot("trainers", 5491, { name = "Lehrer Zackenbart", mapID = 1458, x = 0.6, y = 0.7, class = "PALADIN" }, true)
+  NS.Journal.Lehrplan.resetNames()
+  NS.Journal.QuestsPage:ShowSub("lehrplan")`;
 
 // N1: Vorschaubilder der Notizen (Lesen / Bearbeiten) zusaetzlich unter diesen Namen
 export const N1_SHOTS = { notizen: "n1-notizen", "notizen-edit": "n1-notizen-edit" };
@@ -267,7 +296,7 @@ function texUrl(tex) {
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const rgba = (c, a = 1) => (Array.isArray(c) ? `rgba(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)},${(c[3] ?? 1) * a})` : null);
 // weisse Zeichen, die im Spiel per SetVertexColor eingefaerbt werden
-const WHITE_TEX = /(DiaryCircle|DiaryStroke|Stroke|Arrow|Dash|Disc|Glow|RoundRect|RoundRing|ClockBar|PolaroidGround|Grave|Markers|Sword|MapFade|PageFade|TodoMarks)$/i;
+const WHITE_TEX = /(DiaryCircle|DiaryStroke|Stroke|Arrow|Dash|Disc|Glow|RoundRect|RoundRing|ClockBar|Grave|Markers|Sword|MapFade|PageFade|TodoMarks)$/i;
 const DIARY_MARK_WHITE = /DiaryMarks$/i;
 
 function fontCss(file, size) {

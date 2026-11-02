@@ -1,8 +1,9 @@
--- Momente page: the album as polaroid wall (3 x 2 per sheet, filter chips, paging) or the reading window of a book;
--- right the play-time clock, the library and curiosities. Reads only via ns.Journal.Momente; writes only the filter
+-- Momente page: the album as a wall of handwritten notes (3 x 2 per sheet, filter chips, paging) or the reading window of a
+-- book; right the play-time clock, the library and curiosities. Reads only via ns.Journal.Momente; writes only the filter
 -- choice.
--- Polaroid paper, image and tape are tilted slightly and fixed per entry (polaroidLook, from the key); text is never
--- rotated. Screenshots are not shown. No ticker, no OnUpdate.
+-- Each moment is a small note (the note pad of the to-do note, Media/TodoPad, tape included) with the symbol of its kind,
+-- title, the diary line and day/time in handwriting. Paper and shadow are tilted slightly and fixed per entry (noteLook,
+-- from the key); text is never rotated. No pictures, no screenshots. No ticker, no OnUpdate.
 local _, ns = ...
 
 local Journal = ns.Journal
@@ -41,52 +42,30 @@ local T = ns.Locale.ns("p.Momente", {
 local G = Theme.GRID
 local LX, LW = Theme.gridX("L")
 local RX, RW = Theme.gridX("R")
--- polaroid wall: 3 columns x 2 rows per sheet. Polaroid POL_W x POL_H after the painted frame (Media/PolaroidFrame,
--- Theme.POLAROID_HOLE): image field = hole, narrow margin left, right and top, wider bottom margin (title + one small
--- line).
--- The image lies UNDER the frame and extends IMG_OVER px beyond the hole. Without the frame (Theme.HAS_POLAROID_FRAME =
--- false) the computed paper (Media/PolaroidPaper) applies. Paper, shadow, image and tape are tilted slightly
--- (polaroidLook, Texture:SetRotation); the text stays straight.
+-- note wall: 3 columns x 2 rows per sheet. Note NOTE_W x NOTE_H in the aspect of the note pad (Theme.TODO_PAD_SLICE.aspect,
+-- the texture is shown whole, never stretched); its own tape sits top centre. Without the pad texture a plain paper area
+-- with a strip of diary tape (Media/DiaryTape) stands in. Paper and shadow tilt slightly (noteLook, via texcoords); the
+-- symbol tilts with the paper, text stays straight.
 local PER_PAGE, COLS = 6, 3
-local HOLE = Theme.POLAROID_HOLE
-local USE_FRAME = Theme.HAS_POLAROID_FRAME and HOLE ~= nil
-local POL_W = 126 -- three polaroids per row: 4 grid columns (130 px) each, the polaroid centred in it
-local POL_H, HOLE_X, HOLE_Y, HOLE_W, HOLE_H
-if USE_FRAME then
-  POL_H = floor(POL_W / HOLE.aspect + 0.5)
-  HOLE_X, HOLE_Y = floor(HOLE.l * POL_W + 0.5), floor(HOLE.t * POL_H + 0.5)
-  HOLE_W, HOLE_H = floor(HOLE.r * POL_W + 0.5) - HOLE_X, floor(HOLE.b * POL_H + 0.5) - HOLE_Y
-else
-  HOLE_X, HOLE_Y, HOLE_W, HOLE_H = 9, 9, POL_W - 18, POL_W - 18
-  POL_H = HOLE_Y + HOLE_H + 50
-end
-local IMG_OVER = USE_FRAME and 2 or 0
+-- the pad is looked up when the cards are built (a test can switch it off); size and margin follow its slice table
+local function padSlice() return Theme.TEX and Theme.HAS_TODO_PAD and Theme.TEX.todoPad and Theme.TODO_PAD_SLICE or nil end
+local SLICE = Theme.TODO_PAD_SLICE or {}
+local NOTE_W = 126 -- three notes per row: 4 grid columns (130 px) each, the note centred in it
+local NOTE_H = floor(NOTE_W * (SLICE.aspect or 2120 / 1560) + 0.5)
 local _, SLOT_W = Theme.gridX("L", 1, 4)
-local function slotX(i) return (Theme.gridX("L", 1 + 4 * i, 4)) + floor((SLOT_W - POL_W) / 2) end -- i = 0..2
+local function slotX(i) return (Theme.gridX("L", 1 + 4 * i, 4)) + floor((SLOT_W - NOTE_W) / 2) end -- i = 0..2
 -- head as on all pages: title y 66 (the wax drop top left, keep-out to x 121, is avoided by indenting), sub title,
 -- control line y 118 (switch left, paging right);
--- below it the polaroid wall, spread over the height down to y 550
+-- below it the note wall: two rows from y 168, the lower one ends (tilt included) well before the blot at y 555
 local TITLE_Y = G.slots.title.y
 local TITLE_X, TITLE_W = Theme.gridX("L", 2, 11)
 local SUB_Y = TITLE_Y + 34
 local CTRL_CY = G.slots.ctrl.y + G.slots.ctrl.h / 2
-local GRID_Y, ROW_PITCH = G.slots.body.y + 18, POL_H + 54
-local POL_TILT_MIN, POL_TILT_MAX = 1, 3
--- image and ground are real rotated rectangles: their area (QUAD_W x QUAD_H) is slightly larger than the hole, the
--- atlas carries the image with a transparent margin (Theme.POLAROID_ATLAS.pad),
--- only the content is rotated (Theme.polaroidTilt), edges in the margin
-local PHOTO_W, PHOTO_H = HOLE_W + IMG_OVER, HOLE_H + IMG_OVER
-local QUAD_W, QUAD_H = PHOTO_W, PHOTO_H
-local PAPER_QW, PAPER_QH, SHADOW_QW, SHADOW_QH = POL_W, POL_H, POL_W + 2, POL_H + 2
-if Theme.polaroidQuad and Theme.POLAROID_ATLAS then
-  QUAD_W, QUAD_H = Theme.polaroidQuad(PHOTO_W, PHOTO_H, POL_TILT_MAX)
-  PAPER_QW, PAPER_QH = Theme.polaroidQuad(POL_W, POL_H, POL_TILT_MAX)
-  SHADOW_QW, SHADOW_QH = Theme.polaroidQuad(POL_W + 2, POL_H + 2, POL_TILT_MAX)
-end
-local TAPE_W, TAPE_H, TAPE_ALPHA = 66, 17, 0.85
+local GRID_Y, ROW_PITCH = G.slots.body.y + 18, NOTE_H + 24
+local TILT_MIN, TILT_MAX = 1, 3
 local SHADOW_X, SHADOW_Y, SHADOW_ALPHA = 2, -3, 0.28
-local ICON_SIZE = 76
-local GROUND = { 0.80, 0.72, 0.58 } -- toned ground of the image field without a sheet (warm grey-brown)
+local TAPE_W, TAPE_H = 52, 14 -- only without the pad texture (the pad brings its own tape)
+local ICON_SIZE = 30
 local LIB_ROWS = 4
 local CURIO_ROWS = 7
 
@@ -136,8 +115,7 @@ local function entryTip(e, caption)
 end
 
 -- symbol per moment kind (Theme.MOMENT_ICONS), like the filter groups; death has its own symbol, everything without a
--- group and "Ein Moment" is memory.
--- Without an image sheet it stands large in the image field.
+-- group and "Ein Moment" is memory. It stands small at the top of the note, below the tape.
 local GROUP_ICON = { levels = "level", fights = "fight", finds = "find", places = "place" }
 local DEATH_KINDS = { first_death = true, death = true }
 local function momentIcon(e)
@@ -147,9 +125,8 @@ local function momentIcon(e)
 end
 Page.momentIcon = momentIcon
 
--- scatter values from the moment's key (same entry = same position, same image). Numbers stay below 2^53 (exact in Lua
--- 5.1 as in fengari);
--- one mixing step per property so similar keys ("MO:12", "MO:13") do not land similarly
+-- scatter values from the moment's key (same entry = same position). Numbers stay below 2^53 (exact in Lua 5.1 as in
+-- fengari); one mixing step per property so similar keys ("MO:12", "MO:13") do not land similarly
 local function hash(key)
   local h = 7
   key = tostring(key or "")
@@ -161,288 +138,184 @@ local function mix(h, salt)
   return (h * 48271) % 2147483647
 end
 
--- position of the polaroid: { angle (degrees, magnitude POL_TILT_MIN..POL_TILT_MAX in half degrees, sign scattered),
--- tapeX (px, offset of the tape from the centre),
--- tapeAngle (degrees, tape tilted a bit differently from the paper) }
-local function polaroidLook(key)
+-- position of the note: { angle (degrees, magnitude TILT_MIN..TILT_MAX in half degrees, sign scattered) }
+local function noteLook(key)
   local h = hash(key)
-  local steps = floor((POL_TILT_MAX - POL_TILT_MIN) * 2) + 1
-  local angle = POL_TILT_MIN + (mix(h, 1) % steps) * 0.5
+  local steps = floor((TILT_MAX - TILT_MIN) * 2) + 1
+  local angle = TILT_MIN + (mix(h, 1) % steps) * 0.5
   if mix(h, 2) % 2 == 0 then angle = -angle end
-  return { angle = angle, tapeX = mix(h, 4) % 21 - 10, tapeAngle = angle + (mix(h, 5) % 9 - 4) * 1.5 }
+  return { angle = angle }
 end
-Page.polaroidLook = polaroidLook
+Page.noteLook = noteLook
 
--- choose the images of a sheet: list = entries in grid order (row by row, cols columns) -> { [i] = { sheet, cell } |
--- false }. Per moment deterministic (hash of key) one of the fitting cells of its kind (Momente.PHOTOS); if the left or
--- upper neighbour already has the same cell,
--- the next fitting one, then a spare (Momente.PHOTO_SPARE), finally any other cell: neighbouring polaroids never show
--- the same image. Unknown kind -> false (symbol instead of image).
-local function pickPhotos(list, cols)
-  local photos, map = {}, Momente.PHOTOS or {}
-  local spareOf = Momente.PHOTO_SPARE or {}
-  for i = 1, #list do
-    local e = list[i]
-    local base = type(e) == "table" and map[e.kind] or nil
-    if not base then
-      photos[i] = false
-    else
-      -- candidates: start area/zone, level, equipment slot, last the general motif of the kind
-      local okC, cands = pcall(Momente.photoCandidates, e)
-      if not okC or type(cands) ~= "table" or #cands == 0 then cands = { base } end
-      local left = (i - 1) % cols > 0 and photos[i - 1] or nil
-      local up = i > cols and photos[i - cols] or nil
-      local h = hash(e.key)
-      local pick
-      for _, def in ipairs(cands) do
-        local taken = {}
-        if left and left.sheet == def.sheet then taken[left.cell] = true end
-        if up and up.sheet == def.sheet then taken[up.cell] = true end
-        local function first(cells, salt)
-          local n = #cells
-          if n == 0 then return nil end
-          local start = mix(h, salt) % n
-          for k = 0, n - 1 do
-            local c = cells[(start + k) % n + 1]
-            if not taken[c] then return c end
-          end
-          return nil
-        end
-        local cell
-        if def.fixed then
-          cell = first(def.cells, 6)
-        else
-          cell = first(def.cells, 6) or first(spareOf[def.sheet] or {}, 7) or first({ 1, 2, 3, 4, 5, 6, 7, 8, 9 }, 8)
-        end
-        if cell then
-          pick = { sheet = def.sheet, cell = cell }
-          break
-        end
-      end
-      photos[i] = pick or false
-    end
-  end
-  return photos
-end
-Page.pickPhotos = pickPhotos
-
--- rotate point (x, y) in the polaroid's field (origin top left, y down) around the centre (positive angle =
+-- rotate point (x, y) in the note's field (origin top left, y down) around the centre (positive angle =
 -- counter-clockwise like Texture:SetRotation); result in whole pixels
-local function rotatedExact(card, x, y)
-  local dx, dy = x - POL_W / 2, POL_H / 2 - y
-  local c, s = card.cosA or 1, card.sinA or 0
-  return POL_W / 2 + dx * c - dy * s, POL_H / 2 - (dx * s + dy * c)
-end
 local function rotated(card, x, y)
-  local rx, ry = rotatedExact(card, x, y)
-  return floor(rx + 0.5), floor(ry + 0.5)
+  local dx, dy = x - NOTE_W / 2, NOTE_H / 2 - y
+  local c, s = card.cosA or 1, card.sinA or 0
+  return floor(NOTE_W / 2 + dx * c - dy * s + 0.5), floor(NOTE_H / 2 - (dx * s + dy * c) + 0.5)
 end
 
-local function setTex(t, file)
-  if file then t:SetTexture(file) end
-end
-
--- text lines in the lower margin: title (Morpheus, up to 2 lines, see fitTitle) and below it day/time (Friz, one line).
--- Level and place are not on the polaroid, only in the tooltip (entryTip). Centre (y) in the field
-local IMG_CX, IMG_CY = HOLE_X + HOLE_W / 2, HOLE_Y + HOLE_H / 2
-local TEXT_W = POL_W - 18 -- 9 px air each side to the frame edge, the caption does not stick to the edge
-local BOTTOM = HOLE_Y + HOLE_H -- lower edge of the image field; below it the wide margin (about 36 px with the frame)
--- title field: largest font TITLE.max, lower limit TITLE.min, height TITLE.avail for up to 2 lines. Title field and
--- time stamp share the lower margin without overlap; fitTitle keeps the title height within avail.
--- With the frame the title stays ONE line (font at least 11, otherwise shortened; the tooltip shows it whole), the time
--- stamp (11) below.
-local TITLE = USE_FRAME and { max = G.size.s, min = G.size.xs, avail = 15, top = -0.5 } or { max = 14, min = 11, avail = 32, top = 4 }
-local TEXTS = USE_FRAME and {
-  { name = "title", kind = "title", size = TITLE.max, color = "ink", y = BOTTOM + TITLE.top + TITLE.avail / 2, wrap = true },
-  -- time stamp: bottom edge a good 4 px above the frame edge (at BOTTOM + 30 it partly lay on the margin).
-  -- Top edge (centre - 5.5 px at font 9) lies below the title field (BOTTOM + TITLE.top + TITLE.avail = BOTTOM + 21)
-  { name = "when", kind = "text", size = G.size.xs, color = "sepia", y = BOTTOM + 22 },
-} or {
-  { name = "title", kind = "title", size = TITLE.max, color = "ink", y = BOTTOM + TITLE.top + TITLE.avail / 2, wrap = true },
-  { name = "when", kind = "text", size = G.size.xs, color = "sepia", y = BOTTOM + 42 },
-}
+-- writing area on the paper (left/right margin of the pad, Theme.TODO_PAD_SLICE.margin), from top to bottom: symbol
+-- (centre ICON_Y), title (handwriting, up to 2 lines, field TITLE.top .. TITLE.top + TITLE.avail), the diary line
+-- (handwriting, up to CAPTION.lines lines from CAPTION.top) and day/time (handwriting, one line, centre WHEN_Y) above the
+-- torn bottom edge. Level and place are not on the note, only in the tooltip (entryTip).
+local MARGIN = floor(NOTE_W * (SLICE.margin or 0.115) + 0.5)
+local TEXT_W = NOTE_W - 2 * MARGIN
+local ICON_Y = 31
+local TITLE = { max = 18, min = 14, avail = 42, top = 49 }
+local CAPTION = { size = 15, lines = 3, top = TITLE.top + TITLE.avail + 2 }
+local WHEN_Y = NOTE_H - 17
 Page.TITLE = TITLE
-Page.POLAROID = { w = POL_W, h = POL_H, border = HOLE_X, hole = { x = HOLE_X, y = HOLE_Y, w = HOLE_W, h = HOLE_H },
-  frame = USE_FRAME and true or false, cols = COLS, perPage = PER_PAGE, tiltMin = POL_TILT_MIN, tiltMax = POL_TILT_MAX }
+Page.NOTE = { w = NOTE_W, h = NOTE_H, margin = MARGIN, textW = TEXT_W, cols = COLS,
+  perPage = PER_PAGE, tiltMin = TILT_MIN, tiltMax = TILT_MAX, iconY = ICON_Y, caption = CAPTION, whenY = WHEN_Y }
+
+local function handLabel(parent, size, color, justifyV)
+  local fs = D.font(parent, "hand", size, color)
+  fs:SetJustifyH("CENTER")
+  if justifyV then fs:SetJustifyV(justifyV) end
+  fs:SetWidth(TEXT_W)
+  return fs
+end
 
 local function newCard(parent)
   local f = CreateFrame("Frame", nil, parent)
-  f:SetSize(POL_W, POL_H)
-  local TEX = Theme.TEX or {}
-  -- shadow and paper (rotated), on it the image or ground + symbol (rotated), above it the tape; text straight on top
+  f:SetSize(NOTE_W, NOTE_H)
+  -- shadow and paper (rotated), on it the symbol (rotated); text straight on top
   f.shadow = f:CreateTexture(nil, "BACKGROUND", nil, 1)
-  local paperFile = USE_FRAME and TEX.polaroidFrame or TEX.polaroidPaper
-  setTex(f.shadow, paperFile)
-  f.shadow:SetSize(SHADOW_QW, SHADOW_QH)
-  f.shadow:SetPoint("CENTER", f, "CENTER", SHADOW_X, SHADOW_Y)
-  f.shadow:SetVertexColor(0.17, 0.10, 0.05, SHADOW_ALPHA)
-  -- frame (with hole) lies above image and symbol, the computed paper below
-  f.paper = USE_FRAME and f:CreateTexture(nil, "ARTWORK", nil, 2) or f:CreateTexture(nil, "BACKGROUND", nil, 2)
-  setTex(f.paper, paperFile)
-  f.paper:SetSize(PAPER_QW, PAPER_QH)
-  f.paper:SetPoint("CENTER", f, "CENTER", 0, 0)
-  -- ground: white area with a transparent margin (Media/PolaroidGround), tinted; without the file a plain area remains
-  f.ground = f:CreateTexture(nil, "BORDER", nil, 1)
-  if TEX.polaroidGround then
-    f.ground:SetTexture(TEX.polaroidGround)
-    f.ground:SetVertexColor(GROUND[1], GROUND[2], GROUND[3], 1)
-  else
-    f.ground:SetColorTexture(GROUND[1], GROUND[2], GROUND[3], 1)
+  f.paper = f:CreateTexture(nil, "BACKGROUND", nil, 2)
+  f.pad = padSlice() and true or false
+  -- tilted paper needs room for its corners (Theme.tiltQuad); the plain stand-in stays straight at note size
+  local pw, ph, sw, sh = NOTE_W, NOTE_H, NOTE_W + 2, NOTE_H + 2
+  if f.pad and Theme.tiltQuad then
+    pw, ph = Theme.tiltQuad(NOTE_W, NOTE_H, TILT_MAX)
+    sw, sh = Theme.tiltQuad(NOTE_W + 2, NOTE_H + 2, TILT_MAX)
   end
-  f.ground:SetSize(QUAD_W, QUAD_H)
-  f.photo = f:CreateTexture(nil, "BORDER", nil, 2)
-  f.photo:SetSize(QUAD_W, QUAD_H)
+  if f.pad then
+    f.shadow:SetTexture(Theme.TEX.todoPad)
+    f.paper:SetTexture(Theme.TEX.todoPad)
+    f.shadow:SetVertexColor(0.17, 0.10, 0.05, SHADOW_ALPHA)
+  else
+    f.shadow:SetColorTexture(0.17, 0.10, 0.05, SHADOW_ALPHA * 0.6)
+    f.paper:SetColorTexture(W.color("card"))
+    f.tape = f:CreateTexture(nil, "ARTWORK", nil, 3)
+    if Theme.TEX and Theme.TEX.diaryTape then
+      f.tape:SetTexture(Theme.TEX.diaryTape)
+    else
+      f.tape:SetColorTexture(0.89, 0.84, 0.69, 0.8)
+    end
+    f.tape:SetSize(TAPE_W, TAPE_H)
+    f.tape:SetPoint("CENTER", f, "TOP", 0, -2)
+  end
+  f.shadow:SetSize(sw, sh)
+  f.shadow:SetPoint("CENTER", f, "CENTER", SHADOW_X, SHADOW_Y)
+  f.paper:SetSize(pw, ph)
+  f.paper:SetPoint("CENTER", f, "CENTER", 0, 0)
   f.icon = f:CreateTexture(nil, "ARTWORK", nil, 1)
   f.icon:SetSize(ICON_SIZE, ICON_SIZE)
-  setTex(f.icon, TEX.momentIcons)
-  f.tape = f:CreateTexture(nil, "ARTWORK", nil, 3)
-  setTex(f.tape, TEX.momentTape)
-  f.tape:SetSize(TAPE_W, TAPE_H)
-  f.tape:SetAlpha(TAPE_ALPHA)
-  for _, spec in ipairs(TEXTS) do
-    local fs = label(f, spec.kind, spec.size, spec.color, "CENTER")
-    fs:SetWidth(TEXT_W)
-    fs:SetWordWrap(spec.wrap == true)
-    f[spec.name] = fs
-  end
+  if Theme.TEX and Theme.TEX.momentIcons then f.icon:SetTexture(Theme.TEX.momentIcons) end
+  f.title = handLabel(f, TITLE.max, "ink")
+  f.title:SetWordWrap(true)
+  f.caption = handLabel(f, CAPTION.size, "sepia", "TOP")
+  f.caption:SetWordWrap(true)
+  if f.caption.SetMaxLines then f.caption:SetMaxLines(CAPTION.lines) end
+  f.when = handLabel(f, G.size.m, "sepia")
+  f.when:SetWordWrap(false)
   hover(f, function(card) return card.tipLines end)
   f:Hide()
   return f
 end
 
--- lay out paper, image field, tape and text lines by the entry's position (textures rotated, text straight).
--- Theme.polaroidTilt* return the sampling scale as ninth value; SetTexCoord gets only the eight coordinates
+-- lay out paper, shadow, symbol and text lines by the entry's position (textures rotated, text straight).
+-- Theme.tiltFull returns the sampling scale as ninth value; SetTexCoord gets only the eight coordinates
 local function first8(a, b, c, d, e, f, g, h) return a, b, c, d, e, f, g, h end
-local TEX_GROUND = Theme.TEX and Theme.TEX.polaroidGround and Theme.POLAROID_GROUND and Theme.polaroidTilt
 local function layCard(card, key)
-  local look = polaroidLook(key)
+  local look = noteLook(key)
+  if not card.pad then look.angle = 0 end -- the plain stand-in stays straight (a colour area cannot be turned via texcoords)
   card.look = look
   local rad = look.angle * math.pi / 180
   card.cosA, card.sinA = math.cos(rad), math.sin(rad)
-  -- paper and shadow rotate like image and ground via their texture coordinates (rigid, Theme.polaroidTiltFull), not
-  -- via SetRotation
-  -- (which rotates in UV space without aspect ratio and would shear the 144 x 174 paper, the photo never fitted)
-  if Theme.polaroidTiltFull then
-    card.paper:SetTexCoord(first8(Theme.polaroidTiltFull(POL_W, POL_H, look.angle)))
-    card.shadow:SetTexCoord(first8(Theme.polaroidTiltFull(POL_W + 2, POL_H + 2, look.angle)))
-  else
-    card.paper:SetRotation(rad)
-    card.shadow:SetRotation(rad)
+  -- paper and shadow rotate rigidly via their texture coordinates (Theme.tiltFull), not via SetRotation, which shears a
+  -- non-square area
+  if card.pad and Theme.tiltFull then
+    card.paper:SetTexCoord(first8(Theme.tiltFull(NOTE_W, NOTE_H, look.angle, TILT_MAX)))
+    card.shadow:SetTexCoord(first8(Theme.tiltFull(NOTE_W + 2, NOTE_H + 2, look.angle, TILT_MAX)))
   end
-  -- centre of the image field to the fraction (not rounded to whole pixels): image and ground sit exactly in the hole
-  -- of the rotated frame
-  local ix, iy = rotatedExact(card, IMG_CX, IMG_CY)
-  -- image, ground and symbol tilt via their texture coordinates, not via SetRotation (which overpainted SetTexCoord and
-  -- sampled across the cell border into the neighbour cell).
-  -- Image and ground lie with a transparent margin in their cell: real rotated rectangles at the paper's angle; the
-  -- symbol is a motif without edges
-  for _, t in ipairs({ card.ground, card.photo, card.icon }) do
-    t:ClearAllPoints()
-    t:SetPoint("CENTER", card, "TOPLEFT", ix, -iy)
-  end
-  if TEX_GROUND then
-    local G = Theme.POLAROID_GROUND
-    local gi = G.inset / G.size
-    card.ground:SetTexCoord(first8(Theme.polaroidTilt(gi, 1 - gi, gi, 1 - gi, G.size - 2 * G.pad, G.size, PHOTO_W, PHOTO_H, look.angle)))
-  end
-  local tx, ty = rotated(card, POL_W / 2 + look.tapeX, 1)
-  card.tape:ClearAllPoints()
-  card.tape:SetPoint("CENTER", card, "TOPLEFT", tx, -ty)
-  card.tape:SetRotation(look.tapeAngle * math.pi / 180)
-  for _, spec in ipairs(TEXTS) do
-    local px, py = rotated(card, POL_W / 2, spec.y)
-    local fs = card[spec.name]
-    fs:ClearAllPoints()
-    fs:SetPoint("CENTER", card, "TOPLEFT", px, -py)
-  end
+  local ix, iy = rotated(card, NOTE_W / 2, ICON_Y)
+  card.icon:ClearAllPoints()
+  card.icon:SetPoint("CENTER", card, "TOPLEFT", ix, -iy)
+  local tx, ty = rotated(card, NOTE_W / 2, TITLE.top + TITLE.avail / 2)
+  card.title:ClearAllPoints()
+  card.title:SetPoint("CENTER", card, "TOPLEFT", tx, -ty)
+  local cx, cy = rotated(card, NOTE_W / 2, CAPTION.top)
+  card.caption:ClearAllPoints()
+  card.caption:SetPoint("TOP", card, "TOPLEFT", cx, -cy)
+  local wx, wy = rotated(card, NOTE_W / 2, WHEN_Y)
+  card.when:ClearAllPoints()
+  card.when:SetPoint("CENTER", card, "TOPLEFT", wx, -wy)
 end
-
 Page.layCard = layCard
 
--- show a symbol (cell u0..v1 of the symbol atlas) on the area w x h tilted by the polaroid's tilt (layCard): rotated
--- with aspect correction and zoomed in so far that no neighbour cell bleeds in;
--- the area itself stays straight
-local function tiltCoords(card, w, h, u0, u1, v0, v1)
-  return Theme.rotCoords8(u0, u1, v0, v1, w, h, card.look and card.look.angle or 0)
-end
-
--- photo (cell of the padded sheet) as a rotated rectangle at the paper's angle, without zooming in (Theme.polaroidTilt)
-local function photoCoords(card, cell)
-  local A = Theme.POLAROID_ATLAS
-  local u0, u1, v0, v1 = Theme.polaroidCoords(cell)
-  return first8(Theme.polaroidTilt(u0, u1, v0, v1, A.cell - 2 * A.pad, A.size, PHOTO_W, PHOTO_H, card.look and card.look.angle or 0))
-end
-
--- fill the image field: cell of the sheet if there is one (Theme.HAS_POLAROIDS), otherwise the moment kind's symbol on
--- a tinted ground
-local function setPhoto(card, photo, iconName)
-  local has = Theme.HAS_POLAROIDS or {}
-  local file = photo and has[photo.sheet] and (Theme.TEX or {})["polaroid_" .. photo.sheet] or nil
-  card.photoFile = file
-  if file then
-    card.photo:SetTexture(file)
-    card.photo:SetTexCoord(photoCoords(card, photo.cell))
-    card.photo:Show()
-    card.ground:Hide()
-    card.icon:Hide()
+-- symbol (cell of the symbol atlas) tilted with the note: rotated with aspect correction and zoomed in so far that no
+-- neighbour cell bleeds in; the area itself stays straight
+local function setIcon(card, iconName)
+  if iconName and Theme.momentIconCoords and Theme.rotCoords8 then
+    local u0, u1, v0, v1 = Theme.momentIconCoords(iconName)
+    card.icon:SetTexCoord(Theme.rotCoords8(u0, u1, v0, v1, ICON_SIZE, ICON_SIZE, card.look and card.look.angle or 0))
+    card.icon:Show()
   else
-    card.photo:Hide()
-    card.ground:Show()
-    if iconName and Theme.momentIconCoords then
-      card.icon:SetTexCoord(tiltCoords(card, ICON_SIZE, ICON_SIZE, Theme.momentIconCoords(iconName)))
-      card.icon:Show()
-    else
-      card.icon:Hide()
-    end
+    card.icon:Hide()
   end
 end
 
--- title of the polaroid (one line): the name that goes with it where it carries the image (enemy, find, dungeon, mount ...),
--- for level, close win and memory the occasion, for new zones the place
+-- title of the note: the name that goes with the moment (enemy, find, dungeon, mount ...), for level, close win and first
+-- death the occasion, for new zones the place
 local TITLE_IS_EVENT = { level = true, close_win = true, first_death = true }
-local function polaroidTitle(e)
+local function noteTitle(e)
   if e.kind == "zone" then return e.place or e.title end
   if TITLE_IS_EVENT[e.kind] or not e.what then return e.title end
   return e.what
 end
-Page.polaroidTitle = polaroidTitle
+Page.noteTitle = noteTitle
 
--- set the title and fit it into the title field: first wrap into up to 2 lines (width TEXT_W); if the text does not fit
--- TITLE.avail at the current font, shrink the font step by step down to TITLE.min
--- (it often becomes one line again); only then shorten to ONE line (SetMaxLines, the client adds "..."): the title
--- never reaches into the time stamp. Height from GetStringHeight (the whole text, unshortened).
+-- set the title and fit it into the title field: wrap into up to 2 lines (width TEXT_W); if the text does not fit
+-- TITLE.avail at the current font, shrink the font step by step down to TITLE.min; only then cut to 2 lines (SetMaxLines,
+-- the client adds "..."): the title never reaches into the diary line. Height from GetStringHeight (the whole text).
+-- In the Friz stand-in for the handwriting (D.font, fs.diaryFallback) the sizes scale like there.
 local function fitTitle(fs, text)
   W.setText(fs, text)
   local file, _, flags = fs:GetFont()
   if not file then return end
   if fs.SetMaxLines then fs:SetMaxLines(0) end -- 0 = unlimited: the whole text is measured
   fs:SetWordWrap(true)
+  local k = fs.diaryFallback and (D.HAND_FALLBACK_SCALE or 0.72) or 1
   for size = TITLE.max, TITLE.min, -1 do
-    fs:SetFont(file, size, flags or "")
+    fs:SetFont(file, floor(size * k + 0.5), flags or "")
     if (tonumber(fs:GetStringHeight()) or 0) <= TITLE.avail then return end
   end
-  if fs.SetMaxLines then fs:SetMaxLines(1) end
+  if fs.SetMaxLines then fs:SetMaxLines(2) end
 end
 Page.fitTitle = fitTitle
 
-local function fillCard(card, e, album, used, photo)
+local function fillCard(card, e, album, used)
   card.entry = e
   local caption = Momente.caption(album, e, used)
   layCard(card, e.key)
   card.iconName = momentIcon(e)
-  card.photoPick = photo or nil
-  setPhoto(card, photo, card.iconName)
-  fitTitle(card.title, polaroidTitle(e))
+  setIcon(card, card.iconName)
+  fitTitle(card.title, noteTitle(e))
+  W.setText(card.caption, caption)
   W.setText(card.when, e.when)
   card.tipLines = entryTip(e, caption)
   card:Show()
 end
 
 local function failCard(card)
-  card.entry, card.tipLines, card.iconName, card.photoPick = nil, nil, nil, nil
+  card.entry, card.tipLines, card.iconName = nil, nil, nil
   layCard(card, "?")
-  setPhoto(card, nil, nil)
+  setIcon(card, nil)
   fitTitle(card.title, T.unreadable)
+  W.setText(card.caption, "")
   W.setText(card.when, "")
   card:Show()
 end
@@ -481,7 +354,7 @@ local function buildLeft(self, left)
   -- Filter: toggle with the chosen group circled; the count follows the name in clean font ("Funde · 12")
   ui.filter = D.NewToggle(album, { size = G.size.s, gap = 12, value = self.filter, onChange = function(key) self:OnChip(key) end })
   ui.filter.frame:SetPoint("LEFT", left, "TOPLEFT", LX - 3, -CTRL_CY)
-  -- polaroid wall: PER_PAGE polaroids created once (pool), only refilled when paging
+  -- note wall: PER_PAGE notes created once (pool), only refilled when paging
   ui.cards = {}
   for i = 1, PER_PAGE do
     local c = newCard(album)
@@ -794,14 +667,10 @@ function Page:RenderAlbum()
   if self.pageNo < 1 then self.pageNo = 1 end
   local from = (self.pageNo - 1) * PER_PAGE
   local used = {} -- captions of this sheet: no repetition
-  local sheet = {}
-  for i = 1, PER_PAGE do sheet[i] = list[from + i] end
-  local okPick, photos = W.call(pickPhotos, sheet, COLS)
-  if not okPick or type(photos) ~= "table" then photos = {} end
   for i, card in ipairs(ui.cards) do
     local e = list[from + i]
     if e then
-      if not W.call(fillCard, card, e, album, used, photos[i]) then failCard(card) end
+      if not W.call(fillCard, card, e, album, used) then failCard(card) end
     else
       card.entry, card.tipLines = nil, nil
       W.hideTip(card)

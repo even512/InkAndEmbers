@@ -289,6 +289,16 @@ function View.livePosition()
   return map, x, y
 end
 
+-- Size of a map in world yards { w, h } for the live tail's jump detection (a view unit is one map width/height); nil if unknown.
+function View.sceneYards(mapID)
+  local G = Geo()
+  if not (G and G.mapSize and mapID) then return nil end
+  local ok, w, h = pcall(G.mapSize, mapID)
+  w, h = ok and num(w) or nil, ok and num(h) or nil
+  if w and h and w > 0 and h > 0 then return { w, h } end
+  return nil
+end
+
 -- Facing of the player in radians (0 = north, counter-clockwise, like Texture:SetRotation); nil if unknown or secret.
 function View.facing()
   if type(GetPlayerFacing) ~= "function" then return nil end
@@ -540,6 +550,7 @@ local function zoneScene(model, sel)
     end
   end
   scene.live = true
+  scene.yards = View.sceneYards(zone)
   local total = model.timeline and num(model.timeline.total) or 0
   local c = view.chapter and model.chapters[view.chapter]
   if c and num(c.p0) and num(c.p1) and c.p1 > c.p0 then
@@ -603,6 +614,7 @@ function View.scene(model, sel, opts)
     end
   end
   scene.live = true
+  scene.yards = View.sceneYards(mode == "continent" and scene.contID or scene.mapID)
 
   local focus
   if mode == "continent" and ((opts and opts.whole) or sel.continent) then

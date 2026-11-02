@@ -14,13 +14,20 @@ Journal.Chronik = Chronik
 local floor, huge, min, max = math.floor, math.huge, math.min, math.max
 local format, find, match = string.format, string.find, string.match
 
-Chronik.MAX_LEVEL = 60
+Chronik.MAX_LEVEL = 60        -- WoW Forever and the fallback; the live value is Chronik.maxLevel()
 Chronik.FORECAST_FROM = 10    -- forecast only from this level
 Chronik.FORECAST_LEVELS = 5   -- last level durations that go into the extrapolation
 Chronik.FACTOR_MIN, Chronik.FACTOR_MAX = 0.9, 1.08
 Chronik.DIARY_MAX = 8000      -- diary entries (the newest are kept)
 Chronik.LOOT_MIN_QUALITY = 3  -- finds in the diary from blue (green left out)
 Chronik.NAME_MAX = 40         -- bytes for names in header and profile
+
+-- highest player level of the client (Journal.MapSpace.maxLevel: Forever 60, Retail 80/90); fallback Chronik.MAX_LEVEL
+function Chronik.maxLevel()
+  local ms = Journal.MapSpace
+  local v = ms and ms.maxLevel and ms.maxLevel() or nil
+  return tonumber(v) or Chronik.MAX_LEVEL
+end
 
 -- locale scope "m.Chronik" (English in locales/enUS_model.lua); the catalogues (SOURCES, TIERS, FAMILIES, SEALS, EVENT_GROUPS)
 -- read their labels on access (metatable), never at load
@@ -34,7 +41,7 @@ local TEXT = Loc.ns("m.Chronik", {
   forecastTitle = "So weiter",
   forecastEarly = "Zu früh für eine Prognose",
   forecastNone = "Für eine Schätzung fehlen noch Stufen-Zeiten.",
-  forecastDone = "Stufe 60 ist erreicht. Die Reise geht trotzdem weiter.",
+  forecastDone = "Stufe %s ist erreicht. Die Reise geht trotzdem weiter.",
   src_quest = "Quests", src_kill = "Kills", src_explore = "Entdeckung", src_other = "Sonstiges",
   dm_first_blue = "das erste seltene Stück", dm_first_epic = "das erste epische Stück", dm_first_bag = "die erste Tasche",
   dm_mount = "das erste Reittier", dm_continent = "ein neuer Kontinent", dm_first_dungeon = "der erste Dungeon",
@@ -199,7 +206,7 @@ local TEXT = Loc.ns("m.Chronik", {
   u_plans_other = "%s Reiseziele",
   title_level60 = "Am Ziel der Reise",
   grid_level60 = "Am Ziel der Reise",
-  need_level60 = "Stufe 60 erreichen.",
+  need_level60 = "Stufe %s erreichen.",
   u_profession = "Fertigkeit %s",
   u_fortune = "%s Gold",
   u_rested = "%s EP",
@@ -254,6 +261,12 @@ local TEXT = Loc.ns("m.Chronik", {
   evIntro = "Alles, was die Chronik seit Eurem ersten Login mitgeschrieben hat.",
   evTotal = "Zusammen: %s",
   evLine = "%s: %s",
+  afkLine = "Insgesamt %s abwesend",
+  afkTitle = "Abwesend (AFK)",
+  afkIntro = "Zeit, in der Ihr als abwesend galt, von Hand per /afk oder von selbst nach einigen Minuten ohne Eingabe. Sie steckt in der Spielzeit.",
+  afkTotal = "Insgesamt: %s",
+  afkPhases_one = "%s Pause", afkPhases_other = "%s Pausen",
+  afkLongest = "Längste Pause: %s",
   subtitleFaction = "%s der %s",
   sinceFmt = "%d.%m.%Y, %H:%M",
   approx = "ca. %s",
@@ -269,7 +282,7 @@ local TEXT = Loc.ns("m.Chronik", {
   deaths_one = "%s Tod",
   deaths_other = "%s Tode",
   over = "über %s Std.",
-  forecastHead = "So weiter: Stufe 60 in %s",
+  forecastHead = "So weiter: Stufe %s in %s",
   forecastBody = "grobe Schätzung aus den letzten %s Stufen",
   fb_level = "Eine neue Stufe.", fb_quest = "Eine Quest abgegeben.", fb_loot = "Etwas Wertvolles erhalten.",
   fb_kill = "Ein besonderer Gegner fiel.", fb_close = "Ein knapper Sieg.", fb_death = "Gestorben.", fb_moment = "Ein Moment für die Chronik.",
@@ -625,7 +638,10 @@ Chronik.SEALS = {
 -- name, grid label (only if it differs from the name) and requirement in the active language
 local SEAL_TEXT = {
   title = function(s) return TEXT["title_" .. s.id] end,
-  need = function(s) return TEXT["need_" .. s.id] end,
+  need = function(s)
+    if s.id == "level60" then return TEXT("need_level60", int(Chronik.maxLevel())) end
+    return TEXT["need_" .. s.id]
+  end,
   grid = function(s)
     local g, t = TEXT["grid_" .. s.id], TEXT["title_" .. s.id]
     if g ~= t then return g end
@@ -1180,13 +1196,14 @@ EVAL.continent = function(C)
   return onceOf(nil)
 end
 EVAL.level60 = function(C)
-  local function top(code)
+  local top = Chronik.maxLevel()
+  local function first(code)
     for _, r in ipairs(C.list(code)) do
       local L = levelOf(r, code)
-      if L and L >= Chronik.MAX_LEVEL then return C.hit(r, code) end
+      if L and L >= top then return C.hit(r, code) end
     end
   end
-  return onceOf(top("LV") or top("PL"))
+  return onceOf(first("LV") or first("PL"))
 end
 -- counter without a log line: value from char.counters, no time (the date comes from snapshots.medals)
 local function liveEval(C, steps, seal)
@@ -1215,7 +1232,8 @@ local ONCE_PROGRESS = {
 }
 
 local function levelProgress(level)
-  return TEXT("levelProgress", int(min(floor(level), Chronik.MAX_LEVEL)), int(Chronik.MAX_LEVEL))
+  local top = Chronik.maxLevel()
+  return TEXT("levelProgress", int(min(floor(level), top)), int(top))
 end
 
 -- faction of the best standing (MO reputation value = factionID or name), display-ready | nil
@@ -1750,7 +1768,7 @@ local function median(arr)
 end
 
 function Chronik.project(durations, level, progress, maxLevel)
-  maxLevel = tonumber(maxLevel) or Chronik.MAX_LEVEL
+  maxLevel = tonumber(maxLevel) or Chronik.maxLevel()
   level = tonumber(level)
   if type(durations) ~= "table" or not finite(level) or level < 1 or level >= maxLevel then return nil end
   local d = {}
@@ -1852,7 +1870,47 @@ local function eventTip(index, total)
   return lines, colors
 end
 
-local function profileOf(index, st, level, playedSec, exact, db)
+-- Away time (AFK) of a character from its SV: counters.afk = { seconds, phases } and snapshots.state.afk = { since, seen, longest },
+-- written by collectors/Afk.lua. An open phase counts live while its heartbeat ('seen') is fresh (the collector marks it every
+-- minute; a stale mark means a crash or another character). -> { seconds, phases, longest, open } | nil without any away time.
+Chronik.AFK_LIVE = 150       -- seconds: how old the heartbeat of an open phase may be to count it
+Chronik.AFK_MIN_SHOWN = 60   -- seconds: the page shows the line from this total
+function Chronik.afk(char, now)
+  if type(char) ~= "table" or isSecret(char) then return nil end
+  local function nn(v)
+    if isSecret(v) or not finite(v) or v < 0 then return nil end
+    return v
+  end
+  local c = type(char.counters) == "table" and char.counters.afk or nil
+  local snaps = type(char.snapshots) == "table" and char.snapshots.state or nil
+  local s = type(snaps) == "table" and snaps.afk or nil
+  if type(c) ~= "table" or isSecret(c) then c = {} end
+  if type(s) ~= "table" or isSecret(s) then s = {} end
+  local seconds, phases, longest = nn(c.seconds) or 0, nn(c.phases) or 0, nn(s.longest) or 0
+  local open = 0
+  local since, seen = nn(s.since), nn(s.seen)
+  now = tonumber(now)
+  if since and seen and finite(now) and now >= since and now - seen <= Chronik.AFK_LIVE then open = floor(now - since) end
+  seconds = floor(seconds + open)
+  if open > longest then longest = open end
+  if seconds <= 0 then return nil end
+  return { seconds = seconds, phases = floor(phases) + (open > 0 and 1 or 0), longest = floor(longest), open = open }
+end
+
+-- view of the away time for the profile: text (nil below AFK_MIN_SHOWN) and tooltip lines + colours
+local function afkOf(char, now)
+  local a = Chronik.afk(char, now)
+  if not a then return nil end
+  a.text = a.seconds >= Chronik.AFK_MIN_SHOWN and TEXT("afkLine", Chronik.duration(a.seconds)) or nil
+  local lines = { TEXT.afkTitle, TEXT.afkIntro, TEXT("afkTotal", Chronik.duration(a.seconds)) }
+  if a.phases > 0 then lines[#lines + 1] = TEXT(Loc.plural(a.phases, "afkPhases_one", "afkPhases_other"), int(a.phases)) end
+  if a.longest > 0 then lines[#lines + 1] = TEXT("afkLongest", Chronik.duration(a.longest)) end
+  a.tip = lines
+  a.tipColors = { [1] = { 1, 0.95, 0.85 }, [2] = { 0.62, 0.58, 0.5 } }
+  return a
+end
+
+local function profileOf(index, st, level, playedSec, exact, db, now)
   local Texts = T()
   local info = type(st.char.info) == "table" and st.char.info or {}
   local name = display(info.name, Chronik.NAME_MAX) or TEXT.traveller
@@ -1892,17 +1950,17 @@ local function profileOf(index, st, level, playedSec, exact, db)
   end
   return {
     name = name, subtitle = subtitle, motto = motto and TEXT("quoted", motto) or nil, level = level,
-    maxLevel = Chronik.MAX_LEVEL, since = since,
+    maxLevel = Chronik.maxLevel(), since = since,
     played = playedSec and (exact and Chronik.duration(playedSec) or TEXT("approx", Chronik.duration(playedSec))) or TEXT.unknown,
     playedSec = playedSec, playedExact = exact, sessions = sessionCount(db, index.guid), perDay = perDay, playDays = dayCount,
-    entries = entries, entriesTip = tip, entriesTipColors = tipColors,
+    entries = entries, entriesTip = tip, entriesTipColors = tipColors, afk = afkOf(st.char, now),
     head = TEXT("head", name, class or race or "", int(level)),
   }
 end
 
 local function xpOf(index, live, level)
   local out = { level = level, nextLevel = level + 1 }
-  if level >= Chronik.MAX_LEVEL then
+  if level >= Chronik.maxLevel() then
     out.maxed, out.label, out.pct, out.pctText = true, TEXT.maxed, 1, ""
     return out
   end
@@ -2006,8 +2064,9 @@ end
 
 local function forecastOf(st, level, curDur)
   local out = { ok = false, title = TEXT.forecastTitle }
-  if level >= Chronik.MAX_LEVEL then
-    out.body = TEXT.forecastDone
+  local top = Chronik.maxLevel()
+  if level >= top then
+    out.body = TEXT("forecastDone", int(top))
     return out
   end
   if level < Chronik.FORECAST_FROM then
@@ -2018,14 +2077,14 @@ local function forecastOf(st, level, curDur)
   for L = max(1, level - Chronik.FORECAST_LEVELS), level - 1 do
     if st.dur[L] and st.dur[L] > 0 then d[#d + 1] = st.dur[L] end
   end
-  local remaining = Chronik.project(d, level, curDur or 0, Chronik.MAX_LEVEL)
+  local remaining = Chronik.project(d, level, curDur or 0, top)
   if not remaining or not finite(remaining) then
     out.body = TEXT.forecastNone
     return out
   end
   out.ok, out.hours = true, remaining / 3600
   local h = remaining > 9999 * 3600 and TEXT("over", int(9999)) or TEXT("approx", Chronik.duration(remaining))
-  out.title = TEXT("forecastHead", h)
+  out.title = TEXT("forecastHead", int(top), h)
   out.body = TEXT("forecastBody", int(#d))
   return out
 end
@@ -2062,7 +2121,7 @@ function Chronik.evaluate(index, opts)
   end
 
   local view = { now = now, level = level }
-  view.profile = profileOf(index, st, level, playedSec, exact, db)
+  view.profile = profileOf(index, st, level, playedSec, exact, db, now)
   view.xp = xpOf(index, live, level)
   view.seals = liveSeals(Chronik.sealsOf(index), level)
   view.flow = flowOf(index, st, level, playedSec, now, T())

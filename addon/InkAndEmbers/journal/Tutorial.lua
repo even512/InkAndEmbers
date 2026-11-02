@@ -32,6 +32,35 @@ Tutorial.PAGES = {
   { id = "todo", tiles = { { a = 3, x = 0, y = 768, w = 512, h = 256 }, { a = 3, x = 512, y = 768, w = 512, h = 256 } } },
   { id = "farewell", portrait = true, tiles = {} },
 }
+-- Pages left out in Retail (the feature never runs there): "fire" = campfire talk (MapSpace.fireTalkHidden). Counting, dots and
+-- "page x of y" use Tutorial.pages(), so the numbering has no gap.
+-- Pages with their own Retail text (text_<id>_retail): no fixed level 60, other source of the open quests, no campfire farewell.
+Tutorial.RETAIL_TEXT = { collection = true, openquests = true, farewell = true }
+local function retailClient()
+  local ms = Journal.MapSpace
+  return ms ~= nil and type(ms.retailClient) == "function" and ms.retailClient() == true
+end
+local function pageHidden(p)
+  if p.id ~= "fire" then return false end
+  local ms = Journal.MapSpace
+  return ms ~= nil and type(ms.fireTalkHidden) == "function" and ms.fireTalkHidden() == true
+end
+local activePages = nil
+-- the pages of this client, fixed on first use (the client does not change during a session; the dots are built once)
+function Tutorial.pages()
+  if not activePages then
+    activePages = {}
+    for _, p in ipairs(Tutorial.PAGES) do
+      if not pageHidden(p) then activePages[#activePages + 1] = p end
+    end
+  end
+  return activePages
+end
+-- title / text key of a page for this client
+function Tutorial.textKey(p)
+  if Tutorial.RETAIL_TEXT[p.id] and retailClient() then return "text_" .. p.id .. "_retail" end
+  return "text_" .. p.id
+end
 Tutorial.W, Tutorial.H, Tutorial.RIM = 860, 520, 22
 Tutorial.ATLAS = { size = 1024 }
 -- Left page: one or two tiles stacked (width fixed, height from the tile's aspect), centred between top and bottom
@@ -57,6 +86,7 @@ local T = ns.Locale.ns("Tutorial", {
   text_welcome = "Ab jetzt schreibt die Chronik deine Reise mit – du musst nichts tun, einfach spielen. Blättere weiter, um zu sehen, was alles im Buch steckt.\nDas Buch öffnest du mit dem kleinen Knopf an der Minimap oder mit /chronik. Diese Einführung findest du jederzeit wieder mit /chronik tutorial.",
   title_collection = "Die Sammlung",
   text_collection = "Die Chronik läuft im Hintergrund mit und hält alles fest, was auf deiner Reise zu Level 60 passiert. Und darüber hinaus!\nKills, Tode, Quests, Gegenstände, Begegnungen und besondere Momente.\nDaraus entstehen automatisch die Seiten in diesem Reisebuch!",
+  text_collection_retail = "Die Chronik läuft im Hintergrund mit und hält alles fest, was auf deiner Reise bis zur Höchststufe passiert. Und darüber hinaus!\nKills, Tode, Quests, Gegenstände, Begegnungen und besondere Momente.\nDaraus entstehen automatisch die Seiten in diesem Reisebuch!",
   title_travelmap = "Reise-Karte",
   text_travelmap = "Die Reise-Karte zeichnet den gesamten Weg deines Charakters als Linie über die Welt! Dabei wird ebenfalls mit erfasst, wo Du gekämpft hast oder wo du ein LvL-Up hattest.\nDu kannst dir ebenfalls die gesamte Reise abspielen in verschiedenen Geschwindigkeiten.",
   title_levelflow = "Stufenfluss",
@@ -73,6 +103,7 @@ local T = ns.Locale.ns("Tutorial", {
   text_quests = "Jede abgeschlossene Quest wird aufgezeichnet samt Questtext und welche Belohnungen es gab und welche Du ausgewählt hast. Jede ausgewählte Quest gibt dir sogar einen Lebenslauf wann du sie angenommen hast, was unterwegs passiert ist und wann du sie abgegeben hast.",
   title_openquests = "Offene Quests",
   text_openquests = "Ebenso zeigt dir das Buch auch alle verfügbaren Quests geordnet an. So kannst du schnell herausfinden, welche Quests dir in dem Gebiet noch fehlen.\nBeim Klick auf eine Quest kannst du diese auch sehr leicht als To Do definieren.",
+  text_openquests_retail = "Das Buch zeigt dir auch die Quests, die die Weltkarte des Spiels als annehmbar anzeigt, nach Gebiet geordnet. So kannst du schnell herausfinden, welche Quests dir in dem Gebiet noch fehlen. Einen Questgeber nennt die Weltkarte nicht, dafür steht dort die Questreihe.\nBeim Klick auf eine Quest kannst du diese, wenn die Karte einen Ort dazu kennt, sehr leicht als To Do definieren.",
   title_treasures = "Schätze",
   text_treasures = "Die Schätze Seite gibt Dir einen detaillierten Überblick über deine Finanzen oder deine Beute.\nEbenso kannst du unter Ausrüstungsfunde alle Gegenstände ab Ungewöhnlich nachschauen, wie und wann du diesen erhalten hast. Es wird nämlich alles aufgezeichnet!",
   title_notes = "Notizen",
@@ -81,6 +112,7 @@ local T = ns.Locale.ns("Tutorial", {
   text_todo = "Unter To Do kannst du dir deine eigenen Quests bauen!\nMusst du dir merken, dass du noch zum Auktionshaus wolltest? Mach dir ein To Do mit einem Pin auf der Karte. Das To Do wird automatisch abgehakt, sobald du da bist.\nMöchtest du eine bestimmte Anzahl an Gegnern töten oder eine bestimmte Anzahl an Gegenständen sammeln? Schreib dir dazu ein To Do und es wird automatisch getracked. Gegner werden sogar an der Namensplakette und im Tooltip markiert, dass du sie für ein To Do benötigst.",
   title_farewell = "Gute Reise!",
   text_farewell = "Das ist alles, was du vorab wissen musst. Den Rest erzählt dir die Reise selbst.\nIch schreibe mit: die großen Momente genauso wie die kleinen Umwege. Schau ab und zu ins Buch, du wirst staunen, wie viel zusammenkommt.\nBis bald am Lagerfeuer!",
+  text_farewell_retail = "Das ist alles, was du vorab wissen musst. Den Rest erzählt dir die Reise selbst.\nIch schreibe mit: die großen Momente genauso wie die kleinen Umwege. Schau ab und zu ins Buch, du wirst staunen, wie viel zusammenkommt.\nBis bald unterwegs!",
 })
 Tutorial.TEXT = T
 
@@ -284,7 +316,7 @@ local function build()
   f.portrait:Hide()
 
   f.dots = {}
-  local n = #Tutorial.PAGES
+  local n = #Tutorial.pages()
   local gap = 21
   local x0 = half / 2 - (n - 1) * gap / 2
   for i = 1, n do
@@ -441,13 +473,13 @@ end
 local function render()
   local f = state.frame
   if not f then return end
-  local n = #Tutorial.PAGES
+  local n = #Tutorial.pages()
   local i = state.page
-  local p = Tutorial.PAGES[i]
+  local p = Tutorial.pages()[i]
   setText(f.headL, f.upper(T.header))
   setText(f.headR, f.upper(T("pageOf", i, n)))
   setText(f.title, T["title_" .. p.id])
-  Tutorial.fitBody(T["text_" .. p.id])
+  Tutorial.fitBody(T[Tutorial.textKey(p)])
   Tutorial.layoutImages(p)
   local last = i == n
   if f.next.SetLabel then f.next:SetLabel(last and T.done or T.next) end
@@ -471,7 +503,7 @@ function Tutorial.open(i)
     return false
   end
   local f = build()
-  local n = #Tutorial.PAGES
+  local n = #Tutorial.pages()
   if not f:IsShown() then state.narrator = nil end
   i = tonumber(i) or 1
   state.page = max(1, min(n, floor(i)))
@@ -485,7 +517,7 @@ end
 
 function Tutorial.go(i)
   if not Tutorial.isShown() then return false end
-  local n = #Tutorial.PAGES
+  local n = #Tutorial.pages()
   i = tonumber(i)
   if not i then return false end
   i = max(1, min(n, floor(i)))
@@ -498,7 +530,7 @@ end
 
 function Tutorial.next()
   if not Tutorial.isShown() then return false end
-  if state.page >= #Tutorial.PAGES then
+  if state.page >= #Tutorial.pages() then
     Tutorial.close()
     return true
   end

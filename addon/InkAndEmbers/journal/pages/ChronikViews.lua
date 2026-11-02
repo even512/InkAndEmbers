@@ -984,3 +984,9 @@ function Fire:Close()
   W.hideTip(self.nav.prev)
   W.hideTip(self.nav.next)
 end
+
+-- Retail: the campfire talk never starts there (MapSpace.fireTalkHidden), so the bookmark "Am Feuer" stays out of the Chronik tab
+Pages.hideSub("chronik", "feuer", function()
+  local ms = Journal.MapSpace
+  return ms ~= nil and ms.fireTalkHidden() == true
+end)
