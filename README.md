@@ -113,14 +113,21 @@ You need Node 20 or newer, and only for the helper scripts. The addon itself nee
 `npm run check` parses all Lua files with luaparse (Lua 5.1).
 
 The two data add-ons are generated and checked in. They only have to be regenerated for a new QuestieDB version or a new game
-build, with `npm run data` (or `node scripts/build-todo-data.mjs` and `node scripts/build-quest-data.mjs`, `--help` lists the
-options). The generators read local files only and write only into the target folder. The output is sorted and has no
+build, with `npm run data`. It first fetches the newest **stable** QuestieDB release (`node scripts/fetch-questiedb-release.mjs`:
+SHA-256 checked against the release's `release.json`, only GitHub hosts, the archive is unpacked in memory and nothing in it is
+run; `--tag vX.Y.Z` pins a version, the unstable `preview` channel is used only with `--preview`). The result lands in the
+git-ignored folder `data-capture/questiedb-release`. Then it runs `scripts/build-todo-data.mjs` and `scripts/build-quest-data.mjs`
+(`--help` lists the options). Accepted residual risk: `release.json` and the ZIP come from the same host (GitHub), so the
+checksum protects against damage and a swapped file, not against a compromised release. To close that, pin a version and the
+checksum you got from another trusted source: `node scripts/fetch-questiedb-release.mjs --tag vX.Y.Z --sha256 <64 hex digits>`
+(refused if the release's archive hash differs). Offline, use `node scripts/fetch-questiedb-release.mjs --from-zip <QuestieDB-Forever.zip> --release-json <release.json>`.
+The two generators read local files only and write only into the target folder. The output is sorted and has no
 timestamps, so the same inputs give identical files. The inputs:
 
 | Input | Option / variable | Where from |
 |---|---|---|
-| QuestieDB for Forever (`QuestieDB_Forever.toc`, quests, NPCs, objects, items) | `--questie` / `CHRONICLE_QUESTIE_TOC`; otherwise searched under `WOW_DIR\_forever_\Interface\AddOns\QuestieDB` | the QuestieDB addon, https://github.com/Questie/QuestieDB (release channel `preview`) |
-| Corrections per faction (`src/corrections/` of QuestieDB, parsed only, never run) | `--corrections`; otherwise next to the TOC | the same addon. If they are missing the generator warns, and Alliance quest givers can be wrong |
+| QuestieDB for Forever (`QuestieDB_Forever.toc`, quests, NPCs, objects, items) | `--questie`; otherwise the fetched release in `data-capture/questiedb-release`, then `CHRONICLE_QUESTIE_TOC`, then `WOW_DIR\_forever_\Interface\AddOns\QuestieDB` | the stable releases of https://github.com/Questie/QuestieDB (contract 1 to 4 and newer are accepted; a release that only guarantees a higher contract is rejected) |
+| Corrections per faction (`src/corrections/` of QuestieDB, parsed only, never run) | `--corrections`; otherwise next to the TOC (the fetch script stores them there, byte-identical from the release) | the same release. If they are missing the generator warns, and Alliance quest givers can be wrong |
 | Zones, German names, quest types | `--forever` / `CHRONICLE_FOREVER_DB` | a dump of the Forever database from https://data.morthen.net: `data/forever/zones.json`, `search.json`, `l10n/deDE/search.json` and `quest/*.json`. It is not in this repo, and I cannot promise it stays available |
 | Map overlays (revealed zone maps) | `--overlays`, `--overlays-retail` / `CHRONICLE_OVERLAYS`, `CHRONICLE_OVERLAYS_RETAIL` | snapshot in `scripts/data` (about 0.8 MB): the wago.tools tables `UiMapXMapArt`, `WorldMapOverlay`, `WorldMapOverlayTile` for each build |
 

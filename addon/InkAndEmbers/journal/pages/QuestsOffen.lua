@@ -342,6 +342,12 @@ function View.new(page, left, right)
   ui.emptyHead:SetPoint("TOP", tab, "TOPLEFT", LX + LW / 2, -230)
   ui.emptyBody = D.emptyNote(tab, LW - 60)
   ui.emptyBody:SetPoint("TOP", tab, "TOPLEFT", LX + LW / 2, -270)
+  -- source line in the footer (like the footnote in Schaetze: flush with the fold, right of x 154; blot bottom left stays free)
+  local fp, fx, fy = Theme.gridFoot("L")
+  ui.foot = label(tab, "label", G.size.xs, "sepia", "RIGHT")
+  ui.foot:SetPoint(fp, tab, "TOPLEFT", fx, -fy)
+  ui.foot:SetWidth(LW - 100)
+  ui.foot:SetJustifyV("TOP")
   D.escKeys(tab, function() page:ShowSub("historie") Pages.subChanged("quests") end)
   -- quest titles arriving from the client cache: redraw the open view once
   if OQ.onNames then OQ.onNames(function() if self.open then self:Render() end end) end
@@ -768,6 +774,8 @@ function View:Render(keepData)
   local testText = OQ.testLabel()
   W.setText(ui.test, testText or (res.retail and T.retailHint) or "")
   ui.test:SetTextColor(W.color(testText and "red" or "sepia"))
+  -- source of the data (text is already sanitized in OpenQuests.footer); nothing while the data is unavailable
+  W.setText(ui.foot, not unavailable and OQ.footer and OQ.footer() or "")
   if unavailable then
     ui.cont.frame:Hide()
     ui.pins:ReleaseAll()

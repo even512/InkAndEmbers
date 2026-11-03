@@ -1,5 +1,5 @@
 -- Kampf page: one area dropdown switches the whole page. Left the bestiary (kill count with tally, stamps, most hunted
--- with a 3D model, last rare), right the hunting grounds (heat map or markers + bars), the deaths with the death
+-- with a 3D model, last rare), right the hunting grounds (heat map or markers), the deaths with the death
 -- report, and close calls.
 -- Data from journal/model/Kampf.lua (display-ready texts). A click on a bestiary card opens the model lens (a larger
 -- model frame that grows out of the card, closed by clicking beside it or Esc). No OnUpdate except while the lens
@@ -53,13 +53,12 @@ local TOP_W = 320
 -- into the text block from x 406 in y 168..208; wider only goes over it),
 -- height matching the map art 1002 x 668: 360 x 240 instead of 330 x 220. The lower block moves down by 20 (LOW_Y).
 local MAP_W = 360
-local MAP_Y, MAP_H_HEAT, MAP_H_BARS = 114, 240, 110
+local MAP_Y, MAP_H = 114, 240
 local ZOOM_MAX, ZOOM_STEP, DOT_SIZE, DOT_HIT = 8, 1.25, 5, 6   -- map zoom, factor per wheel notch, kill point (px) and hit radius
 local DOUBLE_CLICK, DRAG_MIN = 0.35, 4                          -- seconds between two clicks; from this many px it counts as dragging
 local LENS_W, LENS_H, LENS_MARGIN, LENS_ANIM, LENS_MODEL_H = 340, 440, 24, 0.25, 330
 local LENS_CAM_MIN, LENS_CAM_MAX = 0.35, 2.4
 local CAP_Y = G.slots.title.y + 26
-local BAR_ROW = 14                 -- 5 rows below the bar map end before the control line of the lower block (LOW_Y)
 -- lower block: control line (switch left, paging right), below it graves (default), close calls OR the death report
 -- detail (replaces the switch with "Zurück zu den Toden")
 local LOW_Y = 366
@@ -91,7 +90,7 @@ LOOKS.unknown = LOOKS.normal
 Page.TEXT = ns.Locale.ns("p.Kampf", {
   pageOf = "Seite %s von %s", deathOf = "Tod %s von %s", moreZones = "+ %s weitere Zonen", closeCount = "%s knappe Siege · %s",
   brand = "INK & EMBERS", page = "BESTIARIUM", right = "KAMPF", hunted = "MEISTGEJAGT", rare = "SELTENER GEGNER",
-  zoneLabel = "GEBIET", byZone = "KILLS JE ZONE",
+  zoneLabel = "GEBIET",
   graves = "WO ICH GESTORBEN BIN", gravesTip = "Zonen, in denen Ihr gestorben seid – ein Grabstein je Tod",
   close = "UM HAARESBREITE", prevDeath = "Tod davor", openDeath = "Klicken: Todesbericht dieses Todes",
   openLastDeath = "Klicken: Todesbericht des letzten Todes hier", deathNo = "Tod %s",
@@ -903,11 +902,11 @@ local function buildMap(self, right)
   local u = self.R
   local box = CreateFrame("Frame", nil, right)
   box:SetPoint("TOPLEFT", right, "TOPLEFT", SR.x, -MAP_Y)
-  box:SetSize(MAP_W, MAP_H_HEAT)
+  box:SetSize(MAP_W, MAP_H)
   if box.SetClipsChildren then box:SetClipsChildren(true) end
   u.map = box
   Page.wireMap(self, box)
-  local frame = Widgets.NewOutline(right, MAP_W, MAP_H_HEAT, "sepia", 0.5)
+  local frame = Widgets.NewOutline(right, MAP_W, MAP_H, "sepia", 0.5)
   frame:SetPoint("TOPLEFT", right, "TOPLEFT", SR.x, -MAP_Y)
   u.mapFrame = frame
   -- soft edge: a mask (Media/MapFade, white with a soft, slightly irregular fading edge, like the journey map) lies
@@ -1003,26 +1002,6 @@ local function buildMap(self, right)
     end
   end
   chip:Hide()
-  -- bars "Kills je Zone" (fallback without positions)
-  local bh = font(right, "label", SZ.xs, "sepia", "LEFT")
-  u.barHead = bh
-  set(bh, Page.TEXT.byZone)
-  u.bars = {}
-  for i = 1, Kampf.BAR_MAX do
-    local n = font(right, "label", SZ.xs, "ink", "LEFT")
-    n:SetWidth(150)
-    n:SetWordWrap(false)
-    local bg = tex(right, "BORDER")
-    bg:SetColorTexture(Widgets.color("sepia", 0.15))
-    bg:SetSize(SR.w - 210, 8)
-    local fill = tex(right, "ARTWORK")
-    fill:SetColorTexture(Widgets.color("red", 0.75))
-    fill:SetHeight(8)
-    fill:SetPoint("TOPLEFT", bg, "TOPLEFT", 0, 0)
-    local c = font(right, "title", SZ.s, "ink", "RIGHT")
-    c:SetWidth(50)
-    u.bars[i] = { name = n, bg = bg, fill = fill, count = c }
-  end
   -- caption (left) and note (right) in the line between title and map, both before the swords
   local cap = font(right, "label", SZ.s, "sepia", "LEFT")
   cap:SetPoint("TOPLEFT", right, "TOPLEFT", SR.x, -CAP_Y)
@@ -1379,8 +1358,7 @@ end
 function Page.PaintMap(self)
   local u, hunt = self.R, self.view and self.view.hunt
   if not (u and hunt) then return end
-  local heat = hunt.mode == "heat"
-  local H = heat and MAP_H_HEAT or MAP_H_BARS
+  local H = MAP_H
   local mv = self.mv
   local ox, oy, w, h = drawArt(self, hunt.zone, H, mv.z, mv.tx, mv.ty)
   local a = { ox = ox, oy = oy, w = w, h = h, H = H }
@@ -1609,7 +1587,7 @@ end
 local function drawHunt(self, hunt)
   local u = self.R
   local heat = hunt.mode == "heat"
-  local H = heat and MAP_H_HEAT or MAP_H_BARS
+  local H = MAP_H
   u.map:SetHeight(H)
   u.mapFrame:SetHeight(H)
   set(u.mapTitle, Kampf.TEXT.hunt .. (hunt.zoneName and (" · " .. hunt.zoneName) or ""))
@@ -1636,37 +1614,9 @@ local function drawHunt(self, hunt)
     u.mapMask:SetPoint("TOPLEFT", u.map, "TOPLEFT", ox, -oy)
     u.mapMask:SetSize(w, h)
   end
-  -- caption and note sit fixed in the line above the map (buildMap); the bars follow below the map
-  local below = MAP_Y + H + 8
+  -- caption and note sit fixed in the line above the map (buildMap)
   set(u.caption, hunt.caption)
   set(u.mapNote, hunt.note)
-  -- bars "Kills je Zone" only without heat (markers + bars)
-  u.barHead:ClearAllPoints()
-  u.barHead:SetPoint("TOPLEFT", self.right, "TOPLEFT", SR.x, -below)
-  u.barHead:SetShown(not heat and #hunt.bars > 0)
-  for i, b in ipairs(u.bars) do
-    local item = (not heat) and hunt.bars[i] or nil
-    local y = below + 14 + (i - 1) * BAR_ROW
-    b.name:ClearAllPoints()
-    b.name:SetPoint("TOPLEFT", self.right, "TOPLEFT", SR.x, -y)
-    b.bg:ClearAllPoints()
-    b.bg:SetPoint("TOPLEFT", self.right, "TOPLEFT", SR.x + 156, -(y + 3))
-    b.count:ClearAllPoints()
-    b.count:SetPoint("TOPRIGHT", self.right, "TOPLEFT", SR.x + SR.w, -(y - 1))
-    if item then
-      set(b.name, item.name)
-      set(b.count, item.countText)
-      b.bg:Show()
-      local fw = (SR.w - 210) * min(1, max(0, item.pct))
-      b.fill:SetWidth(max(fw, 0.01))
-      b.fill:SetShown(fw >= 0.5)
-    else
-      set(b.name, "")
-      set(b.count, "")
-      b.bg:Hide()
-      b.fill:Hide()
-    end
-  end
 end
 
 local function drawDeath(self, d)

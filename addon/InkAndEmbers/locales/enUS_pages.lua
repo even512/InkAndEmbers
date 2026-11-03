@@ -65,7 +65,7 @@ L.add("enUS", "p.ChronikViews.Fire", {
 L.add("enUS", "p.Kampf", {
   pageOf = "Page %s of %s", deathOf = "Death %s of %s", moreZones = "+ %s more zones", closeCount = "%s narrow victories · %s",
   brand = "INK & EMBERS", page = "BESTIARY", right = "COMBAT", hunted = "MOST HUNTED", rare = "RARE FOE",
-  zoneLabel = "ZONE", byZone = "KILLS PER ZONE",
+  zoneLabel = "ZONE",
   graves = "WHERE I DIED", gravesTip = "Zones where you died – one gravestone per death",
   close = "BY A HAIR'S BREADTH", prevDeath = "Previous death", openDeath = "Click: death report of this death",
   openLastDeath = "Click: death report of the last death here", deathNo = "Death %s",

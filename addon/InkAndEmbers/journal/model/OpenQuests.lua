@@ -28,6 +28,13 @@
 -- Retail client: list/zones/available/footer/diagLine/clientZone go to Journal.OpenQuestsRetail (runtime source from
 -- the game's world map, journal/model/OpenQuestsRetail.lua); the data addon is never loaded there. The test mode and
 -- OpenQuests.ALLOW_RETAIL keep the data addon in the retail map space. Forever is unchanged.
+-- Live source (Forever, change "questiedb"): when the addon QuestieDB is installed and fits (OpenQuestsQDB.probe: no retail,
+-- loaded, baked, flavor Forever, contract 1 in range, OpenQuests.QDB_LIVE), quests and givers are read from it
+-- (journal/model/OpenQuestsQDB.lua) in a coroutine with a time budget per frame (QDB_BUDGET_MS, never in combat), started
+-- on the first load. Until it is finished the data addon answers; then its quests/givers are replaced (overlays stay from
+-- the data addon, its flags r/g are added, they carry the Forever database's quest type). Failure or no fitting QuestieDB:
+-- the data addon stays. OpenQuests.sourceInfo() tells source and reason (diagnostics), the footer names the source.
+-- The retail client never touches QuestieDB.
 local _, ns = ...
 
 local Journal = ns.Journal or {}
@@ -65,8 +72,29 @@ local T = ns.Locale.ns("m.OpenQuests", {
   unsureLabel = "Beta-Daten unsicher",
   unsureTip = "Stufe über 30: Forever-Stand unbestätigt",
   testLabel = "Testmodus (Retail): Inhalte nicht aussagekräftig",
-  footer = "Daten: QuestieDB · Stand %s",
-  footerNoVersion = "Daten: QuestieDB",
+  footer = "Daten: QuestieDB %s (Addon-Auszug)",
+  footerNoVersion = "Daten: QuestieDB (Addon-Auszug)",
+  footerLive = "Daten: QuestieDB %s (live)",
+  footerLiveNoVersion = "Daten: QuestieDB (live)",
+  -- source of the data (OpenQuests.sourceInfo, diagnostics)
+  sourceLive = "live",
+  sourceExtract = "Addon-Auszug %s (%s)",
+  sourceExtractNone = "Addon-Auszug nicht geladen (%s)",
+  srcREADY = "QuestieDB passt, wird beim Öffnen gelesen",
+  srcBUILDING = "QuestieDB wird gelesen",
+  srcWAITING = "QuestieDB wartet auf das Kampfende",
+  srcRETAIL = "Retail nutzt QuestieDB nie",
+  srcOFF = "QuestieDB-Quelle abgeschaltet",
+  srcNO_API = "Addon-Schnittstelle fehlt",
+  srcNOT_LOADED = "QuestieDB nicht geladen",
+  srcNO_LIB = "LibQuestieDB fehlt oder ist unvollständig",
+  srcNOT_BAKED = "QuestieDB läuft im Quellmodus",
+  srcFLAVOR = "QuestieDB nicht für Forever",
+  srcCONTRACT = "QuestieDB-Version passt nicht (Vertrag)",
+  srcZONES = "Zonendaten von QuestieDB fehlen",
+  srcEMPTY = "QuestieDB lieferte keine Quests",
+  srcFAILED = "Fehler beim Lesen aus QuestieDB",
+  srcNO_TIMER = "Zeitgeber fehlt",
   todoText = "Quest annehmen: %s",
   more = "… und %d weitere",
   mapFallback = "Karte %d",
@@ -97,6 +125,9 @@ local T = ns.Locale.ns("m.OpenQuests", {
   diagLoaded = "Offene Quests: geladen (%d Quests, %d Geber%s)",
   diagVersion = ", Stand %s",
   diagNotLoaded = "Offene Quests: nicht geladen: %s",
+  diagQdb = "QuestieDB installiert: %s (Contract %s) · Quelle: %s",
+  diagQdbNone = "QuestieDB nicht installiert · Quelle: %s",
+  diagQdbUnknown = "?",
   testOff = "Offene Quests: Testmodus aus.",
   testOn = "Offene Quests: Testmodus an (Volk %s, Klasse %s, Stufe %s). %s",
   testLevelUsage = "Offene Quests: /chronik offene test stufe <Zahl>",
@@ -174,35 +205,53 @@ local function idList(s)
   return out
 end
 
+-- one shared, read-only table per flag text (records never change their flag table in place)
+local FLAG_SETS = {}
+
 local function flagSet(s)
   if s == nil or s == "" then return EMPTY end
-  local f
+  local f = FLAG_SETS[s]
+  if f then return f end
   for c in gmatch(s, "[urgsk]") do
     f = f or {}
     f[c] = true
   end
-  return f or EMPTY
+  f = f or EMPTY
+  FLAG_SETS[s] = f
+  return f
 end
 
+-- records hold only the fields that are set (a constructor listing nil fields reserves their slots); giver key lists are
+-- shared per giver text (read-only)
 local function parseQuests(blob)
-  local quests, count = {}, 0
+  local quests, count, keyLists = {}, 0, {}
   for line in gmatch(blob, "\n([^\n]*)") do
     local id, name, req, ql, races, classes, preAll, preAny, excl, flags, givers =
       match(line, "^(%d+)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t?([^\t]*)$")
     id = id and tonumber(id)
     if id and id > 0 and not quests[id] then
       local keys
-      for key in gmatch(givers or "", "[no]%d+[AH]?") do
-        keys = keys or {}
-        keys[#keys + 1] = key
+      if givers and givers ~= "" then
+        keys = keyLists[givers]
+        if keys == nil then
+          for key in gmatch(givers, "[no]%d+[AH]?") do
+            keys = keys or {}
+            keys[#keys + 1] = key
+          end
+          keyLists[givers] = keys or false
+        end
+        keys = keys or nil
       end
       local minL = tonumber(req)
       local qLevel = tonumber(ql)
-      quests[id] = {
-        id = id, name = name, minLevel = (minL and minL > 0) and floor(minL) or 0, level = (qLevel and qLevel > 0) and floor(qLevel) or nil,
-        races = tonumber(races) or 0, classes = tonumber(classes) or 0, preAll = idList(preAll), preAny = idList(preAny),
-        excl = idList(excl), flags = flagSet(flags), givers = keys,
-      }
+      local q = { id = id, name = name, minLevel = (minL and minL > 0) and floor(minL) or 0, races = tonumber(races) or 0,
+        classes = tonumber(classes) or 0, flags = flagSet(flags) }
+      q.level = (qLevel and qLevel > 0) and floor(qLevel) or nil
+      q.givers = keys
+      q.preAll = idList(preAll)
+      q.preAny = idList(preAny)
+      q.excl = idList(excl)
+      quests[id] = q
       count = count + 1
     end
   end
@@ -356,8 +405,170 @@ local function retailSource()
 end
 OpenQuests.retailSource = retailSource
 
+-- ---------------------------------------------------------------- live source QuestieDB (Forever)
+
+OpenQuests.QDB_LIVE = true -- decision F5: automatic, no setting; false = always the data addon
+OpenQuests.QDB_BUDGET_MS = 4 -- work per frame (debugprofilestop)
+OpenQuests.QDB_STEP_ITEMS = 150 -- quests per frame at most (the only limit without a clock)
+OpenQuests.QDB_COMBAT_WAIT = 2 -- seconds between checks while in combat
+OpenQuests.QDB_FRAME_DELAY = 0 -- C_Timer.After delay between steps (0 = next frame)
+
+-- S.live = { state = "off"|"building"|"waiting"|"done"|"failed", reason, version, job, steps, maxStep, ms }
+local function qdb() return Journal.OpenQuestsQDB end
+
+local function clockFn()
+  local f = rawget(_G, "debugprofilestop")
+  if type(f) ~= "function" then return nil end
+  return function()
+    local ok, v = pcall(f)
+    return (ok and num(v)) or 0
+  end
+end
+
+local function after(sec, fn)
+  if type(C_Timer) ~= "table" or type(C_Timer.After) ~= "function" then return false end
+  return (pcall(C_Timer.After, sec, fn))
+end
+
+local function liveVersion()
+  local Q = qdb()
+  local ok, v = pcall(Q.version)
+  return ok and type(v) == "string" and display(v) or nil
+end
+
+-- the finished job replaces quests/givers; overlays and the flags r/g (Forever database quest type) of the data addon stay
+local function finishLive(L, job)
+  if job.nQuests == 0 then
+    L.state, L.reason = "failed", "EMPTY"
+    return
+  end
+  local old = S.data
+  if old then
+    for id, q in pairs(job.quests) do
+      local o = old.quests[id]
+      local add = o and o.flags and ((o.flags.r and not q.flags.r) or (o.flags.g and not q.flags.g))
+      if add then
+        local f = {}
+        for k in pairs(q.flags) do f[k] = true end
+        if o.flags.r then f.r = true end
+        if o.flags.g then f.g = true end
+        q.flags = f
+      end
+    end
+  end
+  S.data = { quests = job.quests, givers = job.givers, nQuests = job.nQuests, nGivers = job.nGivers, version = L.version,
+    overlays = old and old.overlays or {}, overlaysRetail = old and old.overlaysRetail or {}, german = job.ctx.german, live = true }
+  L.state, L.reason, L.job = "done", "ACTIVE", nil
+  L.quests, L.givers = job.nQuests, job.nGivers
+  L.sharedQuests, L.sharedGivers = job.sharedQuests, job.sharedGivers
+  S.reason, S.nextTry, S.pending = nil, nil, nil
+  S.index = nil
+  OpenQuests.invalidate()
+  OpenQuests._changed()
+end
+
+-- one frame of the live job; never in combat (waits), re-scheduled with C_Timer.After(0)
+local function liveStep()
+  local L = S.live
+  if not L or (L.state ~= "building" and L.state ~= "waiting") then return end
+  if inCombat() then
+    L.state = "waiting"
+    if not after(OpenQuests.QDB_COMBAT_WAIT, liveStep) then L.state, L.reason = "failed", "NO_TIMER" end
+    return
+  end
+  L.state = "building"
+  L.frames = (L.frames or 0) + 1
+  local Q = qdb()
+  if not L.job then
+    local ok, usable, why, lib = pcall(Q.probe)
+    if not ok or not usable then
+      L.state, L.reason = "failed", ok and why or "FAILED"
+      return
+    end
+    -- base = the data addon's records: equal live records are shared instead of copied (memory)
+    local okJ, job = pcall(Q.newJob, lib, { german = clientGerman(), empty = EMPTY, base = S.data })
+    if not okJ or type(job) ~= "table" then
+      L.state, L.reason = "failed", "FAILED"
+      return
+    end
+    L.job = job
+  end
+  local job = L.job
+  local okS, r = pcall(Q.step, job, OpenQuests.QDB_BUDGET_MS, clockFn(), OpenQuests.QDB_STEP_ITEMS)
+  L.steps, L.maxStep, L.ms = job.steps, job.maxStep, job.ms
+  if not okS or r == "error" then
+    L.state, L.reason, L.job = "failed", (okS and job.fail) or "FAILED", nil
+    return
+  end
+  if r == "done" then
+    finishLive(L, job)
+    return
+  end
+  if not after(OpenQuests.QDB_FRAME_DELAY, liveStep) then L.state, L.reason, L.job = "failed", "NO_TIMER", nil end
+end
+OpenQuests._liveStep = liveStep
+
+-- start the live source once (after login); without a fitting QuestieDB the reason is kept and the data addon answers
+local function startLive()
+  if S.live or S.test or not loggedIn() then return end
+  local Q = qdb()
+  if not (Q and type(Q.probe) == "function") then
+    S.live = { state = "off", reason = "NO_LIB" }
+    return
+  end
+  local ok, usable, why = pcall(Q.probe)
+  if not ok then
+    S.live = { state = "off", reason = "FAILED" }
+    return
+  end
+  if not usable then
+    S.live = { state = "off", reason = why }
+    return
+  end
+  S.live = { state = "building", reason = "BUILDING", version = liveVersion() }
+  if not after(OpenQuests.QDB_FRAME_DELAY, liveStep) then S.live.state, S.live.reason = "failed", "NO_TIMER" end
+end
+OpenQuests._startLive = startLive
+
+local SRC_TEXT = { READY = "srcREADY", BUILDING = "srcBUILDING", WAITING = "srcWAITING", RETAIL = "srcRETAIL",
+  OFF = "srcOFF", NO_API = "srcNO_API", NOT_LOADED = "srcNOT_LOADED", NO_LIB = "srcNO_LIB", NOT_BAKED = "srcNOT_BAKED",
+  FLAVOR = "srcFLAVOR", CONTRACT = "srcCONTRACT", ZONES = "srcZONES", EMPTY = "srcEMPTY", FAILED = "srcFAILED", NO_TIMER = "srcNO_TIMER" }
+
+-- source of the open quests (diagnostics): { source = "questiedb"|"extract", reason = KEY, reasonText, version, text,
+-- quests, givers, steps, maxStep (ms of the longest frame), ms, frames }. Reads nothing in retail beyond the client check.
+function OpenQuests.sourceInfo()
+  local L = S.live
+  local reason
+  if L then
+    reason = L.state == "waiting" and "WAITING" or L.reason
+  elseif OpenQuests.retailClient() then
+    reason = "RETAIL"
+  else
+    local Q = qdb()
+    local ok, usable, why = false, false, "NO_LIB"
+    if Q and type(Q.probe) == "function" then ok, usable, why = pcall(Q.probe) end
+    reason = not ok and "FAILED" or (usable and "READY" or why)
+  end
+  local live = L ~= nil and L.state == "done"
+  if live then reason = "ACTIVE" end
+  reason = (reason == "ACTIVE" or SRC_TEXT[reason]) and reason or "FAILED"
+  local d = S.data
+  local info = { source = live and "questiedb" or "extract", reason = reason, reasonText = SRC_TEXT[reason] and T[SRC_TEXT[reason]] or nil,
+    version = live and L.version or (d and not d.live and d.version) or nil, quests = L and L.quests, givers = L and L.givers,
+    steps = L and L.steps, maxStep = L and L.maxStep, ms = L and L.ms, frames = L and L.frames }
+  if live then
+    info.text = T.sourceLive
+  elseif info.version then
+    info.text = T("sourceExtract", info.version, info.reasonText)
+  else
+    info.text = T("sourceExtractNone", info.reasonText)
+  end
+  return info
+end
+
 local function loadData()
   if not S.test and not OpenQuests.ALLOW_RETAIL and OpenQuests.retailClient() then return fail("RETAIL") end
+  if not OpenQuests.retailClient() then startLive() end
   if S.data then return true end
   if adopt() then return loaded() end
   if inCombat() then return fail("COMBAT") end
@@ -378,7 +589,7 @@ end
 function OpenQuests.available()
   local R = retailSource()
   if R then return R.available() end
-  if not S.data then loadData() end
+  if not S.data or not S.live then loadData() end -- loadData also starts the live source once
   return S.data ~= nil
 end
 
@@ -408,7 +619,8 @@ end
 function OpenQuests.status()
   local d = S.data
   return { loaded = d ~= nil, reason = S.reason, tried = S.tried, quests = d and d.nQuests or 0, givers = d and d.nGivers or 0,
-    version = d and d.version or nil, factions = d and d.factions or nil, test = S.test ~= nil }
+    version = d and d.version or nil, factions = d and d.factions or nil, test = S.test ~= nil,
+    source = (d and d.live) and "questiedb" or "extract" }
 end
 
 function OpenQuests.diagLine()
@@ -425,10 +637,28 @@ function OpenQuests.diagLine()
   return line
 end
 
+-- The one source line of /chronik diag: "QuestieDB installed: x.y.z (Contract n) · Source: live" or
+-- "… · Source: bundled extract x.y.z (reason)". Version/contract come ONLY from the TOC metadata of the separate add-on
+-- QuestieDB (OpenQuestsQDB.version/contract, in pcall); never any data rows, never in Retail (nil -> no line). The values end
+-- up in the chat window, so only plain version characters pass (else "?").
+function OpenQuests.qdbDiagLine()
+  if OpenQuests.retailClient() then return nil end
+  local Q = qdb()
+  if not Q or type(Q.version) ~= "function" or not Q.metaAvailable() then return nil end
+  local okV, version, bad = pcall(Q.version)
+  if not okV then version, bad = nil, nil end
+  local okC, contract, badC = pcall(Q.contract)
+  if not okC then contract, badC = nil, nil end
+  local source = OpenQuests.sourceInfo().text
+  if not version and not bad then return T("diagQdbNone", source) end
+  return T("diagQdb", version or T.diagQdbUnknown, contract or T.diagQdbUnknown, source)
+end
+
 function OpenQuests.footer()
   local R = retailSource()
   if R then return R.footer() end
   local d = S.data
+  if d and d.live then return d.version and T("footerLive", d.version) or T.footerLiveNoVersion end
   if d and d.version then return T("footer", d.version) end
   return T.footerNoVersion
 end

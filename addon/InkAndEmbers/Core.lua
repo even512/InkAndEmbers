@@ -917,6 +917,11 @@ function Core.runDiag()
     local ok, line = pcall(openQuests.diagLine)
     Core.print(ok and tostring(line) or T("checkFailed", T.labOpenQuests, tostring(line)))
   end
+  -- installed QuestieDB add-on (version and contract from its TOC only) next to the data extract; nil in Retail = no line
+  if openQuests and type(openQuests.qdbDiagLine) == "function" then
+    local ok, line = pcall(openQuests.qdbDiagLine)
+    if ok and type(line) == "string" then Core.print(line) end
+  end
   -- to-do enemies on the nameplate: seen/marked/last failure reason
   local marks = ns.Journal and ns.Journal.TodoMarks
   if marks and type(marks.diagLine) == "function" then

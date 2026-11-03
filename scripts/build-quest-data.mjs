@@ -3,8 +3,9 @@
 //
 // Aufruf:  node scripts/build-quest-data.mjs [--questie <QuestieDB_Forever.toc>] [--forever <ordner>] [--corrections <QuestieDB-Ordner>]
 //                                            [--out <ordner>] [--fetch] [--help]
-//   --questie      QuestieDB im Forever-Stand ("baked" TOC, Vertragsversion 4). Standard (in dieser Reihenfolge): $CHRONICLE_QUESTIE_TOC,
-//                  dann WOW_DIR (_classic_beta_, _forever_). Umgebungsvariablen koennen auch in der lokalen .env stehen.
+//   --questie      QuestieDB im Forever-Stand ("baked" TOC, Vertragsversion 1 bis 4+). Standard (in dieser Reihenfolge): das geladene stabile
+//                  Release data-capture\questiedb-release (scripts/fetch-questiedb-release.mjs), $CHRONICLE_QUESTIE_TOC, dann WOW_DIR
+//                  (_classic_beta_, _forever_). Umgebungsvariablen koennen auch in der lokalen .env stehen.
 //   --forever      Forever-Datenbank-Dump (Ordner mit zones.json, l10n\deDE\search.json, quest\*.json): Gebiet -> uiMapID, deDE-Namen, Questtyp.
 //                  Standard: $CHRONICLE_FOREVER_DB. Beschaffung: README, Abschnitt "Questdaten neu erzeugen".
 //   --corrections  QuestieDB-Addonordner mit src\corrections\ (fraktionsabhaengige Korrekturen Horde UND Allianz, Lua nur geparst).
@@ -16,8 +17,8 @@
 //   --overlays-retail  dasselbe fuer den Retail-Build (Standard: $CHRONICLE_OVERLAYS_RETAIL, sonst scripts\data\wago-retail-12.1.5.70575)
 //                  fuer die Retail-uiMapIDs aus journal\MapSpace.lua (ZONES); fehlt der Ordner: overlayRetail leer (Retail zeigt dann nur Erkundetes).
 //   --out          Zielordner. Standard: addon\InkAndEmbers_QuestData (TOC wird mit erzeugt)
-//   --fetch        vorher das Skript aus $CHRONICLE_FETCH_SCRIPT (--soft) als Kindprozess ausfuehren (kein eigener Netzcode); offline/ohne Skript ist kein Fehler
-// Exit-Codes: 0 = ok, 1 = Fehler (Quelle fehlt/unlesbar, Vertragsversion != 4, Ergebnis unplausibel klein oder Datei zu gross, unbekannte Option)
+//   --fetch        vorher scripts/fetch-questiedb-release.mjs (--soft) als Kindprozess ausfuehren (kein eigener Netzcode hier); offline ist kein Fehler
+// Exit-Codes: 0 = ok, 1 = Fehler (Quelle fehlt/unlesbar, Vertragsversion ungueltig oder Release-Untergrenze > 4, Ergebnis unplausibel klein oder Datei zu gross, unbekannte Option)
 //
 // Ergebnis (reproduzierbar: sortiert, ohne Zeitstempel). Format verbindlich (Entwicklungsnotizen),
 // Abschnitt "Datenformat (verbindlich)":
@@ -30,8 +31,8 @@
 //               EveNChronicleQuestData.overlayRetail = dasselbe Format fuer die Retail-Karten-IDs (nur Retail-Client)
 //   InkAndEmbers_QuestData.toc (LoadOnDemand, Attribution, Stand)
 //
-// Sicherheit: reine Datenauswertung lokaler Dateien; Netz nur ueber ein optionales, selbst konfiguriertes Download-Skript
-// (feste Argumente, kein Shell-String). Fremddaten mit Grenzen dekodiert (CBOR/zlib wie build-todo-data.mjs); Korrektur-Lua wird mit
+// Sicherheit: reine Datenauswertung lokaler Dateien; Netz nur ueber das Fetch-Skript des Projekts (scripts/fetch-questiedb-release.mjs,
+// feste Argumente, kein Shell-String). Fremddaten mit Grenzen dekodiert (CBOR/zlib wie build-todo-data.mjs); Korrektur-Lua wird mit
 // luaparse NUR geparst, nie ausgefuehrt, nur Literale ausgewertet (Groessenlimit je Datei, keine Symlinks). Namen gesaeubert (cleanName),
 // Lua-Ausgabe als lange Klammer. Geschrieben wird nur in den Zielordner (atomar je Datei).
 
@@ -42,7 +43,7 @@ import { mkdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import luaparse from "luaparse";
-import { cleanName, configPath, defaultSources, luaLong, openQuestie } from "./build-todo-data.mjs";
+import { cleanName, configPath, defaultSources, luaLong, openQuestie, stampedMinContract } from "./build-todo-data.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const QUEST_DATA_ADDON = "InkAndEmbers_QuestData";
@@ -55,6 +56,7 @@ export const OVERLAY_TILE = 256;
 const MAX_CSV_BYTES = 4 * 1024 * 1024;
 const MAIN_TOC = path.join(ROOT, "addon", "InkAndEmbers", "InkAndEmbers.toc");
 const FETCH_TIMEOUT_MS = 240_000;
+const FETCH_SCRIPT = path.join(ROOT, "scripts", "fetch-questiedb-release.mjs");
 
 export const MAX_FILE_BYTES = 600 * 1024; // je Datei
 export const MIN_QUESTS_WITH_GIVER = 3000;
@@ -113,13 +115,13 @@ Aufruf:
   node scripts/build-quest-data.mjs [--questie <toc>] [--forever <ordner>] [--corrections <QuestieDB-Ordner>] [--out <ordner>] [--fetch]
 
 Quellen (lokal; die Pfade koennen auch als Umgebungsvariablen bzw. in der lokalen .env stehen, siehe README "Questdaten neu erzeugen"):
-  --questie      QuestieDB_Forever.toc (Standard: CHRONICLE_QUESTIE_TOC, sonst WOW_DIR aus Umgebung/.env)
+  --questie      QuestieDB_Forever.toc (Standard: data-capture\\questiedb-release, sonst CHRONICLE_QUESTIE_TOC, sonst WOW_DIR aus Umgebung/.env)
   --forever      Forever-Datenbank-Dump (Standard: CHRONICLE_FOREVER_DB)
   --corrections  QuestieDB-Addonordner mit src\\corrections (Standard: neben der TOC, sonst WOW_DIR\\_forever_ bzw. _classic_beta_)
   --overlays     wago.tools-CSV-Ordner fuer die Karten-Overlays (Standard: CHRONICLE_OVERLAYS, sonst scripts\data\wago-1.60.1.70170)
   --overlays-retail  dasselbe fuer den Retail-Build (Standard: CHRONICLE_OVERLAYS_RETAIL, sonst scripts\data\wago-retail-12.1.5.70575)
   --out          Zielordner (Standard: addon\\${QUEST_DATA_ADDON})
-  --fetch        vorher das Skript aus CHRONICLE_FETCH_SCRIPT mit --soft ausfuehren (optional; offline oder ohne Skript ist kein Fehler)
+  --fetch        vorher scripts/fetch-questiedb-release.mjs mit --soft ausfuehren (stabiles QuestieDB-Release; offline ist kein Fehler)
 `;
 
 // ---------------------------------------------------------------- Argumente / Pfade
@@ -426,6 +428,14 @@ export function openForeverQuests(dir) {
 // ---------------------------------------------------------------- Zusammenfuehren
 
 const asList = (v) => (Array.isArray(v) ? v : isObj(v) ? Object.keys(v).sort((a, b) => Number(a) - Number(b)).map((k) => v[k]) : []);
+/**
+ * Lua-Positionsfeld (1-basiert) einer Liste mit Loechern: QuestieDB speichert z. B. startedBy {nil, nil, {1307}} (nur Slot 3 =
+ * Gegenstaende) als CBOR-Map {3: [...]}, eine Korrektur-Datei als Array [null, null, [...]]. asList verliert dort die Position,
+ * slotOf liest genau den Platz i (Array: v[i - 1], Map: v["i"]).
+ */
+export const slotOf = (v, i) => (Array.isArray(v) ? v[i - 1] : isObj(v) ? v[String(i)] : undefined);
+/** Geber-Slots in startedBy/finishedBy (QuestieDB questMeta): 1 = Kreaturen, 2 = Objekte, 3 = Gegenstaende */
+export const GIVER_SLOT = Object.freeze({ npc: 1, object: 2, item: 3 });
 const int = (v) => (Number.isInteger(v) ? v : typeof v === "number" && Number.isFinite(v) ? Math.round(v) : undefined);
 const idList = (v) => [...new Set(asList(v).map(int).filter((x) => Number.isSafeInteger(x) && x > 0 && x <= MAX_ID))].sort((a, b) => a - b);
 const positive = (v) => {
@@ -607,9 +617,9 @@ export function buildQuestData(q, fdb, fixes) {
 
     // Geber je Sicht -> Schluessel
     const keysOf = (view) => {
-      const sb = asList(get(view, "quest", id, QF.startedBy));
+      const sb = get(view, "quest", id, QF.startedBy);
       const out = [];
-      for (const [t, list] of [["n", sb[0]], ["o", sb[1]]]) {
+      for (const [t, list] of [["n", slotOf(sb, GIVER_SLOT.npc)], ["o", slotOf(sb, GIVER_SLOT.object)]]) {
         for (const gid of idList(list)) out.push(giverInfo(t, gid));
       }
       return out;
@@ -900,7 +910,7 @@ export async function build({ questie, forever, corrections = null, overlays = D
   const minGivers = limits.minGivers ?? MIN_GIVERS;
   const maxBytes = limits.maxFileBytes ?? MAX_FILE_BYTES;
   const tocRaw = readFileSync(questie, "utf8");
-  const q = openQuestie(tocRaw);
+  const q = openQuestie(tocRaw, { minSupportedContract: stampedMinContract(questie) });
   const fdb = openForeverQuests(forever);
   const corr = loadCorrections({ questie, corrections, tocSha: sha256(tocRaw) });
   const data = buildQuestData(q, fdb, corr.fixes);
@@ -961,9 +971,8 @@ export async function build({ questie, forever, corrections = null, overlays = D
   return { ...data, withGiver, sizes, questieVersion: version, corrections: corr, badValues: q.stats.badValues, overlays: ov, overlaysRetail: ovR };
 }
 
-/** --fetch: optionales Download-Skript (CHRONICLE_FETCH_SCRIPT) als Kindprozess (feste Argumente, keine Shell). Fehler/offline/nicht konfiguriert = Hinweis, kein Abbruch. */
-export function runFetch({ script = configPath("CHRONICLE_FETCH_SCRIPT"), spawn = spawnSync } = {}) {
-  if (!script) return { ok: false, reason: "kein Download-Skript konfiguriert (CHRONICLE_FETCH_SCRIPT); vorhandener Stand wird benutzt." };
+/** --fetch: Fetch-Skript des Projekts als Kindprozess (feste Argumente, keine Shell). Fehler/offline = Hinweis, kein Abbruch. */
+export function runFetch({ script = FETCH_SCRIPT, spawn = spawnSync } = {}) {
   if (!isRealFile(script)) return { ok: false, reason: `Download-Skript nicht gefunden (${script}); vorhandener Stand wird benutzt.` };
   const r = spawn(process.execPath, [script, "--soft"], { cwd: path.resolve(path.dirname(script), ".."), stdio: "inherit", shell: false, timeout: FETCH_TIMEOUT_MS, windowsHide: true });
   if (r.error) return { ok: false, reason: `Download-Skript nicht ausfuehrbar (${r.error.message}); vorhandener Stand wird benutzt.` };

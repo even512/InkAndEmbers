@@ -7,3 +7,6 @@ tests/screens/
 
 # Quell-Grafiken und Entwuerfe: nur im privaten Repo (dort bleiben schon getrackte Dateien), nie im oeffentlichen
 art/
+
+# Von scripts/fetch-questiedb-release.mjs geladenes QuestieDB-Release (Daten-TOC, nur lokal)
+data-capture/

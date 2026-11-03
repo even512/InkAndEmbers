@@ -9,7 +9,7 @@ Dieses Datenaddon enthält die Gegner-, Gegenstands- und Gebietslisten für die 
 ergänzt). Den genauen Stand nennt der Kopf der Dateien.
 
 - **Quelle / Source:** QuestieDB - Questie-Team und Beitragende (u. a. Muehe, TheCrux/BreakBB, Drejjmit, Dyaxler, Cheeq,
-  TechnoHunter, Yttrium und alle weiteren), https://github.com/Questie/QuestieDB (Stand 1.0.9-dev.7901fee)
+  TechnoHunter, Yttrium und alle weiteren), https://github.com/Questie/QuestieDB (Stand 1.0.10, stabiles Release)
 - **Lizenzlage der Quelle:** QuestieDB hat keine eigene formale Lizenz. Laut https://github.com/Questie/QuestieDB/blob/master/LICENSE.md
   fallen importierte Questie-Inhalte unter die GPL-3.0; die Betreiber sind mit Kopien und Forks **unter den Bedingungen der GPLv3**
   einverstanden, können das aber nicht für alle früheren Beitragenden zusagen (nicht abgedeckter Inhalt gilt dort als

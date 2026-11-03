@@ -23,10 +23,17 @@ The fonts are not renamed or modified.
 
 `InkAndEmbers_QuestData` and `InkAndEmbers_Data` contain data derived from
 **QuestieDB** (https://github.com/Questie/QuestieDB, Questie team and contributors, version
-1.0.9-dev.7901fee). They are distributed under the GNU General Public License v3
+1.0.10). They are distributed under the GNU General Public License v3
 (see `LICENSE` and `LICENSE-NOTE.md` in those folders). Further data: German names and zone
 assignment from the Forever database (data.morthen.net); map overlay numbers from the client
 tables of the Forever build via wago.tools. The name and logo "Questie" are not used.
+
+## Optional runtime dependency: QuestieDB (not shipped)
+
+On WoW Forever the Open quests tab can read quest data live from the separate add-on **QuestieDB**
+(https://github.com/Questie/QuestieDB, GPL-3.0, installed e.g. together with Questie) if the player has it installed.
+It is not bundled, copied or redistributed by Ink & Embers; its data is only read at run time through its public library
+(LibQuestieDB), and nothing of it is written to disk. Without QuestieDB (and in Retail) the bundled data add-on is used.
 
 ## Game content
 

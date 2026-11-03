@@ -1,5 +1,5 @@
 -- Evaluator for the Kampf page: totals, tally, stamps, most hunted (bestiary), rare entry, hunting grounds (heat grid,
--- else markers + bars), last breath (death n from DE/DR/DC/DB), graves, close calls. Pure read logic over the index.
+-- else markers), last breath (death n from DE/DR/DC/DB), graves, close calls. Pure read logic over the index.
 -- Kampf.evaluate(index, opts) -> view; opts: live, now, zone, death, hunted (zone choice for the whole page: uiMapID
 -- with kills, or "all"/nil). The expensive part is computed once per index (Kampf.static).
 -- All output texts are display-ready (Sanitize.display or constants); names from the SV and spell names from the client
@@ -22,7 +22,6 @@ Kampf.HEAT_MAX = 256       -- blobs per map
 Kampf.POINT_MAX = 400      -- exact kill points per map (as Index.POINT_MAX)
 Kampf.SPOT_MAX = 6         -- enemy kinds in the tooltip of a blob/point
 Kampf.MARKER_MAX = 64      -- markers per map (fallback without N1, deaths)
-Kampf.BAR_MAX = 5          -- bars "kills per zone"
 Kampf.HITS_MAX = 8         -- hits in the death report (the last ones before dying)
 Kampf.GRAVE_MAX = 6        -- zones in the graveyard
 Kampf.CLOSE_MAX = 3        -- close wins
@@ -43,6 +42,7 @@ local TEXT = Loc.ns("m.Kampf", {
   noClose = "Noch kein knapper Sieg.",
   noZone = "Noch keine Jagdgründe.",
   noPos = "Ohne Positionen: Marker für besondere Gegner und Tode",
+  noSpots = "Für diese Zone sind keine Kill-Orte erfasst",
   closeFoot = "Kampfende mit unter 10 % Leben (Näherung)",
   noReport = "Kein lesbarer Todesbericht.",
   gap = "Eintrag nicht lesbar",
@@ -701,7 +701,7 @@ local function buildHunt(index, st, mapID)
   local Idx = I()
   local kills = type(index.kills) == "table" and index.kills or {}
   local grid = Idx.HEAT_GRID
-  local h = { zone = mapID, grid = grid, cells = {}, markers = {}, bars = {}, kills = 0, deaths = 0 }
+  local h = { zone = mapID, grid = grid, cells = {}, markers = {}, kills = 0, deaths = 0 }
   h.zoneName = mapID and zoneName(st, mapID) or nil
   h.kills = mapID and type(kills.map) == "table" and tonumber(kills.map[mapID]) or 0
   local function addMarker(x, y, kind, tip)
@@ -832,18 +832,12 @@ local function buildHunt(index, st, mapID)
     h.mode = (#h.markers > 0) and "markers" or "empty"
   end
   if h.deaths > 0 then h.note = TEXT("diedHere", int(h.deaths)) end
-  -- bars: kills per zone
-  local total = tonumber(kills.total) or 0
-  for i = 1, min(#st.zones, Kampf.BAR_MAX) do
-    local z = st.zones[i]
-    h.bars[i] = { mapID = z.mapID, name = z.name, n = z.n, pct = total > 0 and z.n / total or 0, countText = int(z.n) }
-  end
   if h.mode == "heat" then
     h.caption = TEXT("heatCaption", int(h.kills))
   elseif h.mode == "markers" then
     h.caption = TEXT.noPos
   else
-    h.caption = mapID and TEXT.noPos or TEXT.noZone
+    h.caption = mapID and TEXT.noSpots or TEXT.noZone
   end
   return h
 end

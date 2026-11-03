@@ -7,8 +7,8 @@
 ## Version: @project-version@
 ## LoadOnDemand: 1
 ## Dependencies: InkAndEmbers
-## X-QuestieDB-Version: 1.0.9-dev.7901fee
-## X-Attribution: Data: QuestieDB (Questie team and contributors), version 1.0.9-dev.7901fee. License: GPL-3.0 (see LICENSE and LICENSE-NOTE.md). Game world content (c) Blizzard Entertainment.
+## X-QuestieDB-Version: 1.0.10
+## X-Attribution: Data: QuestieDB (Questie team and contributors), version 1.0.10. License: GPL-3.0 (see LICENSE and LICENSE-NOTE.md). Game world content (c) Blizzard Entertainment.
 ## X-License: GPL-3.0
 ## X-Source-License: https://github.com/Questie/QuestieDB/blob/master/LICENSE.md
 

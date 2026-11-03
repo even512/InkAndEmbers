@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.9.5
+
+### Fixes
+- **Combat page:** the "Hunting Grounds" map is now always drawn at full size. Before, characters with many kills but no
+  recorded kill positions got a squashed map with "Kills per zone" bars underneath. The bars are gone; where there is
+  nothing to draw, the map line says that no kill locations are recorded for the zone. Kills per zone stay in the zone list.
+- **Open quests:** some quests started by an item (e.g. a dropped letter or book) showed a wrong quest giver: an NPC with
+  the item's number. Such quests now show no giver, as in QuestieDB itself (35 quests lost a wrong map point).
+- **WoW Forever, Open quests with QuestieDB:** reading QuestieDB live needs much less memory. Entries that match the bundled
+  data are reused instead of copied, so after the switch the tab holds about as much as with the bundled data alone.
+
+### New
+- **WoW Forever, Open quests:** if QuestieDB is installed (e.g. together with Questie), the Open quests tab reads it live,
+  so it always shows the quest data of the QuestieDB you actually run (the footer says "live"); otherwise the bundled data is
+  used as before. It is read in small steps and never during combat. Retail is unchanged.
+
+### Changes
+- Quest and to-do data updated to QuestieDB 1.0.10 (stable release). The data now comes from the stable QuestieDB releases
+  only, checked against their checksum, instead of the unstable preview channel. Small corrections: two enemies now show as
+  elite and one quest has its corrected level.
+- `/chronik diag` now also shows which version of the separate QuestieDB add-on is installed (only its version and contract
+  number are read) and where the Open quests data comes from ("live" or the bundled extract with its version and the
+  reason). Not shown in Retail.
+- The Open quests tab now shows where its data comes from at the bottom of the page.
+
 ## 0.9.4
 
 ### New

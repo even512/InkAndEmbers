@@ -11,6 +11,11 @@ manual-changelog:
 
 enable-nolib-creation: no
 
+# QuestieDB (CurseForge slug questiedb) is optional: in WoW Forever the open quests are read from it when it is installed,
+# otherwise from InkAndEmbers_QuestData. Not required: the same file is uploaded for Retail, where QuestieDB does not exist.
+optional-dependencies:
+  - questiedb
+
 move-folders:
   InkAndEmbers/addon/InkAndEmbers: InkAndEmbers
   InkAndEmbers/addon/InkAndEmbers_QuestData: InkAndEmbers_QuestData

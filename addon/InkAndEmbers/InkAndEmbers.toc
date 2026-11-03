@@ -10,6 +10,8 @@
 ## X-Curse-Project-ID: 1777406
 ## SavedVariables: EveNChronicleDB
 ## SavedVariablesPerCharacter: InkAndEmbersCharDB
+# Optional: open quests read live from QuestieDB in WoW Forever when it is installed (never in Retail; journal\model\OpenQuestsQDB.lua).
+## OptionalDeps: QuestieDB
 ## IconTexture: Interface\AddOns\InkAndEmbers\Media\MinimapIcon
 ## AddonCompartmentFunc: EveNChronicle_OnAddonCompartmentClick
 
@@ -81,6 +83,7 @@ journal\model\DiaryTexts.lua
 journal\model\NoteMarkup.lua
 journal\model\Notes.lua
 journal\model\TodoData.lua
+journal\model\OpenQuestsQDB.lua
 journal\model\OpenQuests.lua
 journal\model\OpenQuestsRetail.lua
 journal\model\Lehrplan.lua

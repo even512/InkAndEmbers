@@ -1,8 +1,9 @@
 // Erzeugt das Datenaddon InkAndEmbers_Data (To-Do-Ziele, Z2): Gegnerliste und Gegenstandsliste.
 //
 // Aufruf:  node scripts/build-todo-data.mjs [--questie <QuestieDB_Forever.toc>] [--forever <ordner>] [--out <ordner>] [--help]
-//   --questie  QuestieDB im Forever-Stand ("baked" TOC, Vertragsversion 4). Standard: erste vorhandene von
-//              $CHRONICLE_QUESTIE_TOC, <WOW_DIR>\_classic_beta_\...\QuestieDB_Forever.toc, <WOW_DIR>\_forever_\...\QuestieDB_Forever.toc
+//   --questie  QuestieDB im Forever-Stand ("baked" TOC, Vertragsversion 1 bis 4+, siehe openQuestie). Standard: erste vorhandene von
+//              data-capture\questiedb-release\... (stabiles Release, scripts/fetch-questiedb-release.mjs), $CHRONICLE_QUESTIE_TOC,
+//              <WOW_DIR>\_classic_beta_\...\QuestieDB_Forever.toc, <WOW_DIR>\_forever_\...\QuestieDB_Forever.toc
 //              (WOW_DIR und CHRONICLE_QUESTIE_TOC aus der Umgebung oder .env)
 //   --forever  Forever-Datenbank (Dump von data.morthen.net, siehe README "Questdaten neu erzeugen"). Standard: $CHRONICLE_FOREVER_DB
 //   --out      Zielordner. Standard: addon\InkAndEmbers_Data (dort liegt auch die feste TOC)
@@ -38,6 +39,11 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const DATA_ADDON = "InkAndEmbers_Data";
 const DEFAULT_OUT = path.join(ROOT, "addon", DATA_ADDON);
 const QUESTIE_REL = path.join("Interface", "AddOns", "QuestieDB", "QuestieDB_Forever.toc");
+/** Vom Fetch-Skript geladenes stabiles Release (gitignored): gleiche Pfad-Endung wie im Spielordner. */
+export const RELEASE_DIR = path.join(ROOT, "data-capture", "questiedb-release");
+export const RELEASE_TOC = path.join(RELEASE_DIR, QUESTIE_REL);
+/** Hoechster Contract, dessen Entity-Format dieser Build kennt (QuestieDB-Contract 1 bis 4: nur additive Aenderungen). */
+export const KNOWN_CONTRACT = 4;
 
 export const MAX_LEVEL = 62;
 export const MAX_LIST_BYTES = 600 * 1024; // je Liste (Datei)
@@ -62,8 +68,8 @@ const HELP = `InkAndEmbers: Datenaddon ${DATA_ADDON} (Gegner- und Gegenstandslis
 Aufruf:
   node scripts/build-todo-data.mjs [--questie <QuestieDB_Forever.toc>] [--forever <ordner>] [--out <ordner>]
 
-Quellen (nur lokal, nichts wird heruntergeladen):
-  --questie   QuestieDB im Forever-Stand (Standard: CHRONICLE_QUESTIE_TOC, sonst WOW_DIR aus Umgebung/.env)
+Quellen (nur lokal, nichts wird heruntergeladen; das stabile Release holt scripts/fetch-questiedb-release.mjs):
+  --questie   QuestieDB im Forever-Stand (Standard: data-capture\\questiedb-release, sonst CHRONICLE_QUESTIE_TOC, sonst WOW_DIR aus Umgebung/.env)
   --forever   Forever-Datenbank-Dump (Standard: CHRONICLE_FOREVER_DB aus Umgebung/.env)
   --out       Zielordner (Standard: addon\\${DATA_ADDON})
 `;
@@ -106,9 +112,9 @@ export function configPath(name) {
   return v && !v.includes("\0") && path.isAbsolute(v) ? path.resolve(v) : null;
 }
 
-/** Standard-Quellen ohne feste Verzeichnisse: CHRONICLE_QUESTIE_TOC, CHRONICLE_FOREVER_DB, WOW_DIR (Umgebung oder .env). forever = null, wenn nicht gesetzt. */
+/** Standard-Quellen: geladenes stabiles Release (data-capture), dann CHRONICLE_QUESTIE_TOC, CHRONICLE_FOREVER_DB, WOW_DIR (Umgebung oder .env). forever = null, wenn nicht gesetzt. */
 export function defaultSources() {
-  const questie = [];
+  const questie = [RELEASE_TOC];
   const toc = configPath("CHRONICLE_QUESTIE_TOC");
   if (toc) questie.push(toc);
   const wow = configValue("WOW_DIR");
@@ -236,10 +242,32 @@ const asList = (v) => (Array.isArray(v) ? v : v && typeof v === "object" ? Objec
 /** Spalte (Array oder Map Position->Wert, 1-basiert wie Lua) an Position p */
 const colAt = (col, p) => (Array.isArray(col) ? col[p - 1] : col && typeof col === "object" ? col[String(p)] : undefined);
 
-/** Lesezugriff auf eine QuestieDB-"baked"-TOC: ids(kind), field(kind, id, nr), deDE(kind, id). */
-export function openQuestie(text) {
+/**
+ * Untergrenze des Contract-Bereichs aus dem Stempel des geladenen Releases (data-capture/questiedb-release/stamp.json, neben der TOC
+ * drei Ordner hoeher), sonst undefined (lokale TOC ohne Stempel: dann gilt nur der Contract der TOC selbst).
+ */
+export function stampedMinContract(tocFile) {
+  try {
+    const stamp = JSON.parse(readFileSync(path.join(path.dirname(tocFile), "..", "..", "..", "stamp.json"), "utf8"));
+    return Number.isSafeInteger(stamp?.minSupportedContract) ? stamp.minSupportedContract : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Lesezugriff auf eine QuestieDB-"baked"-TOC: ids(kind), field(kind, id, nr), deDE(kind, id).
+ * Vertrag: Die TOC muss einen ganzzahligen Contract >= 1 tragen (Contract 5+ ist laut QuestieDB additiv und wird angenommen).
+ * `minSupportedContract` (aus release.json bzw. dem Stempel, optional): liegt die Untergrenze des Releases ueber KNOWN_CONTRACT,
+ * garantiert es das bekannte Entity-Format nicht mehr -> Abbruch.
+ */
+export function openQuestie(text, { minSupportedContract } = {}) {
   const meta = parseTocMeta(text);
-  if (meta.get("X-Contract-Version") !== "4") throw new Error(`QuestieDB: Vertragsversion ${meta.get("X-Contract-Version") ?? "?"} statt 4`);
+  const contractText = meta.get("X-Contract-Version");
+  if (!/^\d{1,4}$/.test(contractText ?? "") || Number(contractText) < 1) throw new Error(`QuestieDB: Vertragsversion ${contractText ?? "?"} ungueltig (erwartet ganze Zahl ab 1)`);
+  if (minSupportedContract !== undefined && minSupportedContract > KNOWN_CONTRACT) {
+    throw new Error(`QuestieDB: Release garantiert erst Contract ${minSupportedContract} aufwaerts; dieser Build kennt 1 bis ${KNOWN_CONTRACT}`);
+  }
   if (meta.get("X-Flavor") !== "Forever") throw new Error(`QuestieDB: Variante ${meta.get("X-Flavor") ?? "?"} statt Forever`);
   const tableFields = { Npc: NPC_TABLE_FIELDS, Item: ITEM_TABLE_FIELDS, Quest: QUEST_TABLE_FIELDS, Object: OBJECT_TABLE_FIELDS };
   const stats = { badValues: 0 };
@@ -286,7 +314,7 @@ export function openQuestie(text) {
     const v = p && c.col ? colAt(c.col, p) : undefined;
     return typeof v === "string" && v !== "" ? v : undefined;
   };
-  return { version: meta.get("Version") ?? "?", ids, field, deDE, stats, has: (kind, id) => meta.raw.has(`X-${kind}-${id}-S`) };
+  return { version: meta.get("Version") ?? "?", contract: Number(contractText), ids, field, deDE, stats, has: (kind, id) => meta.raw.has(`X-${kind}-${id}-S`) };
 }
 
 // ---------------------------------------------------------------- Forever-Datenbank
@@ -437,7 +465,8 @@ export function itemBlob(list) {
 /** Lua-Literal fuer eine lange Zeichenkette: [==[ ... ]==] mit freier Stufe; erster Zeilenumbruch nach "[" wird von Lua verworfen. */
 export function luaLong(s) {
   let level = 1;
-  while (s.includes("]" + "=".repeat(level) + "]")) level++;
+  // also: a text ending in "]" + level "=" would merge with the closing bracket ("]=" + "]=]" closes early)
+  while (s.includes("]" + "=".repeat(level) + "]") || s.endsWith("]" + "=".repeat(level))) level++;
   const eq = "=".repeat(level);
   return `[${eq}[\n${s}]${eq}]`;
 }
@@ -463,7 +492,7 @@ async function writeAtomic(file, text) {
 }
 
 export async function build({ questie, forever, out }) {
-  const q = openQuestie(readFileSync(questie, "utf8"));
+  const q = openQuestie(readFileSync(questie, "utf8"), { minSupportedContract: stampedMinContract(questie) });
   const f = openForever(forever);
   const npcs = buildNpcs(q, f);
   const items = buildItems(q, f);
