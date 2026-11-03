@@ -556,6 +556,28 @@ local function first(fn, ...)
   return r and num(r[1]) or nil
 end
 
+-- B9: free slots in the bags (backpack and bags 1-4); nil if the API is missing or nothing was readable
+local BAG_LAST = 4
+local function freeBagSlots()
+  local C = C_Container
+  if type(C) ~= "table" or isSecret(C) then return nil end
+  local sum, read = 0, false
+  for bag = 0, BAG_LAST do
+    local n = num(call(C.GetContainerNumFreeSlots, bag))
+    if n and n >= 0 then
+      sum = sum + floor(n)
+      read = true
+    end
+  end
+  return read and sum or nil
+end
+
+-- B9: ammunition in the ammo slot (inventory slot 0); only for classes that use ammo (UnitUsesAmmo exists on Forever only)
+local function ammoCount()
+  if not isTrue(call(UnitUsesAmmo, "player")) then return nil end
+  return num(call(GetInventoryItemCount, "player", 0))
+end
+
 function Character.statsSnapshot(self, level)
   level = num(level) or playerLevel()
   if not level then return end
@@ -578,6 +600,8 @@ function Character.statsSnapshot(self, level)
     if a then v.attackPower = a + (b or 0) + (c or 0) end
   end
   v.spellPower, v.healing = first(GetSpellBonusDamage, 2), first(GetSpellBonusHealing)
+  v.bagFree, v.ammo = freeBagSlots(), ammoCount()
+  v.defense = first(UnitDefenseSkill, "player") -- B10 (Forever only)
   if next(v) then Store.putSnapshot("stats", level, v) end
 end
 

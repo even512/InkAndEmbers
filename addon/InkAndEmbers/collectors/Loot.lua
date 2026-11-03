@@ -1,5 +1,7 @@
 -- Collector 'Loot': finds from green up individually, below only counters. Finds come from the chat message (patterns from GlobalStrings); LOOT_OPENED only gives source and quality.
 -- A secret message is never guessed (counters.unreadable.loot_msg). Items are stored as item key (Patterns.itemLink); signal FC_LOOT(itemID, count, quality, source, srcID, name).
+-- Loot rolls (B5): START_LOOT_ROLL remembers the item, the RollOnLoot hook writes RL (choice) and counts counters.rolls[need|greed|pass|de|tmog];
+-- the system messages give RW (won, with our own roll number if it was seen) and counters.rolls.won.
 -- Unreadable source (Retail 12.x): a fresh kill nearby (KILL_TTL_*) gives source 'mob', srcID only if unambiguous and newer than KILL_SRC_MAX s; an approximation (a chest after a kill can count as an enemy).
 local _, ns = ...
 local Core, Store, Patterns, Context = ns.Core, ns.Store, ns.Patterns, ns.Context
@@ -66,12 +68,88 @@ local GROUP = { vendor = "bought", craft = "crafted", mail = "received", trade =
 
 local Loot = {
   requires = { "UnitGUID" },
-  events = { "LOOT_OPENED", "CHAT_MSG_LOOT" },
+  events = { "LOOT_OPENED", "CHAT_MSG_LOOT", "START_LOOT_ROLL" },
   signals = { "FC_KILL", "FC_KILL_SEEN" },
 }
 local handlers = {}
 
+-- RollOnLoot(rollID, rollType): 0 pass, 1 need, 2 greed, 3 disenchant, 4 transmog (Retail)
+local ROLL_CHOICE = { [0] = "pass", [1] = "need", [2] = "greed", [3] = "de", [4] = "tmog" }
+local ROLLED = { "LOOT_ROLL_ROLLED_NEED", "LOOT_ROLL_ROLLED_GREED", "LOOT_ROLL_ROLLED_DE" } -- (roll, item, player)
+local ROLL_MAX = 20 -- remembered rolls (open rolls and our roll numbers) before the memory starts over
+
+-- { key, id } of the item of a roll; nil if the API is missing or the link unreadable
+local function rollItem(rollID)
+  if type(GetLootRollItemLink) ~= "function" then return nil end
+  local id, bonus, quality, name = Patterns.itemLink(call(GetLootRollItemLink, rollID))
+  if not id then return nil end
+  Store.noteItem(id, name, quality)
+  return { key = Patterns.itemKey(id, bonus), id = id }
+end
+
+local function remember(t, k, v)
+  local n = 0
+  for _ in pairs(t) do n = n + 1 end
+  if n >= ROLL_MAX then
+    for key in pairs(t) do t[key] = nil end
+  end
+  t[k] = v
+end
+
+handlers.START_LOOT_ROLL = function(self, rollID)
+  rollID = num(rollID)
+  if not rollID then return end
+  rollID = floor(rollID)
+  local item = rollItem(rollID)
+  if item then remember(self.rolls, rollID, item) end
+end
+
+-- hook on RollOnLoot (runs after the original call)
+local function onRoll(self, rollID, rollType)
+  rollID, rollType = num(rollID), num(rollType)
+  if not rollID then return end
+  rollID = floor(rollID)
+  local choice = rollType and ROLL_CHOICE[floor(rollType)] or "other"
+  local item = self.rolls[rollID] or rollItem(rollID)
+  self.rolls[rollID] = nil
+  Store.append("RL", item and item.key, choice, rollID)
+  Store.count("rolls", choice)
+end
+
+-- own name in "by <player>" (plain or with realm); never a name that only contains ours
+local function isMe(who)
+  local me = str(call(UnitName, "player"))
+  who = str(who)
+  if not me or not who then return false end
+  return who == me or string.sub(who, 1, #me + 1) == me .. "-"
+end
+
+-- roll messages of CHAT_MSG_LOOT: our own roll number (ROLLED) and the win (LOOT_ROLL_YOU_WON). true if the text was one of them.
+local function rollMessage(self, text)
+  local link = Patterns.match("LOOT_ROLL_YOU_WON", text)
+  if link then
+    local id, bonus = Patterns.itemLink(link)
+    if id then
+      Store.append("RW", Patterns.itemKey(id, bonus), self.myRolls[id])
+      Store.count("rolls", "won")
+      self.myRolls[id] = nil
+    end
+    return true
+  end
+  for i = 1, #ROLLED do
+    local roll, itemLink, who = Patterns.match(ROLLED[i], text)
+    if roll ~= nil then
+      local id = Patterns.itemLink(itemLink)
+      if id and num(roll) and isMe(who) then remember(self.myRolls, id, floor(roll)) end
+      return true
+    end
+  end
+  return false
+end
+
 function Loot:init()
+  self.rolls, self.myRolls = {}, {} -- rollID -> { key, id } (open rolls); itemID -> our roll number
+  if type(GetLootRollItemLink) == "function" then Core.hook(self, "RollOnLoot", onRoll) end
   self.slots = {} -- itemID -> { kind, srcID, quality, at }
   self.kills = {} -- fresh kills: { id = npcID or nil (unreadable), at }
   self.window = nil -- last opened loot window: { at, fishing }
@@ -224,6 +302,7 @@ handlers.CHAT_MSG_LOOT = function(self, text)
       end
     end
   end
+  rollMessage(self, text)
 end
 
 function Loot:onEvent(event, ...)

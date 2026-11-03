@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.9.4
+
+### New
+- **Data safety:** every character's data is now also mirrored into a second file that belongs to that character
+  (`WTF/Account/<ACCOUNT>/<Realm>/<Character>/SavedVariables/InkAndEmbers.lua`). If the main file is missing, damaged or
+  holds an older state when you log in, the character is restored from its copy automatically, without losing a line.
+  Newer data is never replaced by older data, and a differing older state is kept aside instead of being deleted.
+  Tips for keeping your own backup are in the README under "Keeping your data safe".
+- **`/chronik backup`:** shows the state of your data safety: when this character's copy was last written, the last save,
+  how full the main file is and the last restore. (`/chronik sicherung` works too.)
+- **Warnings:** a window tells you when data was restored, when the data of other characters is missing from the main file,
+  or when the add-on found no saved data for a character that is clearly not new. It says what to do (do not log out, copy
+  the `.bak` file). The add-on also keeps an eye on the size of the main file and warns long before the game could no longer
+  load it.
+- **Save reminder:** the reminder to save now comes every 30 minutes instead of 60, and also when you take off on a flight
+  or gain a level (at least 10 minutes after the last save, never in combat or in an instance).
+
+### Changes
+- Errors: if one part of the add-on runs into errors, only that part pauses for a few minutes and then carries on, instead
+  of being switched off for the rest of the session. `/chronik status` and `/chronik diag` name paused parts.
+- Every session now notes which version of the add-on recorded it, which makes bug reports easier to follow.
+- More is recorded for your journal: game rules of your character (WoW Forever experience setting, Hardcore, game mode),
+  your pet (summoned, dismissed, tamed, stable slots), loot rolls, spells cast, jumps, PvP flag, gear durability, day or
+  night, quest details (elite, group size) and a few more character values.
+
+### Fixes
+- A damaged value in the saved file is no longer thrown away and replaced by an empty one; it is kept aside so nothing is
+  lost.
+- The add-on version written into the saved file is now the real version instead of a placeholder.
+
 ## 0.9.3
 
 ### New

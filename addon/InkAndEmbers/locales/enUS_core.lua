@@ -18,7 +18,9 @@ L.add("enUS", "Locale", {
 
 L.add("enUS", "Core", {
   prefix = "Chronicle:",
-  collectorOff = "Collector \"%s\" was turned off after %d errors. Details: /chronik diag",
+  handlerOff = "Collector \"%s\": the recording \"%s\" failed repeatedly and stays off until the next reload. Details: /chronik diag",
+  handlersPaused = "Paused recordings: %s",
+  handlersOff = "Recordings off until the reload: %s",
   moreCount = " (+%d more)",
   allRunning = "all recordings are running",
   someRunning = "%d of %d recordings are running (troubleshooting: /chronik diag)",
@@ -47,6 +49,7 @@ L.add("enUS", "Core", {
   helpLanguage = "/chronik language - choose language: \"language auto\", \"language de\" or \"language en\" (takes effect after /reload)",
   helpReset = "/chronik reset - reset the size and position of the travel journal",
   helpSave = "/chronik save - open the save window (saving reloads the interface)",
+  helpBackup = "/chronik backup - state of the data safety: this character's backup copy, last save, how full the file is",
   helpHelp = "/chronik help - this list of commands",
   helpTutorial = "/chronik tutorial - show the introduction (a little book to leaf through) again",
   helpAliases = "The German command names (optionen, sichern, rast, feuer, ...) work too.",
@@ -90,6 +93,33 @@ L.add("enUS", "Core", {
   rqError = "Quest interfaces: error while reading (%s).",
   rqDetails = "Details in EveNChronicleDB.diag.retailQuests[%d] (in the file after /reload).",
   unknownCommand = "Unknown command \"%s\". /chronik help lists all commands.",
+})
+
+L.add("enUS", "Guard", {
+  title = "Ink & Embers: data safety",
+  ok = "Understood",
+  restored = "This character's data was restored from its own backup copy (%d entries) because the main file %s. Nothing was lost. Details: /chronik backup",
+  reasonMissing = "did not contain it",
+  reasonEmpty = "held it without entries",
+  reasonOlder = "only held an older state",
+  archived = "A differing state of this character was kept in EveNChronicleDB.archive (nothing deleted).",
+  missingChars = "The main file lacks the data of %d other characters. It is brought back from their own backup copies when you log in with them. Safest: now, while the game runs, copy the files InkAndEmbers.lua and InkAndEmbers.lua.bak from WTF\\Account\\<account>\\SavedVariables to a safe place (how to: README, \"Keeping your data safe\").",
+  freshSuspect = "Ink & Embers found no saved data and started a new journal. If this is your first time with the add-on, all is well. If you used it before, the game did not load the file: quit the game now (no /reload), then copy InkAndEmbers.lua.bak back. How to: README, \"Keeping your data safe\".",
+  constantsAlert = "The main file of Ink & Embers is %s full. At 100 %% the game can no longer load it. Your characters are protected by their own backup copies, still: please back up your WTF folder and let us know (feedback: README or CurseForge).",
+  constantsHint = "The main file is %s full; at 100 %% the game can no longer load it. Please back up your WTF folder now and then. Details: /chronik backup",
+  pct = "%d.%d %%",
+  dateFmt = "%m/%d/%Y %H:%M",
+  backupTitle = "Data safety:",
+  mirrorState = "Backup copy of this character: last written %s (%d entries).",
+  mirrorNone = "Backup copy of this character: none yet; it is written with the next save or logout.",
+  mirrorOff = "Backup copy of this character: not written in this session (see EveNChronicleDB.diag.recovery).",
+  lastSave = "Last saved: %s.",
+  constantsState = "Main file fill level: %s (%d of %d constants, counted %s).",
+  constantsPending = "Main file fill level: still counting.",
+  recoveryLast = "Last restore: %s (%s).",
+  recoveryNone = "No restore so far.",
+  archiveCount = "Kept older states: %d (in EveNChronicleDB.archive).",
+  missingState = "Characters missing from the main file: %d.",
 })
 
 L.add("enUS", "Save", {

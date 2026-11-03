@@ -1,5 +1,6 @@
--- Collector 'Extras': consumables, emotes, fishing. Counters only, no log lines (exception: the first_fish moment).
+-- Collector 'Extras': consumables, emotes, fishing, casts, jumps, PvP flag. Counters only, no log lines (exception: the first_fish moment).
 -- counters.consumables[itemID], counters.consumed[kind] (potion|elixir|flask|food_drink|bandage|other), counters.emotes[TOKEN], counters.fishing[itemID];
+-- counters.casts[spellID] (own successful casts), counters.misc.jumps, counters.misc.pvpFlagOn (PvP flag switched on);
 -- counters.reagents[itemID] is an approximation: bag decrease shortly after an own cast (not at vendor, mail, trade, bank, AH).
 local _, ns = ...
 local Core, Store, Context = ns.Core, ns.Store, ns.Context
@@ -53,8 +54,8 @@ local KIND = { [1] = "potion", [2] = "elixir", [3] = "flask", [5] = "food_drink"
 
 local Extras = {
   requires = { "UnitName" },
-  events = { "CHAT_MSG_TEXT_EMOTE", "BAG_UPDATE_DELAYED" },
-  unitEvents = { UNIT_SPELLCAST_SUCCEEDED = { "player" } },
+  events = { "CHAT_MSG_TEXT_EMOTE", "BAG_UPDATE_DELAYED", "PLAYER_PVP_FLAG_CHANGED" },
+  unitEvents = { UNIT_SPELLCAST_SUCCEEDED = { "player" }, UNIT_FACTION = { "player" } },
   signals = { "FC_LOOT" },
 }
 local handlers = {}
@@ -138,6 +139,12 @@ handlers.UNIT_SPELLCAST_SUCCEEDED = function(self, unit, castGUID, spellID)
   if not spellID then return end
   spellID = floor(spellID)
   self.castAt = GetTime()
+  -- every own cast counts once (B2): one table increment, the same castGUID twice in a row counts once
+  local gid = str(castGUID)
+  if not (gid and self.lastCastGUID == gid) then
+    self.lastCastGUID = gid
+    Store.count("casts", spellID)
+  end
   local itemID = self.spellItem[spellID]
   if itemID and not (str(castGUID) and self.lastCast[spellID] == castGUID) then
     self.lastCast[spellID] = str(castGUID)
@@ -147,6 +154,27 @@ handlers.UNIT_SPELLCAST_SUCCEEDED = function(self, unit, castGUID, spellID)
   end
   -- recount reagents only if bags hold any (saves querying all bags on every cast)
   if self.reagents and next(self.reagents) then scheduleScan(self, CAST_DELAY) end
+end
+
+-- PvP flag (B12): counts the switch from off to on; the state at start is only remembered. PLAYER_PVP_FLAG_CHANGED exists on Forever,
+-- UNIT_FACTION covers both clients.
+local function readPvp()
+  local v = call(UnitIsPVP, "player")
+  if isSecret(v) or type(v) ~= "boolean" then return nil end
+  return v
+end
+
+local function checkPvp(self)
+  local now = readPvp()
+  if now == nil then return end
+  local was = self.pvp
+  self.pvp = now
+  if now == true and was == false then Store.count("misc", "pvpFlagOn") end
+end
+
+handlers.PLAYER_PVP_FLAG_CHANGED = function(self) checkPvp(self) end
+handlers.UNIT_FACTION = function(self, unit)
+  if unit == "player" then checkPvp(self) end
 end
 
 -- Emotes
@@ -191,7 +219,9 @@ end
 function Extras:init()
   self.meta, self.metaCount, self.spellItem, self.lastCast = {}, 0, {}, {}
   self.reagents = nil
+  self.pvp = readPvp()
   Core.hook(self, "DoEmote", onEmote)
+  Core.hook(self, "JumpOrAscendStart", function() Store.count("misc", "jumps") end) -- B8: one increment per jump
   Core.after(self, 2, function(s)
     s.scanAt = GetTime()
     rescan(s)

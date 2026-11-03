@@ -48,6 +48,12 @@ ns.Types = {
     { "interface", "Interface-Nummer (16001 Forever, 120105 Retail)" },
     { "locale", "Client-Sprache, z. B. deDE" },
     { "tz", "Zeitzonen-Versatz in Sekunden (Ortszeit minus UTC)" },
+    { "xpPreset", "Forever-Erfahrungs-Preset (Rohwert, z. B. 0 oder 1; leer, wenn der Client keins meldet)" },
+    { "hc", "1, wenn Hardcore aktiv ist, 0 wenn nicht, leer = unbekannt" },
+    { "gameMode", "aktiver Spielmodus (Rohwert des Clients)" },
+    { "modeRec", "Datensatz-ID des aktuellen Spielmodus (Rohwert des Clients)" },
+    { "addon", "Addon-Version, die diese Sitzung schrieb (z. B. 0.9.4; \"dev\" bei lokaler Installation)" },
+    { "pvp", "1 = PvP-Markierung beim Einloggen an, 0 = aus, leer = unbekannt" },
   } },
   R = { order = 20, name = "Reload", desc = "Dieselbe Sitzung geht nach einem Reload (Sichern, /reload) weiter.", fields = {
     { "session", "Sitzungsnummer" },
@@ -71,6 +77,7 @@ ns.Types = {
     { "x", "Position West-Ost auf dieser Karte (0-9999)" },
     { "y", "Position Nord-Süd auf dieser Karte (0-9999)" },
     { "sub", "Name der Unterzone (GetSubZoneText, gesäubert, höchstens 60 Bytes), leer wenn ohne Namen oder nicht lesbar" },
+    { "day", "1 = Tag, 0 = Nacht laut Spiel (C_DateAndTime.IsDayTime), leer wenn nicht vorhanden" },
   } },
   PL = { order = 110, name = "Spielzeit", desc = "Antwort auf /played (nach Login, Reload und Level-Up angefragt; beim Logout nicht, dort kommt keine Antwort mehr an).", fields = {
     { "total", "gesamte Spielzeit in Sekunden" },
@@ -190,6 +197,9 @@ ns.Types = {
     { "instance", "1 = in einer Instanz" },
     { "combat", "1 = im Kampf gestorben" },
     { "sub", "Name der Unterzone (GetSubZoneText, gesäubert, höchstens 60 Bytes), leer wenn ohne Namen oder nicht lesbar" },
+    { "durMin", "geringste Haltbarkeit aller getragenen Gegenstände (Plätze 1-18) in Prozent, leer wenn nichts Haltbares getragen wird oder nicht lesbar" },
+    { "durAvg", "durchschnittliche Haltbarkeit der getragenen Gegenstände in Prozent (ganzzahlig), leer wie durMin" },
+    { "day", "1 = Tag, 0 = Nacht laut Spiel (C_DateAndTime.IsDayTime), leer wenn nicht vorhanden" },
   } },
   DR = { order = 510, name = "Todesbericht-Treffer", desc = "Ein Eintrag des Todesberichts (C_DeathRecap), in der Reihenfolge des Clients.", fields = {
     { "ago", "Zehntelsekunden vor dem letzten Treffer (0 = Todesstoß)" },
@@ -220,6 +230,8 @@ ns.Types = {
     { "mapID", "Karte (uiMapID) bei der Wiederbelebung" },
     { "x", "Position West-Ost (0-9999)" },
     { "y", "Position Nord-Süd (0-9999)" },
+    { "durMin", "geringste Haltbarkeit der getragenen Gegenstände (Plätze 1-18) nach der Wiederbelebung in Prozent (zeigt den Verlust beim Geistheiler), leer wenn nicht lesbar" },
+    { "durAvg", "durchschnittliche Haltbarkeit in Prozent (ganzzahlig) nach der Wiederbelebung, leer wie durMin" },
   } },
 
   -- World: map names in snapshots.maps, visited maps and subzones in snapshots.zones/subzones.
@@ -568,6 +580,32 @@ ns.Types = {
     { "text", "Text des Vorhabens (gesäubert, höchstens 120 Zeichen; bei Gegnern/Gegenständen mit Anzahl, z. B. 10× Hasenpfote)" },
     { "how", "Wie erledigt: leer = Zielzone betreten, place = Ort erreicht, kill = Gegner getötet, item = Gegenstände gefunden, hand = von Hand abgehakt" },
   } },
+
+  -- Added with 0.9.4 (appended at the end; new codes only, existing codes keep their fields): rule changes, loot rolls, companions.
+  GG = { order = 60, name = "Spielregel geändert", desc = "Eine Spielregel hat sich zur Laufzeit geändert (GAME_RULES_CHANGED, nur Forever): Erfahrungs-Voreinstellung, Hardcore oder Spielmodus. Nur bei geändertem Wert; der Stand beim Einloggen steht in L.", fields = {
+    { "xpPreset", "Erfahrungs-Voreinstellung als Rohzahl (siehe L), leer wenn nicht vorhanden" },
+    { "hc", "1 = Hardcore aktiv, 0 = nicht, leer wenn nicht lesbar" },
+    { "gameMode", "aktiver Spielmodus (Rohwert), leer wenn nicht vorhanden" },
+    { "modeRec", "Datensatz-ID des Spielmodus, leer wenn nicht vorhanden" },
+  } },
+  RL = { order = 1110, name = "Beutewurf", desc = "Ihr habt bei einem Beutewurf gewählt (RollOnLoot). Der Name des Gegenstands steht in snapshots.items; die Wahl zählt zusätzlich in counters.rolls.", fields = {
+    { "item", "Item-Schlüssel wie bei LT, leer wenn der Gegenstand nicht lesbar war" },
+    { "choice", "Wahl: need (Bedarf), greed (Gier), pass (Passen), de (Entzaubern), tmog (Transmog), other (unbekannte Zahl)" },
+    { "rollID", "Wurf-Nummer des Spiels (rollID)" },
+  } },
+  RW = { order = 1120, name = "Wurf gewonnen", desc = "Ihr habt einen Beutewurf gewonnen (Systemmeldung 'Ihr habt gewonnen'). Zählt zusätzlich in counters.rolls.won.", fields = {
+    { "item", "Item-Schlüssel wie bei LT" },
+    { "roll", "gewürfelte Augenzahl aus der eigenen Würfelmeldung, leer wenn keine zu sehen war" },
+  } },
+  PE = { order = 1620, name = "Begleiter", desc = "Ein Begleiter (Jäger-Tier, Hexenmeister-Dämon, Todesritter-Ghul u. ä.) ist erschienen, gewechselt oder verschwunden. Nur bei Wechsel der Kreatur (GUID), nie bei jedem Treffer.", fields = {
+    { "how", "summon (erscheint), dismiss (verschwindet), new (zum ersten Mal gesehen), change (direkt gegen ein anderes getauscht), tame (frisch gezähmt)" },
+    { "npcID", "Kreatur (npcID aus der GUID); ? = nicht lesbar" },
+    { "name", "Name des Begleiters; ? = gesperrt" },
+    { "family", "Kreaturenfamilie (UnitCreatureFamily, z. B. Wolf), leer wenn keine" },
+    { "level", "Stufe des Begleiters, leer wenn nicht lesbar" },
+    { "loyalty", "Loyalität laut Forever-API (Rohwert), leer wenn nicht vorhanden" },
+    { "happiness", "Zufriedenheit laut Forever-API (Rohwert), leer wenn nicht vorhanden" },
+  } },
 }
 
 local function isSecret(v)
@@ -637,20 +675,49 @@ end
 
 -- Database
 
+-- like sub, but a non-table value is never thrown away: it moves aside (key_bad, key_bad2, ...) and is noted
+local function subKeep(t, k, notes)
+  local v = t[k]
+  if v ~= nil and type(v) ~= "table" then
+    local name, i = k .. "_bad", 1
+    while t[name] ~= nil do
+      i = i + 1
+      name = k .. "_bad" .. i
+    end
+    t[name] = v
+    t[k] = nil
+    if notes then notes[#notes + 1] = { reason = "not_table", key = k, keptAs = name } end
+  end
+  return sub(t, k)
+end
+
 function Store.init()
-  local db = EveNChronicleDB
-  if type(db) ~= "table" then db = {} end
+  local raw = EveNChronicleDB
+  local notes = {}
+  local db = raw
+  -- nil: nothing was loaded (new install, or the game did not load the file: Guard decides at login)
+  Store.mainMissing = raw == nil
+  if raw ~= nil and type(raw) ~= "table" then
+    -- damaged main file: keep the original value instead of discarding it
+    db = { recovered = raw }
+    notes[#notes + 1] = { reason = "main_not_table", key = "EveNChronicleDB", keptAs = "recovered" }
+  elseif raw == nil then
+    db = {}
+  end
   if type(db.schema) ~= "number" then
     db.schema = ns.SCHEMA
   elseif db.schema > ns.SCHEMA then
     Store.futureSchema = db.schema -- newer file: rebuild nothing, only note it
   end
   db.addonVersion = ns.version
-  local meta = sub(db, "meta")
-  sub(meta, "sessions")
-  local diag = sub(db, "diag")
+  local meta = subKeep(db, "meta", notes)
+  subKeep(meta, "sessions", notes)
+  local diag = subKeep(db, "diag", notes)
   if Store.futureSchema then diag.schemaWarning = "Datei hat Schema " .. int(Store.futureSchema) .. ", Addon kennt " .. int(ns.SCHEMA) end
-  sub(db, "chars")
+  subKeep(db, "chars", notes)
+  if ns.Guard then
+    for _, n in ipairs(notes) do ns.Guard.note(db, n) end
+  end
   EveNChronicleDB = db
   Store.db = db
   Store.hookReload()
@@ -687,8 +754,11 @@ function Store.login()
   if isSecret(guid) or type(guid) ~= "string" or guid == "" then
     error("Spieler-GUID nicht lesbar")
   end
-  local char = sub(db.chars, guid)
-  for _, k in ipairs(Store.CHAR_TABLES) do sub(char, k) end
+  -- data safety (Guard.lua): main file against the character's own mirror, before the character table is created
+  local Guard = ns.Guard
+  if Guard then Guard.prepare(db, guid) end
+  local char = subKeep(db.chars, guid)
+  for _, k in ipairs(Store.CHAR_TABLES) do subKeep(char, k) end
   local info, now = char.info, time()
   local fresh = not info.firstSeen
   if fresh then info.firstSeen = now end
@@ -712,6 +782,7 @@ function Store.login()
   end
   Store.fresh = fresh and { at = now, level = level } or nil
   Store.sizes = {}
+  if Guard then Guard.attach(db, guid, char) end
   Store.openBlock()
 end
 
@@ -1071,6 +1142,7 @@ function Store.beginSession(isInitialLogin, isReloadingUi)
   local locale = GetLocale and GetLocale()
   sessions[#sessions + 1] = {
     guid = guid,
+    addon = text(ns.version),
     start = now,
     build = text(build),
     buildNumber = tonumber(buildNumber),
@@ -1079,7 +1151,13 @@ function Store.beginSession(isInitialLogin, isReloadingUi)
     tz = tz,
   }
   Store.session = #sessions
-  Store.append("L", Store.session, build, buildNumber, tonumber(interface), locale, tz)
+  -- end fields of L (0.9.4): game rules, version, PvP flag; read by collectors/Progress.lua (ns.loginExtras), missing = empty
+  local xpPreset, hc, gameMode, modeRec, pvp
+  if type(ns.loginExtras) == "function" then
+    local ok, a, b, c, d, e = pcall(ns.loginExtras)
+    if ok then xpPreset, hc, gameMode, modeRec, pvp = a, b, c, d, e end
+  end
+  Store.append("L", Store.session, build, buildNumber, tonumber(interface), locale, tz, xpPreset, hc, gameMode, modeRec, text(ns.version), pvp)
 end
 
 -- PLAYER_LOGOUT: with a valid reload flag: S, the session stays open (stop nil, reloadAt). Otherwise O and stop.
@@ -1109,4 +1187,6 @@ function Store.logout()
       s.stop = now
     end
   end
+  -- mirror markers after the last flush (also on reload); Guard.write never throws
+  if ns.Guard then ns.Guard.write(db) end
 end

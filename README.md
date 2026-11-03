@@ -62,19 +62,44 @@ New files such as textures and fonts are only picked up after a full restart of 
 | `/chronik training` | open the Training tab under Quests (WoW Forever only; `training status` prints the state) |
 | `/chronik language` | `auto`, `de` or `en`; takes effect after `/reload` |
 | `/chronik save` | open the save window; saving reloads the interface |
+| `/chronik backup` | state of the data safety: this character's backup copy, last save, how full the main file is, last restore |
 | `/chronik reset` | reset size and position of the journal |
 | `/chronik welcome`, `rest`, `tutorial` | show the welcome card, the "Since your last rest" recap, the introduction book |
 | `/chronik diag` | self-test of all interfaces, result in `EveNChronicleDB.diag` |
 | `/chronik help` | list all commands |
 
-The German command names (`optionen`, `sichern`, `rast`, `feuer` and so on) work as well. After 60 minutes without
-a save a small window asks whether to save the journey. In combat and in instances it waits for the next quiet moment.
+The German command names (`optionen`, `sichern`, `rast`, `feuer` and so on) work as well. After 30 minutes without
+a save a small window asks whether to save the journey. It also asks when you take off on a flight or gain a level (if
+your last save is at least 10 minutes old, and not more often than every 10 minutes). In combat and in instances it waits
+for the next quiet moment.
 
 ## Data and privacy
 
 Everything stays on your computer. The data is saved in the account-wide SavedVariables file
 `WTF/Account/<ACCOUNT>/SavedVariables/InkAndEmbers.lua`, in the variable `EveNChronicleDB`, one entry per character. WoW writes
 that file on logout and on reload. The addon only says something to other players when you click a campfire note yourself.
+
+### Keeping your data safe
+
+Your journal can hold weeks of play, so the add-on takes some care, but please read the honest limits below.
+
+- **A second copy per character.** Besides the account-wide file, the add-on mirrors each character's own data into a separate
+  file of that character: `WTF/Account/<ACCOUNT>/<Realm>/<Character>/SavedVariables/InkAndEmbers.lua` (variable
+  `InkAndEmbersCharDB`). If the main file is missing, damaged or older than the copy when you log in, the add-on restores the
+  character from the copy and tells you. It never replaces newer data with older data.
+- **It is not a real backup.** The copy lives in the same `WTF` folder on the same disk. It does not help if the disk dies,
+  or if the game fails to load saved variables at all. **If you want to be safe, copy your `WTF` folder now and then**
+  (copying while the game runs is fine). The game writes the files only on logout and reload, so a crash loses what happened
+  since the last save; that is why the add-on reminds you every 30 minutes.
+- **If the add-on shows a warning** that data was missing or restored, or that it started a new journal although you used it before:
+  1. **Do not log out and do not reload yet.** Every write replaces `InkAndEmbers.lua.bak` with the current state, and that file
+     is your last good copy.
+  2. While the game is still running, copy the files `InkAndEmbers.lua` and `InkAndEmbers.lua.bak` from
+     `WTF/Account/<ACCOUNT>/SavedVariables` (and the ones in the character's folder) to a safe place.
+  3. Quit the game completely. Then take your saved copy of `InkAndEmbers.lua.bak`, rename that copy to `InkAndEmbers.lua` and put
+     it into the same folder, replacing the file that is there. Start the game again.
+  `/chronik backup` shows the state of the character's copy, the last save, how full the main file is and the last restore;
+  `/chronik diag` shows what the add-on found, and bug reports are welcome (see Feedback).
 
 ## Building from the source
 
@@ -154,7 +179,11 @@ EveNChronicleDB = {
     tzOffset,                 -- local time minus UTC (seconds) of the last session
     reloadAt,                 -- only set between a reload logout and the next login
   },
-  diag = { collectors, apis, patterns, client, restrictions, state, core, lastRun },
+  diag = { collectors, apis, patterns, client, restrictions, state, core, lastRun,
+    recovery = { { at, guid, reason, from, lines, ... }, ... },   -- data safety events (restore, kept states, damaged values)
+    constants = { n, at, pct },                                    -- distinct constants of this file (game limit 262143)
+  },
+  archive = { ["Player-..."] = { { at, reason, lineCount, lastBlockAt, char }, ... } },  -- only if needed, see below
   chars = { ["Player-..."] = {
     info = { name, realm, race, raceFile, class, classFile, faction, factionName, firstSeen, lastSeen },
     lineCount,                -- number of all log lines
@@ -168,6 +197,29 @@ EveNChronicleDB = {
   } },
 }
 ```
+
+Each character also has its own file `WTF/Account/<ACCOUNT>/<Realm>/<Character>/SavedVariables/InkAndEmbers.lua`
+(`## SavedVariablesPerCharacter`), a mirror of that character only:
+
+```
+InkAndEmbersCharDB = {
+  v = 1,                      -- mirror format
+  guid = "Player-...",
+  savedAt, addonVersion,      -- when and by which version it was written (logout or reload)
+  lineCount, lastBlockAt,     -- markers: number of log lines, epoch of the newest log block header
+  sessions = { { <copy of the character's meta.sessions entry>, idx = <index in meta.sessions> }, ... },
+  accountChars = { ["Player-..."] = <lineCount>, ... },   -- all characters of the main file at that time
+  missingChars = { ["Player-..."] = { lines, since, warned } },   -- only while characters are missing from the main file
+  char = { <the same table as EveNChronicleDB.chars[guid]> },
+}
+```
+
+At login the add-on compares the main file with the mirror. The mirror wins only if the main file lacks the character, holds it
+without lines, or holds an older state (more lines in the mirror and its newest block header is not older). Its sessions are then
+added to `meta.sessions` and the session index in each block header is rewritten. A losing state that holds a log or trail block
+the winner does not have is kept under `archive[guid]` (nothing is deleted automatically); the log gets a `GR` line. A value that
+is not a table where a table belongs is never dropped either: it moves aside (`recovered`, `chars_bad`, `<key>_bad`) and
+`diag.recovery` notes it. Readers only need `EveNChronicleDB`; the mirror is a safety copy.
 
 A session runs from login to logout (`O`, `stop`). A reload (save button, `/reload`) continues the same session: `S` when the
 interface reloads (`stop` stays empty, `reloadAt` is set), `R` afterwards, and `reloads` goes up by one. If the end of a session is missing at
@@ -204,7 +256,8 @@ the map changes, after 500 points and after login or reload.
   If you show this data on a web page, escape it and never insert it as HTML.
 - Quests: `quests[questID]` has `title`, `detail` (accept text), `objectives`, `progress`, `reward`, `rewardMoney`, `choices`,
   `rewardChoices`, `rewardItems`, `giver`/`giverNpc`, `qlevel`, `mapID`, `category` (the header above the quest in the quest log) and,
-  where the client provides them, `questLine`, `questLineName`, `questLinePos`, `questLineLen`. Older entries may lack newer fields.
+  where the client provides them, `questLine`, `questLineName`, `questLinePos`, `questLineLen`, and (0.9.4) `group` (suggested group size), `elite`, `tag` (quest tag name), `freq`
+  (0 normal, 1 daily, 2 weekly). Older entries may lack newer fields.
 - Books: `books[key]` has `title`, `material`, `mapID`, the pages as `p1`, `p2`, ... and `pages`. The key is a stable 16-digit hash of title,
   material and first page. Only pages the player opens are read.
 - Item keys (in `LT`, `GW`, `TH`, `PM`, `PS`, `snapshots.gear`) are `<itemID>`, or `<itemID>.s<suffix>.b<bonusID>...` for random suffixes and bonus IDs.

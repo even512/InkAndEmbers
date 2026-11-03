@@ -13,9 +13,15 @@ local T = ns.Locale.ns("Save", {
   later = "Später",
 })
 
-Save.INTERVAL = 3600 -- seconds without a save before prompting
+Save.INTERVAL = 1800 -- seconds without a save before prompting (WoW only writes the saved variables on logout/reload)
 Save.SNOOZE = 1800
 Save.TICK = 30
+-- extra occasions (takeoff of a flight, level-up): only when the last save is at least MIN_AGE ago and the window was
+-- not shown within MIN_GAP seconds; in combat/instances the request waits at most PENDING_FOR seconds
+Save.MIN_AGE = 600
+Save.MIN_GAP = 600
+Save.PENDING_FOR = 120
+Save.TAKEOFF_DELAY = 2
 
 local function minutesSinceSave()
   local last = Save.lastSave or (ns.Store and ns.Store.loginAt) or time()
@@ -86,6 +92,8 @@ end
 
 function Save.show()
   if not Save.frame then build() end
+  Save.lastShown = time()
+  Save.pendingUntil = nil
   Save.refresh()
   Save.frame:Show()
 end
@@ -99,10 +107,33 @@ function Save.later()
   Save.hide()
 end
 
+-- Extra occasion: show the window if the last save is old enough and it was not shown a moment ago.
+-- During combat/instances the request is kept for a short while and shown by the next check.
+function Save.request(reason)
+  if Save.isShown() then return false end
+  local now = time()
+  if minutesSinceSave() * 60 < Save.MIN_AGE then return false end
+  if Save.lastShown and now - Save.lastShown < Save.MIN_GAP then return false end
+  if Save.blocked() then
+    Save.pendingUntil = now + Save.PENDING_FOR
+    Save.pendingReason = reason
+    return false
+  end
+  Save.show()
+  return true
+end
+
 function Save.check()
   if Save.isShown() then
     Save.refresh()
     return
+  end
+  if Save.pendingUntil then
+    if time() > Save.pendingUntil then
+      Save.pendingUntil = nil
+    elseif not Save.blocked() then
+      if Save.request(Save.pendingReason or "pending") then return end
+    end
   end
   if not Save.dueAt or time() < Save.dueAt then return end
   if Save.blocked() then return end
@@ -116,6 +147,21 @@ function Save.start()
   Save.dueAt = Save.lastSave + Save.INTERVAL
   Save.ticker = C_Timer.NewTicker(Save.TICK, function() ns.Core.safe(Save.check) end)
 end
+
+-- takeoff: control is lost, a moment later the client reports UnitOnTaxi (fear/charm do not count)
+ns.Core.on("PLAYER_CONTROL_LOST", function()
+  C_Timer.After(Save.TAKEOFF_DELAY, function()
+    ns.Core.safe(function()
+      if type(UnitOnTaxi) ~= "function" then return end
+      local ok, onTaxi = pcall(UnitOnTaxi, "player")
+      -- unreadable (secret) counts as 'no'
+      if ok and not (type(issecretvalue) == "function" and issecretvalue(onTaxi)) and onTaxi == true then
+        Save.request("flight")
+      end
+    end)
+  end)
+end)
+ns.Core.on("PLAYER_LEVEL_UP", function() Save.request("level") end)
 
 ns.Core.on("PLAYER_ENTERING_WORLD", function()
   if Save.ticker then Save.check() else Save.start() end

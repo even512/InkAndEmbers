@@ -551,6 +551,41 @@ local function closeObjectives(self, questID)
   self.objPending[questID] = nil
 end
 
+-- B7: suggested group size, elite flag, tag name and frequency of a quest, stored once in quests[questID] (group, elite, tag, freq).
+-- Forever: C_QuestLog.IsEliteQuest; Retail: C_QuestLog.GetQuestTagInfo (isElite, tagName). Every call under pcall, only readable values
+-- of the right type are taken, anything else stays missing.
+local TAG_MAX = 40
+
+local function readableBool(v)
+  if isSecret(v) or type(v) ~= "boolean" then return nil end
+  return v
+end
+
+local function questExtras(questID)
+  local out = {}
+  local C = C_QuestLog
+  if type(C) ~= "table" or isSecret(C) then return out end
+  local idx = num(call(C.GetLogIndexForQuestID, questID))
+  local info = (idx and idx > 0) and logInfo(floor(idx)) or nil
+  local group = info and num(info.suggestedGroup) or nil
+  if group == nil then group = num(call(C.GetSuggestedGroupSize, questID)) end
+  if group ~= nil and group >= 0 then out.group = floor(group) end
+  local freq = info and num(info.frequency) or nil
+  if freq ~= nil and freq >= 0 then out.freq = floor(freq) end
+  local elite = readableBool(call(C.IsEliteQuest, questID))
+  local tagInfo = call(C.GetQuestTagInfo, questID)
+  if type(tagInfo) == "table" and not isSecret(tagInfo) then
+    if elite == nil then elite = readableBool(tagInfo.isElite) end
+    local tag = str(tagInfo.tagName)
+    if tag then
+      tag = gsub(ns.Sanitize.cut(ns.Sanitize.field(tag), TAG_MAX), " +$", "")
+      if tag ~= "" then out.tag = tag end
+    end
+  end
+  if elite ~= nil then out.elite = elite end
+  return out
+end
+
 -- Life story
 
 handlers.QUEST_ACCEPTED = function(self, a, b)
@@ -567,9 +602,11 @@ handlers.QUEST_ACCEPTED = function(self, a, b)
   self.givers[questID] = nil
   local ql = questLevel(questID)
   local mapID, px, py = here()
-  Store.putText("quests", questID, {
+  local fields = {
     title = questTitle(questID), qlevel = ql, mapID = mapID, giver = gname, giverNpc = gid, category = questCategory(questID),
-  })
+  }
+  for k, v in pairs(questExtras(questID)) do fields[k] = v end
+  Store.putText("quests", questID, fields)
   -- fallback for the description text: GetQuestText is missing or was unreadable
   local quests = charQuests()
   local entry = quests and quests[questID]

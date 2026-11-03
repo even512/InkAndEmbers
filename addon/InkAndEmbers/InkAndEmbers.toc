@@ -9,6 +9,7 @@
 # The CurseForge project number (the packager reads it from here; 0 = no upload).
 ## X-Curse-Project-ID: 1777406
 ## SavedVariables: EveNChronicleDB
+## SavedVariablesPerCharacter: InkAndEmbersCharDB
 ## IconTexture: Interface\AddOns\InkAndEmbers\Media\MinimapIcon
 ## AddonCompartmentFunc: EveNChronicle_OnAddonCompartmentClick
 
@@ -25,6 +26,7 @@ Core.lua
 Sanitize.lua
 Patterns.lua
 Store.lua
+Guard.lua
 Zone.lua
 Context.lua
 Save.lua
@@ -52,6 +54,7 @@ collectors\Afk.lua
 collectors\Campfire.lua
 collectors\Plans.lua
 collectors\Trainer.lua
+collectors\Pet.lua
 journal\Fmt.lua
 journal\Geo.lua
 journal\MapSpace.lua

@@ -1,11 +1,25 @@
 -- Namespace, event bus with pcall isolation, collector registry, slash command /chronik, diag.
 local ADDON_NAME, ns = ...
 
-ns.version = "1.0.0"
 ns.SCHEMA = 1
 
 local Core = {}
 ns.Core = Core
+
+-- Add-on version from the TOC (the packager replaces '@project-version@'); an unreplaced placeholder (local install)
+-- or anything unusable gives "dev". Only plain version characters pass, the value ends up in the log and the SV.
+function Core.readVersion()
+  local api = type(C_AddOns) == "table" and C_AddOns.GetAddOnMetadata or nil
+  if type(api) ~= "function" then api = _G.GetAddOnMetadata end
+  if type(api) ~= "function" then return "dev" end
+  local ok, v = pcall(api, ADDON_NAME, "Version")
+  if not ok or type(v) ~= "string" then return "dev" end
+  v = string.match(v, "^%s*(.-)%s*$")
+  if v == "" or #v > 40 or string.find(v, "@", 1, true) or not string.match(v, "^[%w%._%+%-]+$") then return "dev" end
+  return v
+end
+
+ns.version = Core.readVersion()
 
 local format, floor, concat = string.format, math.floor, table.concat
 
@@ -13,7 +27,9 @@ local format, floor, concat = string.format, math.floor, table.concat
 -- (diag notes, collector status) stays German and is not translated.
 local T = ns.Locale.ns("Core", {
   prefix = "Chronik:",
-  collectorOff = "Sammler \"%s\" wurde nach %d Fehlern abgeschaltet. Details: /chronik diag",
+  handlerOff = "Sammler \"%s\": die Aufzeichnung \"%s\" schlug wiederholt fehl und bleibt bis zum nächsten Neuladen aus. Details: /chronik diag",
+  handlersPaused = "Pausierte Aufzeichnungen: %s",
+  handlersOff = "Bis zum Neuladen abgeschaltete Aufzeichnungen: %s",
   moreCount = " (+%d weitere)",
   allRunning = "alle Aufzeichnungen laufen",
   someRunning = "%d von %d Aufzeichnungen laufen (Fehlersuche: /chronik diag)",
@@ -42,6 +58,7 @@ local T = ns.Locale.ns("Core", {
   helpLanguage = "/chronik sprache - Sprache wählen: \"sprache auto\", \"sprache de\" oder \"sprache en\" (wirkt nach /reload)",
   helpReset = "/chronik reset - Größe und Position des Reisejournals zurücksetzen",
   helpSave = "/chronik sichern - Sichern-Fenster öffnen (Sichern lädt die Oberfläche neu)",
+  helpBackup = "/chronik sicherung - Stand der Datensicherung: Sicherungskopie dieses Charakters, letztes Speichern, Füllstand der Datei",
   helpHelp = "/chronik hilfe - diese Befehlsliste",
   helpTutorial = "/chronik tutorial - Einführung (kleines Buch zum Durchblättern) erneut zeigen",
   helpDebug = "Fehlersuche:",
@@ -91,13 +108,20 @@ local T = ns.Locale.ns("Core", {
 local COMMAND_ALIASES = {
   options = "optionen", settings = "optionen", einstellungen = "optionen", config = "optionen",
   welcome = "willkommen", rest = "rast", sound = "ton", meter = "messer", note = "notiz",
-  language = "sprache", lang = "sprache", save = "sichern", campfire = "feuer", lagerfeuer = "feuer",
+  language = "sprache", lang = "sprache", save = "sichern", backup = "sicherung", campfire = "feuer", lagerfeuer = "feuer",
   open = "offene", quests = "offene", auras = "auren", buffs = "auren", coins = "muenzen", ["münzen"] = "muenzen",
   training = "lehrplan", trainer = "lehrplan", lehrer = "lehrplan",
   anleitung = "tutorial", einfuehrung = "tutorial", ["einführung"] = "tutorial", intro = "tutorial",
 }
 
+-- Errors are counted per handler (collector x event/signal/timer/hook), not per collector: MAX_ERRORS errors of one handler
+-- within ERROR_WINDOW seconds pause it for PAUSE_SECS; the MAX_PAUSES-th pause in a session keeps it off until the reload.
+-- Single errors over hours never switch anything off. An init error gets one new try after INIT_RETRY seconds.
 Core.MAX_ERRORS = 3
+Core.ERROR_WINDOW = 60
+Core.PAUSE_SECS = 300
+Core.MAX_PAUSES = 3
+Core.INIT_RETRY = 10
 -- never register (Midnight/Forever: ADDON_ACTION_FORBIDDEN)
 Core.FORBIDDEN_EVENTS = { COMBAT_LOG_EVENT_UNFILTERED = true, COMBAT_LOG_EVENT = true }
 -- base APIs for /chronik diag (in addition to every collector's requires)
@@ -139,6 +163,13 @@ Core.BASE_APIS = {
   -- optional, diagnostics only: campfire talk (players at the fire, nameplate switch, send on click)
   "C_ChatInfo.SendChatMessage", "CheckInteractDistance", "C_UnitAuras.GetUnitAuraBySpellID", "C_CVar.GetCVar",
   "C_CVar.SetCVar", "UnitSex", "SitStandOrDescendStart",
+  -- optional, diagnostics only: version, game rules, companion, loot rolls, durability, quest tags, bags, stats, day/night, pvp, jump
+  "C_AddOns.GetAddOnMetadata", "C_GameRules.IsHardcoreActive", "C_GameRules.GetActiveGameMode",
+  "C_GameRules.GetCurrentGameModeRecordID", "UnitCreatureFamily", "C_PetInfo.GetPetHappiness", "C_PetInfo.GetPetLoyalty",
+  "C_PetInfo.GetPetTrainingPoints", "C_StableInfo.GetNumStableSlots", "RollOnLoot", "GetLootRollItemLink",
+  "GetInventoryItemDurability", "C_QuestLog.IsEliteQuest", "C_QuestLog.GetQuestTagInfo", "C_QuestLog.GetSuggestedGroupSize",
+  "C_Container.GetContainerNumFreeSlots", "UnitUsesAmmo", "GetInventoryItemCount", "UnitDefenseSkill",
+  "C_DateAndTime.IsDayTime", "UnitIsPVP", "JumpOrAscendStart",
 }
 
 -- APIs whose absence is normal on some clients: reported as expected in /chronik diag, not as an error.
@@ -146,6 +177,17 @@ Core.BASE_APIS = {
 Core.EXPECTED_ABSENT = {
   ["C_SkillInfo.GetSkillLineInfo"] = "fehlt (erwartet auf Retail)", -- stored as-is in diag.apis, not translated
   ["C_GameRules.GetForeverExperiencePreset"] = "fehlt (nur auf Forever vorhanden)",
+  -- Forever-exclusive names (warcraft.wiki.gg, Category:Exclusive_API/forever)
+  ["C_PetInfo.GetPetHappiness"] = "fehlt (nur auf Forever vorhanden)",
+  ["C_PetInfo.GetPetLoyalty"] = "fehlt (nur auf Forever vorhanden)",
+  ["C_PetInfo.GetPetTrainingPoints"] = "fehlt (nur auf Forever vorhanden)",
+  ["C_StableInfo.GetNumStableSlots"] = "fehlt (nur auf Forever vorhanden)",
+  ["C_QuestLog.IsEliteQuest"] = "fehlt (nur auf Forever vorhanden)",
+  ["C_DateAndTime.IsDayTime"] = "fehlt (nur auf Forever vorhanden)",
+  ["UnitDefenseSkill"] = "fehlt (nur auf Forever vorhanden)",
+  ["UnitUsesAmmo"] = "fehlt (nur auf Forever vorhanden)",
+  -- Retail-only counterparts: not expected on Forever
+  ["C_QuestLog.GetSuggestedGroupSize"] = "fehlt (erwartet auf Forever)",
 }
 
 -- special enemies: classification -> tag, used by Moments (kind kill/first_*).
@@ -171,6 +213,10 @@ local signals = {}
 local frame = CreateFrame("Frame")
 Core.frame = frame
 Core.started = false
+
+local function nowGT()
+  return type(GetTime) == "function" and GetTime() or 0
+end
 
 local function getDb()
   return ns.Store and ns.Store.db
@@ -224,8 +270,20 @@ function Core.syncDiag()
   if not db or type(db.diag) ~= "table" then return end
   local d = db.diag
   if type(d.collectors) ~= "table" then d.collectors = {} end
+  local gt = nowGT()
   for _, e in ipairs(order) do
     local old = type(d.collectors[e.name]) == "table" and d.collectors[e.name] or {}
+    -- handlers: paused ones (key -> epoch when they resume) and ones off until the reload (key -> true)
+    local paused, off
+    for key, h in pairs(e.hs) do
+      if h.off then
+        off = off or {}
+        off[key] = true
+      elseif h.pausedUntil and gt < h.pausedUntil then
+        paused = paused or {}
+        paused[key] = h.resumeAt
+      end
+    end
     d.collectors[e.name] = {
       status = e.status,
       note = e.note,
@@ -235,6 +293,13 @@ function Core.syncDiag()
       disabledAt = e.disabledAt,
       lastError = e.lastError or old.lastError,
       lastErrorAt = e.lastErrorAt or old.lastErrorAt,
+      lastEvent = e.lastEvent or old.lastEvent,
+      firstError = e.firstError or old.firstError,
+      firstErrorAt = e.firstErrorAt or old.firstErrorAt,
+      pauses = e.pauseCount,
+      paused = paused,
+      off = off,
+      initRetried = e.initRetried,
     }
   end
   local missing = ns.Patterns and ns.Patterns.missing
@@ -277,17 +342,84 @@ local function notify(event, ...)
   for i = 1, #list do Core.safe(list[i], event, ...) end
 end
 
-function Core.collectorFailed(e, err)
+-- Handler state of a collector: e.hs[key] = { fails = {GetTime of recent errors}, pauses = n, pausedUntil = GetTime,
+-- resumeAt = epoch, off = true }. key = event name, signal name, "after", "ticker" or "hook:<name>"; memory only (reload resets).
+-- true while the handler is paused or off; a pause that has run out is lifted here (no timer needed)
+local function handlerBlocked(e, key)
+  local h = e.hs[key]
+  if not h then return false end
+  if h.off then return true end
+  if h.pausedUntil then
+    if nowGT() < h.pausedUntil then return true end
+    h.pausedUntil, h.resumeAt = nil, nil
+    h.fails = {}
+    Core.syncDiag()
+  end
+  return false
+end
+
+-- key: which handler failed (nil = unknown, counted under "?"); noPause: count only (one-shot timers)
+function Core.collectorFailed(e, err, key, noPause)
+  key = type(key) == "string" and key or "?"
+  local at, msg = time(), errText(err)
   e.errors = e.errors + 1
-  e.lastError, e.lastErrorAt = errText(err), time()
-  if e.active and e.errors >= Core.MAX_ERRORS then
-    e.active = false
-    e.status = "disabled"
-    e.note = format("abgeschaltet nach %d Fehlern", e.errors)
-    e.disabledAt = time()
-    Core.print(T("collectorOff", e.name, e.errors))
+  e.lastError, e.lastErrorAt, e.lastEvent = msg, at, key
+  if not e.firstError then e.firstError, e.firstErrorAt = msg, at end
+  if e.active and not noPause then
+    local h = e.hs[key]
+    if not h then
+      h = { fails = {}, pauses = 0 }
+      e.hs[key] = h
+    end
+    if not h.off and not h.pausedUntil then
+      local t, kept = nowGT(), {}
+      for _, f in ipairs(h.fails) do
+        if t - f < Core.ERROR_WINDOW then kept[#kept + 1] = f end
+      end
+      kept[#kept + 1] = t
+      h.fails = kept
+      if #kept >= Core.MAX_ERRORS then
+        h.fails = {}
+        h.pauses = h.pauses + 1
+        e.pauseCount = (e.pauseCount or 0) + 1
+        if h.pauses >= Core.MAX_PAUSES then
+          h.off, h.offAt = true, at
+          Core.print(T("handlerOff", e.name, key))
+        else
+          h.pausedUntil, h.resumeAt = t + Core.PAUSE_SECS, at + Core.PAUSE_SECS
+        end
+      end
+    end
   end
   Core.syncDiag()
+end
+
+-- paused (until resumeAt) and permanently-off (until reload) handlers, as sorted "Collector:key" lists
+function Core.handlerStates()
+  local paused, off = {}, {}
+  local t = nowGT()
+  for _, e in ipairs(order) do
+    for key, h in pairs(e.hs) do
+      if h.off then
+        off[#off + 1] = e.name .. ":" .. key
+      elseif h.pausedUntil and t < h.pausedUntil then
+        paused[#paused + 1] = { name = e.name .. ":" .. key, left = h.pausedUntil - t }
+      end
+    end
+  end
+  table.sort(paused, function(a, b) return a.name < b.name end)
+  table.sort(off)
+  return paused, off
+end
+
+local function printHandlerStates()
+  local paused, off = Core.handlerStates()
+  if #paused > 0 then
+    local items = {}
+    for i, p in ipairs(paused) do items[i] = format("%s (%s)", p.name, T("minShort", math.max(1, math.ceil(p.left / 60)))) end
+    Core.print(T("handlersPaused", concat(items, ", ")))
+  end
+  if #off > 0 then Core.print(T("handlersOff", concat(off, ", "))) end
 end
 
 local function dispatch(event, ...)
@@ -295,9 +427,9 @@ local function dispatch(event, ...)
   if not list then return end
   for i = 1, #list do
     local e = list[i]
-    if e.active and type(e.def.onEvent) == "function" then
+    if e.active and type(e.def.onEvent) == "function" and not handlerBlocked(e, event) then
       local ok, err = pcall(e.def.onEvent, e.def, event, ...)
-      if not ok then Core.collectorFailed(e, err) end
+      if not ok then Core.collectorFailed(e, err, event) end
     end
   end
 end
@@ -311,9 +443,9 @@ function Core.emit(signal, ...)
   if not list then return end
   for i = 1, #list do
     local e = list[i]
-    if e.active and type(e.def.onEvent) == "function" then
+    if e.active and type(e.def.onEvent) == "function" and not handlerBlocked(e, signal) then
       local ok, err = pcall(e.def.onEvent, e.def, signal, ...)
-      if not ok then Core.collectorFailed(e, err) end
+      if not ok then Core.collectorFailed(e, err, signal) end
     end
   end
 end
@@ -367,8 +499,9 @@ local function registerUnitEvent(e, event, units)
       local filter = e.unitFilter[ev]
       if not e.active or type(e.def.onEvent) ~= "function" then return end
       if filter and not (type(unit) == "string" and filter[unit]) then return end
+      if handlerBlocked(e, ev) then return end
       local ok, err = pcall(e.def.onEvent, e.def, ev, unit, ...)
-      if not ok then Core.collectorFailed(e, err) end
+      if not ok then Core.collectorFailed(e, err, ev) end
     end)
     e.unitFrame, e.unitFilter = f, {}
   end
@@ -384,7 +517,21 @@ local function registerUnitEvent(e, event, units)
   return true
 end
 
-local function startCollector(e)
+local startCollector
+
+-- a failed init gets exactly one new try after INIT_RETRY seconds (an API may only be ready after the login)
+local function scheduleInitRetry(e)
+  if e.initRetried or type(C_Timer) ~= "table" or type(C_Timer.After) ~= "function" then return end
+  e.initRetried = true
+  pcall(C_Timer.After, Core.INIT_RETRY, function()
+    if e.status ~= "disabled" or not e.initFailed then return end
+    e.status, e.initFailed, e.note, e.disabledAt = "registered", nil, nil, nil
+    startCollector(e)
+    Core.syncDiag()
+  end)
+end
+
+function startCollector(e)
   if e.status ~= "registered" then return end
   local def = e.def
   local missing = Core.checkRequires(def.requires)
@@ -395,15 +542,24 @@ local function startCollector(e)
   end
   e.active = true -- already during init so Core.after/ticker/hook work there
   e.status = "active"
+  e.hookCalls = {}
   if type(def.init) == "function" then
     local ok, err = pcall(def.init, def)
     if not ok then
+      local at, msg = time(), errText(err)
       e.active = false
       e.errors = e.errors + 1
-      e.lastError, e.lastErrorAt = errText(err), time()
+      e.lastError, e.lastErrorAt, e.lastEvent = msg, at, "init"
+      if not e.firstError then e.firstError, e.firstErrorAt = msg, at end
       e.status = "disabled"
       e.note = "Start fehlgeschlagen"
-      e.disabledAt = time()
+      e.disabledAt = at
+      e.initFailed = true
+      -- what the failed init started must not run twice after the retry: cancel its tickers, drop its timers (e.gen)
+      e.gen = e.gen + 1
+      for _, h in ipairs(e.tickerHandles) do pcall(h.Cancel, h) end
+      e.tickerHandles = {}
+      scheduleInitRetry(e)
       return
     end
   end
@@ -462,11 +618,15 @@ local function entryOf(def)
   return type(def) == "table" and byDef[def] or nil
 end
 
-local function guarded(e, fn)
+-- key = handler name for the pause logic; key nil = one-shot timers: errors are counted but never pause (nothing repeats)
+-- gen: timers and tickers made by an init that failed later are dropped (e.gen counts failed inits); hooks cannot be undone
+-- and therefore keep working across the retry (see Core.hook)
+local function guarded(e, fn, key, keepGen)
+  local gen = e.gen
   return function(...)
-    if not e.active then return end
+    if not e.active or (not keepGen and e.gen ~= gen) or (key and handlerBlocked(e, key)) then return end
     local ok, err = pcall(fn, e.def, ...)
-    if not ok then Core.collectorFailed(e, err) end
+    if not ok then Core.collectorFailed(e, err, key or "after", key == nil) end
   end
 end
 
@@ -484,14 +644,19 @@ function Core.ticker(def, sec, fn)
   local e = entryOf(def)
   if not e or not e.active or type(fn) ~= "function" then return NO_HANDLE end
   local handle
-  local run = guarded(e, fn)
+  e.tickers = (e.tickers or 0) + 1
+  local key = "ticker#" .. e.tickers
+  local run = guarded(e, fn, key)
+  local gen = e.gen
   handle = C_Timer.NewTicker(sec, function(...)
-    if not e.active then
+    local h = e.hs[key]
+    if not e.active or e.gen ~= gen or (h and h.off) then
       if handle then handle:Cancel() end
       return
     end
     run(...)
   end)
+  e.tickerHandles[#e.tickerHandles + 1] = handle
   return handle
 end
 
@@ -500,14 +665,36 @@ end
 function Core.hook(def, tblOrName, name, fn)
   local e = entryOf(def)
   if not e or not e.active or type(hooksecurefunc) ~= "function" then return false end
+  local key
   if type(tblOrName) == "string" then
     if type(name) ~= "function" or type(_G[tblOrName]) ~= "function" then return false end
-    return (pcall(hooksecurefunc, tblOrName, guarded(e, name)))
+    key = "hook:" .. tblOrName
+  else
+    if type(tblOrName) ~= "table" or type(name) ~= "string" or type(fn) ~= "function" or type(tblOrName[name]) ~= "function" then
+      return false
+    end
+    -- one error counter per table and function name (e.g. the OnAccept of two different dialogs)
+    local id = e.tblIds[tblOrName]
+    if not id then
+      e.tblCount = e.tblCount + 1
+      id = e.tblCount
+      e.tblIds[tblOrName] = id
+    end
+    key = "hook:t" .. id .. "." .. name
   end
-  if type(tblOrName) ~= "table" or type(name) ~= "string" or type(fn) ~= "function" or type(tblOrName[name]) ~= "function" then
-    return false
+  -- the n-th hook on the same target during one init run: if an earlier (failed) init already installed it, it stays
+  -- (hooksecurefunc cannot be undone, a second one would count everything twice)
+  local n = (e.hookCalls[key] or 0) + 1
+  e.hookCalls[key] = n
+  if n <= (e.hookDone[key] or 0) then return true end
+  local ok
+  if type(tblOrName) == "string" then
+    ok = pcall(hooksecurefunc, tblOrName, guarded(e, name, key, true))
+  else
+    ok = pcall(hooksecurefunc, tblOrName, name, guarded(e, fn, key, true))
   end
-  return (pcall(hooksecurefunc, tblOrName, name, guarded(e, fn)))
+  if ok then e.hookDone[key] = n end
+  return ok and true or false
 end
 
 -- def = { events = {...}, unitEvents = { UNIT_X = { "player" } }, signals = { "FC_KILL", ... }, requires = { "C_X.Y", ... },
@@ -519,7 +706,8 @@ function ns.RegisterCollector(name, def)
     return false
   end
   def.name = name
-  local e = { name = name, def = def, status = "registered", errors = 0, active = false }
+  local e = { name = name, def = def, status = "registered", errors = 0, active = false, hs = {},
+    gen = 0, tickerHandles = {}, tblIds = setmetatable({}, { __mode = "k" }), tblCount = 0, hookCalls = {}, hookDone = {} }
   registry[name] = e
   byDef[def] = e
   order[#order + 1] = e
@@ -608,7 +796,7 @@ end
 -- help lines in display order (empty texts are skipped)
 local HELP = {
   "helpTitle", "helpToggle", "helpStatus", "helpOptions", "helpMinimap", "helpToast", "helpSound", "helpWelcome", "helpTutorial", "helpRest",
-  "helpMeter", "helpTodo", "helpNote", "helpOpen", "helpTrain", "helpLanguage", "helpReset", "helpSave", "helpHelp", "helpAliases", "helpDebug", "helpDiag",
+  "helpMeter", "helpTodo", "helpNote", "helpOpen", "helpTrain", "helpLanguage", "helpReset", "helpSave", "helpBackup", "helpHelp", "helpAliases", "helpDebug", "helpDiag",
   "helpDiagQuests", "helpCampfire", "helpSim", "helpAuras", "helpCoins",
 }
 
@@ -668,8 +856,8 @@ function Core.runDiag()
     local ok, t = available(p)
     if ok then
       apis[p] = t
-    elseif Core.EXPECTED_ABSENT[p] then
-      apis[p] = Core.EXPECTED_ABSENT[p]
+    elseif Core.EXPECTED_ABSENT[p] or (p == "C_AddOns.GetAddOnMetadata" and type(_G.GetAddOnMetadata) == "function") then
+      apis[p] = Core.EXPECTED_ABSENT[p] or "fehlt (globales GetAddOnMetadata als Rückfall vorhanden)"
       expected[#expected + 1] = p
     else
       apis[p] = "fehlt"
@@ -706,6 +894,7 @@ function Core.runDiag()
   local line = T("collectorsActive", active, total)
   if #inactive > 0 then line = line .. T("inactive", shortList(inactive, 4)) end
   Core.print(line)
+  printHandlerStates()
   -- handwriting: fresh probe on the toolkit's invisible FontString, with a reason on fallback
   local diary = ns.Journal and ns.Journal.Widgets and ns.Journal.Widgets.Diary
   if diary and type(diary.handStatus) == "function" then
@@ -1038,6 +1227,7 @@ function Core.slash(msg)
     access.toggle()
   elseif cmd == "" or cmd == "status" then
     Core.print(Core.statusLine())
+    printHandlerStates()
   elseif cmd == "optionen" then
     local options = ns.Journal and ns.Journal.Options
     if options then options.open() else Core.print(T.optionsMissing) end
@@ -1100,6 +1290,8 @@ function Core.slash(msg)
     end
   elseif cmd == "sichern" then
     ns.Save.show()
+  elseif cmd == "sicherung" and ns.Guard then
+    ns.Guard.slash()
   elseif cmd == "tutorial" then
     local tutorial = ns.Journal and ns.Journal.Tutorial
     if tutorial then tutorial.slash() else Core.print(T.tutorialMissing) end

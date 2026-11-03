@@ -32,6 +32,65 @@ end
 
 local Zone = ns.Zone
 
+-- Game rules and identity (0.9.4). C_GameRules is WoW Forever only; values are stored raw, never interpreted. Every call runs under
+-- pcall, secret or wrongly typed results count as missing (empty field), so a client without the API (Retail) just writes nothing.
+
+local function readRules()
+  local r = {}
+  local G = C_GameRules
+  if type(G) ~= "table" or isSecret(G) then return r end
+  local preset = num(call(G.GetForeverExperiencePreset))
+  if preset then r.xpPreset = floor(preset) end
+  local hc = call(G.IsHardcoreActive)
+  if not isSecret(hc) and type(hc) == "boolean" then r.hc = hc and 1 or 0 end
+  local mode = call(G.GetActiveGameMode)
+  r.gameMode = num(mode) and floor(mode) or str(mode)
+  local rec = num(call(G.GetCurrentGameModeRecordID))
+  if rec then r.modeRec = floor(rec) end
+  return r
+end
+
+-- 1 = day, 0 = night (C_DateAndTime.IsDayTime exists on Forever only); nil if missing or unreadable
+local function dayFlag()
+  local D = C_DateAndTime
+  if type(D) ~= "table" or isSecret(D) then return nil end
+  local v = call(D.IsDayTime)
+  if isSecret(v) or type(v) ~= "boolean" then return nil end
+  return v and 1 or 0
+end
+
+-- 1 = PvP flag on, 0 = off, nil if unreadable
+local function pvpFlag()
+  local v = call(UnitIsPVP, "player")
+  if isSecret(v) or type(v) ~= "boolean" then return nil end
+  return v and 1 or 0
+end
+
+-- info.sex / raceID / classID (B4) and info.xpPreset / hardcore (A3) of the current character; only readable values overwrite.
+local function refreshInfo()
+  local r = readRules()
+  local char = Store.char()
+  local info = type(char) == "table" and char.info or nil
+  if type(info) ~= "table" then return r end
+  local sex = num(call(UnitSex, "player"))
+  if sex then info.sex = floor(sex) end
+  local _, _, raceID = call(UnitRace, "player")
+  raceID = num(raceID)
+  if raceID then info.raceID = floor(raceID) end
+  local _, _, classID = call(UnitClass, "player")
+  classID = num(classID)
+  if classID then info.classID = floor(classID) end
+  if r.xpPreset ~= nil then info.xpPreset = r.xpPreset end
+  if r.hc ~= nil then info.hardcore = r.hc == 1 end
+  return r
+end
+
+-- end fields of the L line (called by Store.beginSession): xpPreset, hc, gameMode, modeRec, pvp
+function ns.loginExtras()
+  local r = refreshInfo()
+  return r.xpPreset, r.hc, r.gameMode, r.modeRec, pvpFlag()
+end
+
 -- Helpers
 
 local WINDOW = 1.0     -- seconds: a message may wait this long for its difference (and vice versa)
@@ -124,7 +183,7 @@ local Progress = {
   requires = { "UnitLevel" },
   events = {
     "PLAYER_ENTERING_WORLD", "PLAYER_LEVEL_UP", "PLAYER_XP_UPDATE", "CHAT_MSG_COMBAT_XP_GAIN", "CHAT_MSG_SYSTEM",
-    "UI_INFO_MESSAGE", "TIME_PLAYED_MSG", "QUEST_TURNED_IN", "PLAYER_LOGOUT",
+    "UI_INFO_MESSAGE", "TIME_PLAYED_MSG", "QUEST_TURNED_IN", "PLAYER_LOGOUT", "GAME_RULES_CHANGED",
   },
 }
 local handlers = {}
@@ -415,6 +474,7 @@ function Progress:init()
   self.playedQueue = {}
   self.levelsPending = 0
   self.xp, self.xpMax, self.xpLevel = readXp()
+  self.rules = refreshInfo() -- baseline for GG (and info.* also after a reload, which writes no L line)
 end
 
 handlers.PLAYER_ENTERING_WORLD = function(self, _, isReloadingUi)
@@ -428,7 +488,7 @@ end
 handlers.PLAYER_LEVEL_UP = function(self, level)
   level = num(level) or playerLevel()
   local mapID, x, y = Zone.here()
-  Store.append("LV", level, mapID, x, y, Zone.sub())
+  Store.append("LV", level, mapID, x, y, Zone.sub(), dayFlag())
   -- order relative to PLAYER_XP_UPDATE is not guaranteed: if the client already has the new maximum, XP_UPDATE is not processed yet
   -- (remember the level for jump detection); otherwise advance the base level.
   local curMax = num(call(UnitXPMax, "player"))
@@ -497,6 +557,25 @@ handlers.QUEST_TURNED_IN = function(self, questID, xp)
   if xp and xp > 0 then
     self.hints.turn = { questID = num(questID), xp = floor(xp), at = GetTime() }
   end
+end
+
+-- GAME_RULES_CHANGED (Forever): GG only if a readable value differs from the last known one; unreadable values keep the old one
+local RULE_KEYS = { "xpPreset", "hc", "gameMode", "modeRec" }
+handlers.GAME_RULES_CHANGED = function(self)
+  local old, new = self.rules or {}, readRules()
+  local changed = false
+  for _, k in ipairs(RULE_KEYS) do
+    if new[k] ~= nil and new[k] ~= old[k] then changed = true end
+    if new[k] == nil then new[k] = old[k] end
+  end
+  if not changed then return end
+  self.rules = new
+  local char = Store.char()
+  if char and type(char.info) == "table" then
+    if new.xpPreset ~= nil then char.info.xpPreset = new.xpPreset end
+    if new.hc ~= nil then char.info.hardcore = new.hc == 1 end
+  end
+  Store.append("GG", new.xpPreset, new.hc, new.gameMode, new.modeRec)
 end
 
 handlers.PLAYER_LOGOUT = function(self)

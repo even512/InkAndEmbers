@@ -70,6 +70,35 @@ local function playerLevel()
   return num(call(UnitLevel, "player"))
 end
 
+-- durability of the worn items (slots 1-18): lowest and average percent, whole numbers. nil, nil if nothing durable is worn or unreadable.
+-- 18 calls, only at death and at the way back.
+local DUR_SLOTS = 18
+local function durability()
+  if type(GetInventoryItemDurability) ~= "function" then return nil, nil end
+  local lowest, sum, n = nil, 0, 0
+  for slot = 1, DUR_SLOTS do
+    local ok, cur, max = pcall(GetInventoryItemDurability, slot)
+    cur, max = ok and num(cur) or nil, ok and num(max) or nil
+    if cur and max and max > 0 then
+      local pct = cur / max * 100
+      if lowest == nil or pct < lowest then lowest = pct end
+      sum = sum + pct
+      n = n + 1
+    end
+  end
+  if n == 0 then return nil, nil end
+  return floor(lowest + 0.5), floor(sum / n + 0.5)
+end
+
+-- 1 = day, 0 = night (C_DateAndTime.IsDayTime exists on Forever only); nil if missing or unreadable
+local function dayFlag()
+  local D = C_DateAndTime
+  if type(D) ~= "table" or isSecret(D) then return nil end
+  local v = call(D.IsDayTime)
+  if isSecret(v) or type(v) ~= "boolean" then return nil end
+  return v and 1 or 0
+end
+
 local function npcIdOf(guid)
   if not str(guid) then return nil end
   local kind, id = match(guid, "^(%a+)%-%d+%-%d+%-%d+%-%d+%-(%d+)%-")
@@ -260,7 +289,8 @@ handlers.PLAYER_DEAD = function(self)
   self.dead = d
   self.spiritAt, self.corpseAt, self.resAt, self.spiritOffer, self.resOffer = nil, nil, nil, nil, nil
   self.gossipAt = nil
-  Store.append("DE", playerLevel(), mapID, x, y, call(IsInInstance) == true and 1 or 0, combat and 1 or 0, ns.Zone.sub())
+  local durMin, durAvg = durability()
+  Store.append("DE", playerLevel(), mapID, x, y, call(IsInInstance) == true and 1 or 0, combat and 1 or 0, ns.Zone.sub(), durMin, durAvg, dayFlag())
   Core.emit("FC_DEATH")
   Core.after(self, RECAP_DELAY, function(s) readRecap(s, d) end)
 end
@@ -334,7 +364,8 @@ local function snapshot(d)
 end
 
 local function writeBack(how, guess, snap)
-  Store.append("DB", how, guess, snap.seconds, snap.mapID, snap.x, snap.y)
+  local durMin, durAvg = durability()
+  Store.append("DB", how, guess, snap.seconds, snap.mapID, snap.x, snap.y, durMin, durAvg)
 end
 
 revived = function(self, how, guess)
