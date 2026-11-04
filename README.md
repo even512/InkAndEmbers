@@ -1,7 +1,8 @@
 # Ink & Embers: An Adventurer's Journal
 
 A World of Warcraft addon that writes down your leveling journey while you play and turns it into a travel journal you can
-open in the game with `/chronik`. I made it for WoW Forever. It also loads on Retail (Interface 120105).
+open in the game with `/chronik`. I made it for WoW Forever (Interface 16001) and it runs on Retail (Interface 120105) too, from the
+same download. Version 1.0 is the first stable release; the changes are in `CHANGELOG.md`.
 
 The addon only records what the game shows to addons. In combat and in instances Blizzard hides some values from addons, so
 a few entries are approximations or stay empty. The log format below says where.
@@ -16,8 +17,10 @@ The journal is a book with these pages:
   A To Do sub-page keeps your own goals (a zone, a place, an enemy to kill, items to collect).
 - Chronicle: a diary, a list of travel companions, medals and seals.
 - Quests: what you accepted and turned in, the quest texts and quest chains. The Open tab lists quests you can still
-  pick up, with the quest givers on the map. It needs the optional data add-on `InkAndEmbers_QuestData`. The Training tab
-  (WoW Forever only) shows what your class trainer teaches at which level, what you can learn now and what it costs.
+  pick up, with the quest givers on the map. In WoW Forever the data comes from QuestieDB: read live from the QuestieDB add-on
+  if it is installed (optional), otherwise from the bundled extract in `InkAndEmbers_QuestData`. In Retail the list comes from
+  the game's own world map (no quest givers there). The Training tab (WoW Forever only) shows what your class trainer teaches
+  at which level, what you can learn now and what it costs.
 - Treasures: the gold flow, notable loot and how your gear changed over the levels.
 - Moments: milestones as small handwritten diary notes, play time by hour of day, books you read and curiosities.
 - Combat: kills, a bestiary and the death reports.
@@ -27,10 +30,10 @@ The to-do goals also show up outside the book. Enemies you still have to kill ge
 a small book icon on their nameplate. A note at the screen edge lists the open goals. The enemy and item search for the goals uses
 `InkAndEmbers_Data`.
 
-When you sit down at a campfire, a few singed scraps of paper float above the flames. Each one holds a conversation starter
+When you sit down at a campfire (WoW Forever), a few singed scraps of paper float above the flames. Each one holds a conversation starter
 that you can say in /say with a click, or throw away. Who sat with you is written to the log and shows up in the journal.
 
-Smaller things: pop-ups for new medals and areas, a welcome card, a short introduction book (`/chronik tutorial`), and
+Smaller things: pop-ups for new medals and areas, a welcome greeting, a short introduction book (`/chronik tutorial`), and
 HUD elements that can be moved in the game's Edit Mode. The interface and the texts are available in English and German.
 
 ## Installation
@@ -40,14 +43,17 @@ From [CurseForge](https://www.curseforge.com/wow/addons/ink-embers-an-adventurer
 By hand: copy these three folders from `addon/` into `Interface/AddOns` of your game folder (`_forever_` or `_retail_`):
 
 - `InkAndEmbers`, the addon itself
-- `InkAndEmbers_QuestData`, quest and quest giver data for the Open tab (loaded on demand)
+- `InkAndEmbers_QuestData`, quest and quest giver data for the Open tab in WoW Forever (loaded on demand; not used in Retail)
 - `InkAndEmbers_Data`, enemy, item and zone names for the to-do goals (loaded on demand)
+
+The add-on `QuestieDB` (optional, from the Questie team) is not part of this repository or download. If it is installed, WoW Forever
+reads the open quests from it live.
 
 New files such as textures and fonts are only picked up after a full restart of the game. For changes to Lua files `/reload` is enough.
 
 ## Commands
 
-`/chronik` opens and closes the journal. The minimap button, the addon compartment and a key binding do the same.
+`/chronik` opens and closes the journal (`/inkembers`, `/inkember` and `/ie` do the same). The minimap button, the addon compartment and a key binding do the same.
 
 | Command | What it does |
 |---|---|
@@ -64,7 +70,7 @@ New files such as textures and fonts are only picked up after a full restart of 
 | `/chronik save` | open the save window; saving reloads the interface |
 | `/chronik backup` | state of the data safety: this character's backup copy, last save, how full the main file is, last restore |
 | `/chronik reset` | reset size and position of the journal |
-| `/chronik welcome`, `rest`, `tutorial` | show the welcome card, the "Since your last rest" recap, the introduction book |
+| `/chronik welcome`, `rest`, `tutorial` | show the welcome greeting, the "Since your last rest" recap, the introduction book |
 | `/chronik diag` | self-test of all interfaces, result in `EveNChronicleDB.diag` |
 | `/chronik help` | list all commands |
 
@@ -158,6 +164,10 @@ simulation `journal/SimPanel.lua` is left out of the package.
 
 I wrote the code with Claude Code, and most of the images were made with Google Gemini and then edited by me. I plan, test and
 maintain the addon myself.
+
+## Support
+
+If you enjoy the add-on and want to support its development, you can do so on Ko-fi: https://ko-fi.com/even512
 
 ## Feedback
 

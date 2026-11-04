@@ -1,5 +1,51 @@
 # Changelog
 
+## 1.0.0
+
+First stable version. It collects everything from the 0.9 line; the details are in the entries below.
+
+### What's in 1.0
+- **Travel journal from level 1:** the book (`/chronik`) fills itself while you play: Journey with a map and a replay of your
+  route, Chronicle, Quests, Treasures, Moments, Combat and Notes. Moments are small handwritten diary notes.
+- **One download for WoW Forever and Retail:** the add-on tells them apart by the interface version. Forever-only parts
+  (Training tab, campfire talk, live QuestieDB) are hidden in Retail, and Retail reads its maximum level from the client.
+- **Open quests:** the quests you can still pick up, with quest givers on the map. In Forever the data comes from QuestieDB
+  (live if the QuestieDB add-on is installed, otherwise the bundled extract, stable releases only); in Retail from the game's
+  own world map. QuestieDB is optional.
+- **To-do list that ticks itself off:** places, enemies and items, with a tooltip line and a nameplate icon for the enemies
+  you still need, a note at the screen edge and a trainer to-do after a level-up (Forever).
+- **Training tab (WoW Forever):** what your class trainer teaches at which level, what you can learn now and what it costs.
+- **Campfire conversation starters (WoW Forever):** notes above the fire with a line to say, drawn from your own journey and
+  the people sitting with you, plus a "Since your last rest" recap.
+- **Data safety:** a second copy of every character's data, automatic restore, warnings, size watch, save reminders and
+  `/chronik backup`. Everything stays on your computer.
+- **English and German**, welcome greeting, introduction book, toasts, HUD elements for the Edit Mode.
+
+### New
+- **Automatic screenshots:** a new option (on by default) lets you turn off the screenshots the Chronicle takes at special moments.
+- **Short commands:** `/inkembers`, `/inkember` and `/ie` do the same as `/chronik`.
+- **Training page in the introduction (WoW Forever):** the introduction now explains the training plan.
+- **Quieter first login:** on the very first login only the introduction shows, with no area pop-up and no welcome card.
+
+### Changes
+- **Welcome-back note:** the welcome-back note is now a wooden frame with a lantern that slides in from the left, with a narrator of your race in the circle and your greeting on the parchment. One option, "Welcome greeting", turns it (and a character's first greeting) on or off. By default it shows after 1 hour away; you can choose the delay ("Show after an absence of": at once, 1, 2, 4, 8 or 24 hours) and which info lines it shows (last seen, open quests, rested bonus, to-do nearby) in the options.
+- **German texts:** German texts address the reader consistently ("Ihr"); typos in the introduction are fixed.
+- **Notification queue:** Notifications now queue up and appear one at a time, and wait while the game's own zone text is showing. Many similar ones (e.g. medals) are merged instead of dropped.
+- **Notification size and position:** Notifications are smaller by default and appear slightly below the screen center; they remain movable in Edit Mode, and only sizes you never changed become smaller, while saved sizes and positions are kept.
+- **Rest recap off by default:** The rest recap is now off by default; you can turn it on in the options.
+
+### Fixes
+- **Long names:** Long zone, quest and character names no longer get cut off in the journal and in notifications; hover shows the full text where space is short.
+- **Clients without Edit Mode:** the bundled Edit Mode library now steps aside quietly if the game lacks the Edit Mode interfaces; the HUD elements then keep using the settings panel instead of throwing errors at login.
+- **Dates in English:** journey chapters show month/day (for example "10/26 08:33") instead of the German day.month form.
+- **Starting point is no news:** the zone and continent you start in are no longer listed as a Moment or a diary discovery (the "Beyond the Sea" medal still counts the starting continent).
+- **Wording:** "Quest Book" is used everywhere in English; "Avg. per play day" replaces the "Ø" sign; no "approx." in front of "under 1 min".
+- **Trainer to-do:** the money amount is written "5 S 10 K" (capital letters) instead of "5 s 10 k".
+- **Slash commands:** `/chronik open` and `/chronik lehrplan` with an unknown word now say so instead of silently opening the page. `/chronik diag` no longer breaks if a game interface is missing. Developer lines (test mode, quest probe, auras, coins) only show in the help with the development tools.
+- **Welcome greeting in Edit Mode:** the welcome-back note (wooden frame, lantern, narrator) now has its own Edit Mode element "Chronicle: Welcome greeting" to move, resize and fade; the old large welcome card is gone from the Edit Mode and no longer appears as a greeting (a new character's first session uses the note too). The large card is now only the campfire recap, which shows up in Edit Mode as "Chronicle: Campfire recap" only while that option is on.
+- **First greeting:** a character's first welcome note now shows all three lines, including the hint how to open the book (minimap button or `/chronik`), and only depends on the option "Welcome greeting", not on the chosen absence or info lines.
+
+
 ## 0.9.5
 
 ### Fixes

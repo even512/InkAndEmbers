@@ -561,6 +561,7 @@ local function paintRight()
   V.next = nx
   local has = nx ~= nil
   V.nextText:SetShown(has)
+  if V.nextHover then V.nextHover:SetShown(has) end
   V.nextIcon:SetShown(has)
   V.nextRing:SetShown(has)
   V.nextZone:SetShown(has)
@@ -1120,6 +1121,16 @@ local function buildRight(panel)
   nt:SetWordWrap(true)
   if nt.SetMaxLines then nt:SetMaxLines(2) end
   V.nextText = nt
+  -- up to 120 characters but only 2 lines: full text on hover
+  local nh = CreateFrame("Frame", nil, card)
+  nh:SetPoint("TOPLEFT", nt, "TOPLEFT", 0, 0)
+  nh:SetSize(C.w - 58 - 14, 56)
+  nh:SetScript("OnEnter", function(self)
+    local nx = V.next
+    if nx and type(nx.text) == "string" and nx.text ~= "" then W.tip(self, { nx.text }) end
+  end)
+  nh:SetScript("OnLeave", function(self) W.hideTip(self) end)
+  V.nextHover = nh
   local pin = card:CreateTexture(nil, "ARTWORK")
   pin:SetSize(14, 14)
   pin:SetPoint("TOPLEFT", card, "TOPLEFT", 58, -70)

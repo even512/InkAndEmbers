@@ -46,6 +46,7 @@ Theme.TEX = {
   seals = MEDIA .. "Seals", zoneSeal = MEDIA .. "ZoneSeal",
   toast = MEDIA .. "Toast", glow = MEDIA .. "Glow", disc = MEDIA .. "Disc",
   welcomeCard = MEDIA .. "WelcomeCard",
+  welcomeBack = MEDIA .. "WelcomeBack",
   hatch = MEDIA .. "Hatch",
   sword = MEDIA .. "Sword", swordIcon = MEDIA .. "SwordIcon",
   mapKill = MEDIA .. "MapKill",
@@ -650,6 +651,11 @@ Theme.NARRATORS = { "human", "dwarf", "nightelf", "gnome", "orc", "undead", "tau
 Theme.NARRATOR_TEX = { size = 512, cx = 256, cy = 250, r = 176 }
 Theme.HAS_NARRATORS = true
 for _, id in ipairs(Theme.NARRATORS) do Theme.TEX["narrator_" .. id] = MEDIA .. "Narrator_" .. id end
+for _, id in ipairs(Theme.NARRATORS) do
+  Theme.TEX["narratorFigIn_" .. id] = MEDIA .. "NarratorFigIn_" .. id -- pop-out figure of the welcome-back note, behind the ring (Begleiter.CUTOUTS)
+  Theme.TEX["narratorFigOut_" .. id] = MEDIA .. "NarratorFigOut_" .. id -- the same figure, upper part in front of the ring
+end
+for _, id in ipairs(Theme.NARRATORS) do Theme.TEX["narratorBG_" .. id] = MEDIA .. "NarratorBG_" .. id end -- circle backdrop behind the pop-out figure
 function Theme.narratorTex(id)
   return type(id) == "string" and Theme.TEX["narrator_" .. id] or nil
 end

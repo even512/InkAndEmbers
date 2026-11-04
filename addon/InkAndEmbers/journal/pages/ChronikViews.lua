@@ -25,6 +25,15 @@ SL.x, SL.w = Theme.gridX("L")
 SR.x, SR.w = Theme.gridX("R")
 local IN_X = Theme.gridX("L", 2) + 4
 local IN_W = SL.x + SL.w - IN_X
+-- profile name (28 pt, "Name-Realm" can be long): shrinks down to 18 pt, full text on hover when it had to shrink
+local function fitName(u, maxW)
+  local size = W.fitLine(u.name, maxW, 18)
+  local cut = size and (size < (u.name.fitBase or size) or (tonumber(u.name:GetStringWidth()) or 0) > maxW)
+  if u.nameHover then
+    u.nameHover.full = cut and u.name:GetText() or nil
+    u.nameHover:EnableMouse(cut and true or false)
+  end
+end
 local BODY_X, BODY_W = SL.x + 4, SL.w - 4          -- left content: 4 px gap to the blot at the text block
 local LEFT_BOTTOM = 466                             -- left content ends above the seals bottom left
 local RIGHT_BOTTOM = 560                            -- right content ends above the ink splash
@@ -422,6 +431,12 @@ function Mates.new(page, left, right)
   u.name:SetPoint("TOPLEFT", r, "TOPLEFT", SR.x, -G.slots.title.y)
   u.name:SetWidth(SR.w - 30)
   u.name:SetWordWrap(false)
+  u.nameHover = CreateFrame("Frame", nil, r)
+  u.nameHover:SetPoint("TOPLEFT", u.name, "TOPLEFT", 0, 0)
+  u.nameHover:SetSize(SR.w - 30, 34)
+  u.nameHover:EnableMouse(false)
+  u.nameHover:SetScript("OnEnter", function(h) if h.full then W.tip(h, { h.full }) end end)
+  u.nameHover:SetScript("OnLeave", function(h) W.hideTip(h) end)
   u.kind = font(r, "text", SZ.s, "sepia", "LEFT")
   u.kind:SetPoint("TOPLEFT", r, "TOPLEFT", SR.x, -SUB_Y)
   u.kind:SetWidth(SR.w)
@@ -510,6 +525,8 @@ function Mates:RenderCard()
   end
   if not p then
     set(u.name, "")
+    u.nameHover.full = nil
+    u.nameHover:EnableMouse(false)
     set(u.kind, "")
     set(u.hint, (#(self.items or {}) == 0) and T.emptyBody or T.pick)
     return
@@ -517,6 +534,7 @@ function Mates:RenderCard()
   set(u.hint, "")
   local s = self:Lines(p)
   set(u.name, s.name)
+  fitName(u, SR.w - 30)
   u.name:SetTextColor(unpack(Mates.classColor(p.class)))
   local kind = s.kind or ""
   set(u.kind, (kind ~= "" and s.level ~= "") and (kind .. " · " .. s.level) or (kind .. s.level))
@@ -806,6 +824,12 @@ function Fire.new(page, left, right)
   u.name:SetPoint("TOPLEFT", r, "TOPLEFT", SR.x, -G.slots.title.y)
   u.name:SetWidth(SR.w - 30)
   u.name:SetWordWrap(false)
+  u.nameHover = CreateFrame("Frame", nil, r)
+  u.nameHover:SetPoint("TOPLEFT", u.name, "TOPLEFT", 0, 0)
+  u.nameHover:SetSize(SR.w - 30, 34)
+  u.nameHover:EnableMouse(false)
+  u.nameHover:SetScript("OnEnter", function(h) if h.full then W.tip(h, { h.full }) end end)
+  u.nameHover:SetScript("OnLeave", function(h) W.hideTip(h) end)
   u.kind = font(r, "text", SZ.s, "sepia", "LEFT")
   u.kind:SetPoint("TOPLEFT", r, "TOPLEFT", SR.x, -SUB_Y)
   u.kind:SetWidth(SR.w)
@@ -887,6 +911,8 @@ function Fire:RenderCard()
   for _, fs in ipairs(u.visits) do set(fs, "") end
   if not p then
     set(u.name, "")
+    u.nameHover.full = nil
+    u.nameHover:EnableMouse(false)
     set(u.kind, "")
     set(u.hint, (#(self.items or {}) == 0) and T.emptyBody or T.pick)
     return
@@ -894,6 +920,7 @@ function Fire:RenderCard()
   set(u.hint, "")
   local s = self:Lines(p)
   set(u.name, s.name)
+  fitName(u, SR.w - 30)
   u.name:SetTextColor(unpack(Mates.classColor(p.class)))
   local kind = s.kind or ""
   set(u.kind, (kind ~= "" and s.level ~= "") and (kind .. " · " .. s.level) or (kind .. s.level))

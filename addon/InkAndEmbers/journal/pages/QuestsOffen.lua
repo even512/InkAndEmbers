@@ -312,6 +312,13 @@ local function buildRight(self, tabR)
   ui.selWhy:SetWidth(RW)
   ui.selWhy:SetWordWrap(false)
   ui.selWhy:SetPoint("TOPLEFT", tabR, "TOPLEFT", RX, -(PANEL_Y + 35))
+  -- long names/reasons shrink (fitLine) and show in full on hover over the three lines
+  ui.selHover = CreateFrame("Frame", nil, tabR)
+  ui.selHover:SetPoint("TOPLEFT", tabR, "TOPLEFT", RX, -PANEL_Y)
+  ui.selHover:SetSize(RW, 50)
+  ui.selHover:EnableMouse(false)
+  ui.selHover:SetScript("OnEnter", function(h) if ui.selTip then W.tip(h, ui.selTip) end end)
+  ui.selHover:SetScript("OnLeave", function(h) W.hideTip(h) end)
   ui.todo = D.NewSticker(tabR, T.toTodo, function() self:AddTodo() end, { tip = T.toTodoTip, height = 36 })
   ui.todo:SetPoint("TOPLEFT", tabR, "TOPLEFT", RX, -(PANEL_Y + 54))
   ui.todoMsg = label(tabR, "label", G.size.xs, "sepia")
@@ -847,11 +854,18 @@ function View:Render(keepData)
     for _, r in ipairs(q.reasons or {}) do why[#why + 1] = r.text end
     for _, n in ipairs(q.notes or {}) do why[#why + 1] = n end
     W.setText(ui.selWhy, table.concat(why, " · "))
+    W.fitLine(ui.selName, RW, 10)
+    W.fitLine(ui.selSub, RW)
+    W.fitLine(ui.selWhy, RW)
+    ui.selTip = rowTip(q)
+    ui.selHover:EnableMouse(true)
     ui.todo:SetEnabled(not q.noLocation and q.givers and #q.givers > 0)
   else
     W.setText(ui.selName, "")
     W.setText(ui.selSub, T.pick)
     W.setText(ui.selWhy, "")
+    ui.selTip = nil
+    ui.selHover:EnableMouse(false)
   end
   W.setText(ui.todoMsg, q and self.todoText or "")
 end

@@ -43,17 +43,19 @@ local T = ns.Locale.ns("Core", {
   status = "Die Chronik schreibt seit %s mit: %s %s, zuletzt gesichert %s, %s.",
   helpTitle = "Befehle:",
   helpToggle = "/chronik - Reisejournal öffnen/schließen (oder eine Taste unter Tastaturbelegung > AddOns > Ink & Embers legen)",
+  helpShort = "Kurzformen statt /chronik: /inkembers, /inkember und /ie",
   helpStatus = "/chronik status - Status der Chronik",
   helpOptions = "/chronik optionen - Einstellungen öffnen (Optionen > AddOns > Ink & Embers)",
   helpMinimap = "/chronik minimap - Minimap-Knopf ein-/ausblenden (Rechtsklick auf den Knopf öffnet die Einstellungen)",
   helpToast = "/chronik toast - Einblendungen für neue Medaillen und Gebiete ein-/ausschalten (\"toast test\" zeigt Beispiele)",
   helpSound = "/chronik ton - Ton der Einblendungen ein-/ausschalten",
-  helpWelcome = "/chronik willkommen - Begrüßungskarte als Vorschau zeigen",
+  helpWelcome = "/chronik willkommen - Willkommen-Gruß als Vorschau zeigen",
   helpRest = "/chronik rast - Rückblick \"Seit der letzten Rast\" als Vorschau zeigen",
   helpMeter = "/chronik messer - Schadensanzeige automatisch einschalten: \"messer an\" oder \"messer aus\" (auch in den Einstellungen)",
   helpTodo = "/chronik todo - offene To Dos am Bildschirmrand ein-/ausblenden (\"todo reset\" setzt Lage und Größe zurück)",
   helpNote = "/chronik notiz - Schnellnotiz-Feld ein-/ausblenden (Enter legt eine Notiz an)",
-  helpOpen = "/chronik offene - offene Quests (Rubrik \"Offen\" unter Quests); \"offene test\" schaltet den Retail-Testmodus ein (\"test aus\" beendet ihn)",
+  helpOpen = "/chronik offene - offene Quests (Rubrik \"Offen\" unter Quests)",
+  helpOpenTest = "/chronik offene test - schaltet den Retail-Testmodus ein (\"test aus\" beendet ihn)",
   helpTrain = "/chronik lehrplan - Lehrplan Eurer Klasse (Rubrik \"Lehrplan\" unter Quests, nur WoW Forever); \"lehrplan status\" zeigt den Stand",
   helpLanguage = "/chronik sprache - Sprache wählen: \"sprache auto\", \"sprache de\" oder \"sprache en\" (wirkt nach /reload)",
   helpReset = "/chronik reset - Größe und Position des Reisejournals zurücksetzen",
@@ -795,8 +797,8 @@ end
 
 -- help lines in display order (empty texts are skipped)
 local HELP = {
-  "helpTitle", "helpToggle", "helpStatus", "helpOptions", "helpMinimap", "helpToast", "helpSound", "helpWelcome", "helpTutorial", "helpRest",
-  "helpMeter", "helpTodo", "helpNote", "helpOpen", "helpTrain", "helpLanguage", "helpReset", "helpSave", "helpBackup", "helpHelp", "helpAliases", "helpDebug", "helpDiag",
+  "helpTitle", "helpToggle", "helpShort", "helpStatus", "helpOptions", "helpMinimap", "helpToast", "helpSound", "helpWelcome", "helpTutorial", "helpRest",
+  "helpMeter", "helpTodo", "helpNote", "helpOpen", "helpOpenTest", "helpTrain", "helpLanguage", "helpReset", "helpSave", "helpBackup", "helpHelp", "helpAliases", "helpDebug", "helpDiag",
   "helpDiagQuests", "helpCampfire", "helpSim", "helpAuras", "helpCoins",
 }
 
@@ -805,6 +807,9 @@ local HELP = {
 function Core.hasDevTools()
   return ns.SimPanel ~= nil
 end
+
+-- Developer help lines: shown only with the development tools (like /chronik sim)
+local DEV_HELP = { helpSim = true, helpOpenTest = true, helpDiagQuests = true, helpAuras = true, helpCoins = true }
 
 -- Help lines about WoW Forever only parts, left out in Retail: the campfire talk (never starts there) and the trainer plan.
 local function helpHiddenInRetail(key)
@@ -822,7 +827,7 @@ end
 function Core.printHelp()
   for _, key in ipairs(HELP) do
     local line = T[key]
-    if line ~= "" and (key ~= "helpSim" or Core.hasDevTools()) and not helpHiddenInRetail(key) then Core.print(line) end
+    if line ~= "" and (not DEV_HELP[key] or Core.hasDevTools()) and not helpHiddenInRetail(key) then Core.print(line) end
   end
 end
 
@@ -870,13 +875,20 @@ function Core.runDiag()
     local d = db.diag
     d.apis = apis
     d.lastRun = time()
-    local build, buildNumber, _, interface = GetBuildInfo()
-    d.client = { build = build, buildNumber = tonumber(buildNumber), interface = tonumber(interface), locale = GetLocale() }
+    -- each call guarded: a missing interface must not break the self-test
+    local function try(fn, ...)
+      if type(fn) ~= "function" then return nil end
+      local r = { pcall(fn, ...) }
+      if not r[1] then return nil end
+      return r[2], r[3], r[4], r[5]
+    end
+    local build, buildNumber, _, interface = try(GetBuildInfo)
+    d.client = { build = build, buildNumber = tonumber(buildNumber), interface = tonumber(interface), locale = (try(GetLocale)) }
     d.restrictions = probeRestrictions()
     d.state = {
-      inCombat = InCombatLockdown() and true or false,
-      inInstance = IsInInstance() and true or false,
-      healthSecret = issecretvalue and issecretvalue(UnitHealth and UnitHealth("player")) and true or false,
+      inCombat = try(InCombatLockdown) and true or false,
+      inInstance = try(IsInInstance) and true or false,
+      healthSecret = (type(issecretvalue) == "function" and type(UnitHealth) == "function" and try(function() return issecretvalue(UnitHealth("player")) end)) and true or false,
     }
     Core.syncDiag()
   end
@@ -1243,7 +1255,7 @@ function Core.slash(msg)
   elseif (cmd == "toast" or cmd == "zettel" or cmd == "ton") and toast then
     toast.slash(cmd, rest)
   elseif (cmd == "willkommen" or cmd == "rast") and ns.Journal and ns.Journal.Begleiter then
-    ns.Journal.Begleiter.slash(cmd)
+    ns.Journal.Begleiter.slash(cmd, rest)
   elseif cmd == "todo" and ns.Journal and ns.Journal.TodoTracker then
     ns.Journal.TodoTracker.slash(rest)
   elseif (cmd == "offene" or cmd == "offen") and ns.Journal and ns.Journal.OpenQuests then
@@ -1311,6 +1323,9 @@ function Core.slash(msg)
 end
 
 SLASH_EVENCHRONICLE1 = "/chronik"
+SLASH_EVENCHRONICLE2 = "/inkembers" -- same command under the add-on's name; /inkember and /ie are the short forms
+SLASH_EVENCHRONICLE3 = "/inkember"
+SLASH_EVENCHRONICLE4 = "/ie"
 if type(SlashCmdList) == "table" then
   SlashCmdList.EVENCHRONICLE = function(msg) Core.safe(Core.slash, msg) end
 end

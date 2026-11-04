@@ -129,6 +129,7 @@ local T = ns.Locale.ns("m.OpenQuests", {
   diagQdbNone = "QuestieDB nicht installiert · Quelle: %s",
   diagQdbUnknown = "?",
   testOff = "Offene Quests: Testmodus aus.",
+  unknownArg = "Unbekannter Zusatz \"%s\". /chronik offene öffnet die Seite.",
   testOn = "Offene Quests: Testmodus an (Volk %s, Klasse %s, Stufe %s). %s",
   testLevelUsage = "Offene Quests: /chronik offene test stufe <Zahl>",
   testRaceUsage = "Offene Quests: Volk-Kennung z. B. Scourge, Human, Orc, NightElf, Dwarf, Gnome, Tauren, Troll",
@@ -1647,6 +1648,11 @@ function OpenQuests.slash(rest)
       say(T("testOn", t.race, t.class, tostring(t.level or playerLevel()), T.testLabel))
     end
     if type(OpenQuests.openPage) == "function" then pcall(OpenQuests.openPage) end
+    return
+  end
+  if sub1 ~= "" then
+    local S_ = ns.Sanitize
+    say(T("unknownArg", S_ and S_.field and S_.field(rest) or "?"))
     return
   end
   if type(OpenQuests.openPage) == "function" then

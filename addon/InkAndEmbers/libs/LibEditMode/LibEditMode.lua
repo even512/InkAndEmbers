@@ -1,3 +1,6 @@
+-- Ink & Embers: guard for clients without Edit Mode
+if not (EventRegistry and EditModeManagerFrame and EditModeSystemSettingsDialog and Enum and Enum.EditModeSettingDisplayType and CreateUnsecuredObjectPool and hooksecurefunc) then return end
+
 local MINOR = 18
 
 local _, ns = ...

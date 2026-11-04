@@ -120,7 +120,8 @@ function Stations.build(model, index, fmt)
     local w = when(t)
     local lines = { head }
     if w then lines[#lines + 1] = w .. (Stations.dateText(t) and (" · " .. Stations.dateText(t)) or "") end
-    for _, l in ipairs(tip or {}) do if type(l) == "string" and l ~= "" then lines[#lines + 1] = l end end
+    if type(detail) == "string" and detail ~= "" then lines[#lines + 1] = detail end -- full place name (the card line may shrink)
+    for _, l in ipairs(tip or {}) do if type(l) == "string" and l ~= "" and l ~= detail then lines[#lines + 1] = l end end
     lines[#lines + 1] = Stations.TEXT.tipJump
     out[#out + 1] = { key = key, kind = kind, t = t, head = head, sub = Stations.subText(w, t, detail), tip = lines }
   end
@@ -366,6 +367,7 @@ function Stations.layout(ui)
     W().setText(b.head, s.head)
     W().setText(b.sub, s.sub)
     W().fitLine(b.head, ui.colW - 18)
+    W().fitLine(b.sub, ui.colW - 18, 9)
     b:ClearAllPoints()
     b:SetPoint("TOPLEFT", ui.frame, "TOPLEFT", (col - 1) * (ui.colW + ui.colGap), -(Stations.HEAD_H + 4 + row * Stations.ROW_H))
     b.selected = ui.sel ~= nil and s.key == ui.sel

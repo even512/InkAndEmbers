@@ -1,7 +1,7 @@
 -- First-login intro as a small flip-through book. Shown once per account (EveNChronicleDB.ui.tutorialSeen): left one or two
 -- images (tiles of the atlases Media/Tutorial_<lang>_<n>.tga), right a handwritten heading and the text; back / skip / next, page dots.
 -- One welcome page, then one page per feature of the book (texts by the author), at the end a farewell page
--- with the narrator portrait of the welcome card (same choice: Begleiter.narrator(), setting "Erzähler auf der Willkommen-Karte").
+-- with the narrator portrait of the welcome card (same choice: Begleiter.narrator(), setting "Erzähler im Willkommen-Gruß").
 local _, ns = ...
 
 local Journal = ns.Journal or {}
@@ -45,6 +45,11 @@ local function pageHidden(p)
   local ms = Journal.MapSpace
   return ms ~= nil and type(ms.fireTalkHidden) == "function" and ms.fireTalkHidden() == true
 end
+-- the training plan (Lehrplan) exists in WoW Forever only (Lehrplan.active(): false in Retail)
+local function trainingShown()
+  local L = Journal.Lehrplan
+  return L ~= nil and type(L.active) == "function" and L.active() == true
+end
 local activePages = nil
 -- the pages of this client, fixed on first use (the client does not change during a session; the dots are built once)
 function Tutorial.pages()
@@ -82,39 +87,47 @@ local T = ns.Locale.ns("Tutorial", {
   done = "Los geht's!",
   dotTip = "Seite %d",
   combat = "Die Einführung öffnet sich nicht im Kampf. Bitte nach dem Kampf noch einmal: /chronik tutorial",
-  title_welcome = "Willkommen in deiner Chronik",
-  text_welcome = "Ab jetzt schreibt die Chronik deine Reise mit – du musst nichts tun, einfach spielen. Blättere weiter, um zu sehen, was alles im Buch steckt.\nDas Buch öffnest du mit dem kleinen Knopf an der Minimap oder mit /chronik. Diese Einführung findest du jederzeit wieder mit /chronik tutorial.",
+  title_welcome = "Willkommen in Eurer Chronik",
+  text_welcome = "Ab jetzt schreibt die Chronik Eure Reise mit – Ihr müsst nichts tun, einfach spielen. Blättert weiter, um zu sehen, was alles im Buch steckt.\nDas Buch öffnet Ihr mit dem kleinen Knopf an der Minimap oder mit /chronik. Diese Einführung findet Ihr jederzeit wieder mit /chronik tutorial. Auch /inkembers und /ie öffnen das Buch.",
   title_collection = "Die Sammlung",
-  text_collection = "Die Chronik läuft im Hintergrund mit und hält alles fest, was auf deiner Reise zu Level 60 passiert. Und darüber hinaus!\nKills, Tode, Quests, Gegenstände, Begegnungen und besondere Momente.\nDaraus entstehen automatisch die Seiten in diesem Reisebuch!",
-  text_collection_retail = "Die Chronik läuft im Hintergrund mit und hält alles fest, was auf deiner Reise bis zur Höchststufe passiert. Und darüber hinaus!\nKills, Tode, Quests, Gegenstände, Begegnungen und besondere Momente.\nDaraus entstehen automatisch die Seiten in diesem Reisebuch!",
+  text_collection = "Die Chronik läuft im Hintergrund mit und hält alles fest, was auf Eurer Reise bis Stufe 60 passiert. Und darüber hinaus!\nKills, Tode, Quests, Gegenstände, Begegnungen und besondere Momente. Zu besonderen Momenten macht die Chronik auf Wunsch automatisch einen Screenshot; in den Einstellungen lässt sich das abschalten.\nDaraus entstehen automatisch die Seiten in diesem Reisebuch!",
+  text_collection_retail = "Die Chronik läuft im Hintergrund mit und hält alles fest, was auf Eurer Reise bis zur Höchststufe passiert. Und darüber hinaus!\nKills, Tode, Quests, Gegenstände, Begegnungen und besondere Momente. Zu besonderen Momenten macht die Chronik auf Wunsch automatisch einen Screenshot; in den Einstellungen lässt sich das abschalten.\nDaraus entstehen automatisch die Seiten in diesem Reisebuch!",
   title_travelmap = "Reise-Karte",
-  text_travelmap = "Die Reise-Karte zeichnet den gesamten Weg deines Charakters als Linie über die Welt! Dabei wird ebenfalls mit erfasst, wo Du gekämpft hast oder wo du ein LvL-Up hattest.\nDu kannst dir ebenfalls die gesamte Reise abspielen in verschiedenen Geschwindigkeiten.",
+  text_travelmap = "Die Reise-Karte zeichnet den gesamten Weg Eures Charakters als Linie über die Welt! Dabei wird ebenfalls erfasst, wo Ihr gekämpft habt und wo Ihr einen Stufenaufstieg hattet.\nIhr könnt Euch die gesamte Reise auch in verschiedenen Geschwindigkeiten abspielen lassen.",
   title_levelflow = "Stufenfluss",
-  text_levelflow = "Der Stufenfluss zeigt dir an, wie lange Du für die einzelnen Level gebraucht hast, darunter wird aufgenommen was deine kürzeste und was deine längste Stufe zeittechnisch war.\nDie roten Punkte geben dir an, dass du in dem Level gestorben bist.",
+  text_levelflow = "Der Stufenfluss zeigt Euch, wie lange Ihr für die einzelnen Stufen gebraucht habt. Darunter stehen Eure kürzeste und Eure längste Stufe.\nDie roten Punkte zeigen an, dass Ihr in dieser Stufe gestorben seid.",
   title_medals = "Medaillen",
-  text_medals = "Für besondere Leistungen auf deiner Reise gibt es Medaillen, jeweils in verschiedenen Stufen. Schau gleich nach, was du für die Medaillen tun musst. Dies steht in den Tooltips.",
+  text_medals = "Für besondere Leistungen auf Eurer Reise gibt es Medaillen, jeweils in verschiedenen Stufen. Schaut gleich nach, was Ihr für die Medaillen tun müsst. Das steht in den Tooltips.",
   title_companions = "Weggefährten",
-  text_companions = "Die Chronik merkt sich alle Spieler, mit denen Du unterwegs warst. Links steht die Liste, sortierbar nach Zeit der letzten Begegnung oder gemeinsamer Zeit. Rechts stehen zu jedem Weggefährten die Klasse, Level, das erste und letzte Treffen, sowie auch die gemeinsamen Orte.",
+  text_companions = "Die Chronik merkt sich alle Spieler, mit denen Ihr unterwegs wart. Links steht die Liste, sortierbar nach der Zeit der letzten Begegnung oder nach der gemeinsamen Zeit. Rechts stehen zu jedem Weggefährten die Klasse, die Stufe, das erste und das letzte Treffen sowie die gemeinsamen Orte.",
   title_fire = "Am Feuer",
-  text_fire = "Rastet man an einem Lagerfeuer, schweben Zettel mit Gesprächsideen über den Flammen. Linksklicke auf den Satz und dein Charakter sagt diesen in /s. Mit Rechtsklick verwirfst du ihn und es erscheint ein Neuer.\nDas System ist dynamisch und nutzt deine Chronik für die Sätze. Sowie werden ebenfalls andere Abenteurer erkannt und darauf reagiert.\nSomit dürfte es jedem leichtfallen, seine Geschichten am Lagerfeuer zu erzählen!",
+  text_fire = "Rastet Ihr an einem Lagerfeuer, schweben Zettel mit Gesprächsideen über den Flammen. Linksklick auf einen Satz, und Euer Charakter sagt ihn in /s. Mit Rechtsklick verwerft Ihr ihn, und es erscheint ein neuer.\nDas System ist dynamisch und nutzt Eure Chronik für die Sätze. Auch andere Abenteurer am Feuer werden erkannt, und die Zettel reagieren auf sie.\nSo fällt es jedem leicht, am Lagerfeuer seine Geschichten zu erzählen!",
   title_combat = "Kampf",
-  text_combat = "Die Kampf Seite speichert alles, was mit dem Kämpfen zu tun hat.\nEs wird aufgezeichnet welche Gegner Du erledigt hast und wie viele davon. Jeden Einzelnen davon kannst du dir auch noch einmal ganz genau anschauen!\nEbenso kannst du dir anzeigen lassen wo du die einzelnen Gegner der Zonen erledigt hast… entweder als Hotspot oder als genaue Tötungspositionen.\nDeine Tode werden ebenfalls aufgezeichnet und du kannst dir auch die letzten Sekunden deines Ablebens anschauen.",
+  text_combat = "Die Kampfseite hält alles fest, was mit dem Kämpfen zu tun hat.\nSie zeichnet auf, welche Gegner Ihr erledigt habt und wie viele davon. Jeden Einzelnen könnt Ihr Euch noch einmal ganz genau anschauen!\nAuch wo Ihr die Gegner der einzelnen Zonen erledigt habt, lässt sich anzeigen… entweder als Hotspot oder als genaue Tötungspositionen.\nEure Tode werden ebenfalls aufgezeichnet, und Ihr könnt Euch sogar die letzten Sekunden vor Eurem Ableben anschauen.",
   title_quests = "Quests",
-  text_quests = "Jede abgeschlossene Quest wird aufgezeichnet samt Questtext und welche Belohnungen es gab und welche Du ausgewählt hast. Jede ausgewählte Quest gibt dir sogar einen Lebenslauf wann du sie angenommen hast, was unterwegs passiert ist und wann du sie abgegeben hast.",
+  text_quests = "Jede abgeschlossene Quest wird aufgezeichnet, samt Questtext, den angebotenen Belohnungen und der, die Ihr gewählt habt. Zu jeder ausgewählten Quest gibt es sogar einen Lebenslauf: wann Ihr sie angenommen habt, was unterwegs passiert ist und wann Ihr sie abgegeben habt.",
+  text_quests_train = "Unter Quests findet Ihr außerdem den Lehrplan: was der Lehrer Eurer Klasse auf welcher Stufe beibringt, was Ihr jetzt lernen könnt und was es kostet. Nach einem Stufenaufstieg erinnert Euch auf Wunsch ein To Do an den Besuch beim Lehrer.",
   title_openquests = "Offene Quests",
-  text_openquests = "Ebenso zeigt dir das Buch auch alle verfügbaren Quests geordnet an. So kannst du schnell herausfinden, welche Quests dir in dem Gebiet noch fehlen.\nBeim Klick auf eine Quest kannst du diese auch sehr leicht als To Do definieren.",
-  text_openquests_retail = "Das Buch zeigt dir auch die Quests, die die Weltkarte des Spiels als annehmbar anzeigt, nach Gebiet geordnet. So kannst du schnell herausfinden, welche Quests dir in dem Gebiet noch fehlen. Einen Questgeber nennt die Weltkarte nicht, dafür steht dort die Questreihe.\nBeim Klick auf eine Quest kannst du diese, wenn die Karte einen Ort dazu kennt, sehr leicht als To Do definieren.",
+  text_openquests = "Ebenso zeigt Euch das Buch alle verfügbaren Quests geordnet an. So findet Ihr schnell heraus, welche Quests Euch in einem Gebiet noch fehlen.\nMit einem Klick auf eine Quest könnt Ihr sie ganz leicht als To Do festlegen.",
+  text_openquests_retail = "Das Buch zeigt Euch auch die Quests, die die Weltkarte des Spiels als annehmbar anzeigt, nach Gebiet geordnet. So findet Ihr schnell heraus, welche Quests Euch in einem Gebiet noch fehlen. Einen Questgeber nennt die Weltkarte nicht, dafür steht dort die Questreihe.\nMit einem Klick auf eine Quest könnt Ihr sie, wenn die Karte einen Ort dazu kennt, ganz leicht als To Do festlegen.",
   title_treasures = "Schätze",
-  text_treasures = "Die Schätze Seite gibt Dir einen detaillierten Überblick über deine Finanzen oder deine Beute.\nEbenso kannst du unter Ausrüstungsfunde alle Gegenstände ab Ungewöhnlich nachschauen, wie und wann du diesen erhalten hast. Es wird nämlich alles aufgezeichnet!",
+  text_treasures = "Die Schätze-Seite gibt Euch einen detaillierten Überblick über Eure Finanzen und Eure Beute.\nUnter Ausrüstungsfunde könnt Ihr außerdem alle Gegenstände ab Qualität Ungewöhnlich nachschlagen: wie und wann Ihr sie erhalten habt. Es wird nämlich alles aufgezeichnet!",
   title_notes = "Notizen",
-  text_notes = "Dein eigenes Notizbuch für deine umfangreichen Notizen. Das Notizbuch ist mit verschiedenen Editor Funktionen ausgestattet, so dass du dir alles aufschreiben kannst, was du willst. Ebenso lässt sich ein Pin automatisch auf der Karte erstellen, wo Du die Notiz geschrieben hast.\nFür das Interface gibt es auch noch ein Schnell Notizen Element um auf deiner Reise schnell Notizen ins Buch schreiben zu können.",
+  text_notes = "Euer eigenes Notizbuch für umfangreiche Notizen. Es bietet verschiedene Editor-Funktionen, damit Ihr alles aufschreiben könnt, was Ihr wollt. Auf Wunsch wird automatisch ein Pin auf der Karte gesetzt, wo Ihr die Notiz geschrieben habt.\nFür die Oberfläche gibt es außerdem ein Schnellnotiz-Feld, mit dem Ihr unterwegs rasch Notizen ins Buch schreiben könnt.",
   title_todo = "To Do",
-  text_todo = "Unter To Do kannst du dir deine eigenen Quests bauen!\nMusst du dir merken, dass du noch zum Auktionshaus wolltest? Mach dir ein To Do mit einem Pin auf der Karte. Das To Do wird automatisch abgehakt, sobald du da bist.\nMöchtest du eine bestimmte Anzahl an Gegnern töten oder eine bestimmte Anzahl an Gegenständen sammeln? Schreib dir dazu ein To Do und es wird automatisch getracked. Gegner werden sogar an der Namensplakette und im Tooltip markiert, dass du sie für ein To Do benötigst.",
+  text_todo = "Unter To Do könnt Ihr Euch Eure eigenen Quests bauen!\nMüsst Ihr Euch merken, dass Ihr noch zum Auktionshaus wolltet? Macht ein To Do mit einem Pin auf der Karte. Es wird automatisch abgehakt, sobald Ihr dort seid.\nMöchtet Ihr eine bestimmte Anzahl Gegner töten oder eine bestimmte Anzahl Gegenstände sammeln? Schreibt dazu ein To Do, und es wird automatisch erfasst. Gegner werden sogar an der Namensplakette und im Tooltip markiert, wenn Ihr sie für ein To Do braucht.",
   title_farewell = "Gute Reise!",
-  text_farewell = "Das ist alles, was du vorab wissen musst. Den Rest erzählt dir die Reise selbst.\nIch schreibe mit: die großen Momente genauso wie die kleinen Umwege. Schau ab und zu ins Buch, du wirst staunen, wie viel zusammenkommt.\nBis bald am Lagerfeuer!",
-  text_farewell_retail = "Das ist alles, was du vorab wissen musst. Den Rest erzählt dir die Reise selbst.\nIch schreibe mit: die großen Momente genauso wie die kleinen Umwege. Schau ab und zu ins Buch, du wirst staunen, wie viel zusammenkommt.\nBis bald unterwegs!",
+  text_farewell = "Das ist alles, was Ihr vorab wissen müsst. Den Rest erzählt Euch die Reise selbst.\nIch schreibe mit: die großen Momente genauso wie die kleinen Umwege. Schaut ab und zu ins Buch, Ihr werdet staunen, wie viel zusammenkommt.\nBis bald am Lagerfeuer!",
+  text_farewell_retail = "Das ist alles, was Ihr vorab wissen müsst. Den Rest erzählt Euch die Reise selbst.\nIch schreibe mit: die großen Momente genauso wie die kleinen Umwege. Schaut ab und zu ins Buch, Ihr werdet staunen, wie viel zusammenkommt.\nBis bald unterwegs!",
 })
 Tutorial.TEXT = T
+
+-- body text of a page: its text plus, on the Quests page in WoW Forever only, the paragraph about the training plan (Lehrplan)
+function Tutorial.bodyText(p)
+  local text = T[Tutorial.textKey(p)]
+  if p.id == "quests" and trainingShown() then text = text .. "\n" .. T.text_quests_train end
+  return text
+end
 
 local state = { frame = nil, page = 1, after = {}, narrator = nil }
 Tutorial.state = state
@@ -479,7 +492,7 @@ local function render()
   setText(f.headL, f.upper(T.header))
   setText(f.headR, f.upper(T("pageOf", i, n)))
   setText(f.title, T["title_" .. p.id])
-  Tutorial.fitBody(T[Tutorial.textKey(p)])
+  Tutorial.fitBody(Tutorial.bodyText(p))
   Tutorial.layoutImages(p)
   local last = i == n
   if f.next.SetLabel then f.next:SetLabel(last and T.done or T.next) end

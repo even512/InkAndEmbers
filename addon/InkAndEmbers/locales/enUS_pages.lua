@@ -6,7 +6,7 @@ local L = ns.Locale
 L.add("enUS", "p.Chronik", {
   ofSeals = "%s of %s", longest = "longest: %s", noLevel = "%s without a level", pageOf = "Page %s of %s",
   brand = "INK & EMBERS", profile = "PROFILE", page = "CHRONICLE", traveller = "TRAVELER", travellerM = "TRAVELER", travellerF = "TRAVELER",
-  since = "On the road since", played = "Total time played", perDay = "Ø per play day", sessions = "Sessions", entries = "Recorded events",
+  since = "On the road since", played = "Total time played", perDay = "Avg. per play day", sessions = "Sessions", entries = "Recorded events",
   seals = "MEDALS OF THE JOURNEY", flow = "Level flow", flowSub = "How long each level took",
   legend = "red dots = died", xpTotal = "TOTAL EXPERIENCE", sources = "EXPERIENCE SOURCES",
   noXp = "No experience gained yet.", diaryEmpty = "Nothing experienced yet – the journal is waiting.",
@@ -70,6 +70,9 @@ L.add("enUS", "p.Kampf", {
   close = "BY A HAIR'S BREADTH", prevDeath = "Previous death", openDeath = "Click: death report of this death",
   openLastDeath = "Click: death report of the last death here", deathNo = "Death %s",
   nextDeath = "Next death", prevCards = "Previous foes", nextCards = "More foes",
+  hintHunted = "Slay a foe and it appears here.", hintHuntedZone = "Slay a foe here and it appears in this list.",
+  hintGraves = "Every death gets a gravestone here.", hintClose = "Win a fight on low health and it shows up here.",
+  hintZone = "Slay a foe and your hunting grounds take shape.",
   zoneEmpty = "No zone with kills yet.", krit = "crit", unknownPic = "?", here = "here",
   lowGraves = "Deaths", lowClose = "Close calls", backToGraves = "Back to the deaths",
   noDeathTitle = "The Last Breath",
@@ -171,7 +174,7 @@ L.add("enUS", "p.Quests", {
   goals = "Objectives", turnIn = "Turn-in", life = "Timeline", rewardHead = "Reward",
   noDetail = "No description text recorded.", noGoals = "No objectives recorded.", noReward = "No turn-in text recorded.",
   emptyHead = "No completed quests yet.",
-  emptyBody = "As soon as you complete a quest, the chronicle writes it down here.",
+  emptyBody = "As soon as you complete a quest, the chronicle writes it down here. Which quests are still out there, you see under \"Open\".",
   emptyRight = "Timeline and rewards appear with the first completed quest.",
   accepted = "Accepted", abandoned = "Abandoned", turned = "Turned in", between = "On the way",
   done = "completed",
@@ -186,7 +189,7 @@ L.add("enUS", "p.Quests", {
 
 -- journal/pages/Schaetze.lua
 L.add("enUS", "p.Schaetze", {
-  level = "Level %s", levels = "Level %s–%s", total = "Total %s", gearSub = "%s changes · level 1 to %s",
+  level = "Level %s", levels = "Level %s–%s", total = "Total %s", gearSub = "%s changes · level 1 to %s", gearSubNone = "No change yet · equip something new",
   brand = "INK & EMBERS", page = "TREASURES", book = "PURSE", bag = "IN THE PURSE",
   ledger = "Ledger", flow = "Gold flow", flowSub = "Where the gold came from and where it went",
   toBars = "Sources", toBand = "Levels", noMoney = "No gold moved yet.",
@@ -231,7 +234,7 @@ L.add("enUS", "p.SchaetzeFunde", {
 })
 
 L.add("enUS", "p.QuestsOffen", {
-  brand = "INK & EMBERS", book = "QUEST LOG", page = "OPEN QUESTS",
+  brand = "INK & EMBERS", book = "QUEST BOOK", page = "OPEN QUESTS",
   allZones = "All zones", zoneTip = "Choose a zone", zoneTip2 = "Number = open quests in this zone",
   locked = "Locked", lockedTip = { "Show locked quests", "Quests you cannot accept yet appear grayed out with the reason." },
   group = "Group", groupTip = { "Group, dungeon, raid, PvP and event quests", "Default: hidden" },
@@ -293,12 +296,12 @@ L.add("enUS", "p.QuestsLehrplan", {
   todoDone = "To-do added.", todoFail = "No to-do added.",
   talentHead = "Talents",
   talentFree_one = "%s talent point is free.", talentFree_other = "%s talent points are free.",
-  talentNone = "All talent points are spent.", talentUnknown = "Talent points not readable.",
+  talentNone = "All talent points are spent.", talentEarly = "You will get talent points later on your journey.", talentUnknown = "Talent points not readable.",
   fees = "Training fees paid so far: %s",
   retailHead = "WoW Forever only",
   retailBody = "On Retail you learn class spells by yourself – no training plan needed there.",
   noDataHead = "No training plan",
   noDataBody = "There is no training data for this class.",
-  emptyNow = "Nothing to learn right now.", emptyNext = "Nothing more in sight.", emptyLearned = "Nothing learned yet.",
+  emptyNow = "Nothing to learn right now. Visit your trainer again with the next level.", emptyNext = "Nothing more in sight.", emptyLearned = "Nothing learned yet. Visit your class trainer.",
   prevPage = "Previous page", nextPage = "Next page",
 })

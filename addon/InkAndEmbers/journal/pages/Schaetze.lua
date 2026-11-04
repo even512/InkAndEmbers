@@ -61,7 +61,7 @@ local GEM_W = floor((R0 + RW - GEM_X - 4) / 4) -- 4 px air to the decoration bot
 
 -- locale scope "p.Schaetze" (English in locales/enUS_pages.lua), read when drawing
 Page.TEXT = ns.Locale.ns("p.Schaetze", {
-  level = "Stufe %s", levels = "Stufe %s–%s", total = "Gesamt %s", gearSub = "%s Wechsel · Stufe 1 bis %s",
+  level = "Stufe %s", levels = "Stufe %s–%s", total = "Gesamt %s", gearSub = "%s Wechsel · Stufe 1 bis %s", gearSubNone = "Noch kein Wechsel · legt etwas Neues an",
   brand = "INK & EMBERS", page = "SCHÄTZE", book = "BEUTEL", bag = "IM BEUTEL",
   ledger = "Haushaltsbuch", flow = "Goldfluss", flowSub = "Woher das Gold kam und wohin es ging",
   toBars = "Quellen", toBand = "Stufen", noMoney = "Noch kein Gold bewegt.",
@@ -913,7 +913,11 @@ function Page:DrawGear(view)
     return
   end
   set(u.gearEmpty, "")
-  set(u.gearSub, Page.TEXT("gearSub", gear.changesText, Journal.Texts.int(gear.level)))
+  if (tonumber(gear.changes) or 0) == 0 then
+    set(u.gearSub, Page.TEXT.gearSubNone)
+  else
+    set(u.gearSub, Page.TEXT("gearSub", gear.changesText, Journal.Texts.int(gear.level)))
+  end
   for i, row in ipairs(gear.rows) do
     local y = GEAR_Y + (i - 1) * GEAR_ROW
     for _, run in ipairs(row.runs) do

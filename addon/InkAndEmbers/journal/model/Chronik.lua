@@ -384,6 +384,14 @@ function Chronik.duration(sec) -- via Fmt.duration ("6 Std. 27 Min.")
   return ns.Journal.Fmt.duration(sec) or TEXT.unknown
 end
 
+-- "ca. 6 Std." for an estimated duration; below one minute the text itself already says "under 1 min", so no "ca."
+function Chronik.approxText(text)
+  local fmt = ns.Journal and ns.Journal.Fmt
+  if fmt and text == fmt.duration(0) then return text end
+  return TEXT("approx", text)
+end
+function Chronik.approxDuration(sec) return Chronik.approxText(Chronik.duration(sec)) end
+
 -- local time of a moment by the index's time zone history (as Index.dayOf)
 local function tzAt(index, t)
   local arr = type(index.tzT) == "table" and index.tzT or {}
@@ -1625,10 +1633,13 @@ local function buildDiary(index, char, flowDur)
   for _, r in ipairs(Idx.list(index, "DE")) do
     add(r, "death", { zone = rawStr(Idx.str(r, "DE", "sub")) or zone(r, "DE") })
   end
+  local skipStartContinent = true -- the starting continent is no news (the medal still counts it)
   for _, r in ipairs(Idx.list(index, "MO")) do
     local kind = Idx.str(r, "MO", "kind")
     local what = kind and DIARY_MOMENTS[kind] and TEXT["dm_" .. kind]
-    if what then add(r, "moment", { what = what, zone = rawStr(Idx.str(r, "MO", "sub")) or zone(r, "MO") }) end
+    if kind == "continent" and skipStartContinent then
+      skipStartContinent = false
+    elseif what then add(r, "moment", { what = what, zone = rawStr(Idx.str(r, "MO", "sub")) or zone(r, "MO") }) end
   end
   -- campfire rounds (LF): "Am Lagerfeuer in <zone> mit A, B (n)"; who/again are display-ready, people (raw values) only
   -- for the tooltip
@@ -1637,10 +1648,13 @@ local function buildDiary(index, char, flowDur)
     add({ t = rd.t, ln = rd.ln }, "campfire", { zone = rd.zone, who = FM.who(rd), again = FM.again(rd, "ihr"),
       people = FM.tipPeople(rd), n = rd.n, seconds = rd.seconds, sim = rd.sim })
   end
+  local skipStartZone = true -- the starting zone is no news either
   for _, r in ipairs(Idx.list(index, "ZN")) do
     if Idx.str(r, "ZN", "mapType") == "3" then
       local name = zone(r, "ZN")
-      if name then add(r, "zone", { zone = name }) end
+      if skipStartZone then
+        skipStartZone = false
+      elseif name then add(r, "zone", { zone = name }) end
     end
   end
   for _, r in ipairs(Idx.list(index, "SZ")) do
@@ -1951,7 +1965,7 @@ local function profileOf(index, st, level, playedSec, exact, db, now)
   return {
     name = name, subtitle = subtitle, motto = motto and TEXT("quoted", motto) or nil, level = level,
     maxLevel = Chronik.maxLevel(), since = since,
-    played = playedSec and (exact and Chronik.duration(playedSec) or TEXT("approx", Chronik.duration(playedSec))) or TEXT.unknown,
+    played = playedSec and (exact and Chronik.duration(playedSec) or Chronik.approxDuration(playedSec)) or TEXT.unknown,
     playedSec = playedSec, playedExact = exact, sessions = sessionCount(db, index.guid), perDay = perDay, playDays = dayCount,
     entries = entries, entriesTip = tip, entriesTipColors = tipColors, afk = afkOf(st.char, now),
     head = TEXT("head", name, class or race or "", int(level)),
@@ -2028,7 +2042,7 @@ local function flowOf(index, st, level, playedSec, now, texts)
     col.color = col.current and "red" or ((col.fastest or col.slowest) and "gold" or "ink")
     local tip = { TEXT(col.current and "colLevelNow" or "colLevel", int(L)) }
     local durText = d and Chronik.duration(d)
-    if d and st.approx[L] and not col.current then durText = TEXT("approx", durText) end
+    if d and st.approx[L] and not col.current then durText = Chronik.approxText(durText) end
     tip[#tip + 1] = d and TEXT("colDur", durText) or TEXT.colDurUnknown
     if n > 0 then tip[#tip + 1] = TEXT(Loc.plural(n, "deaths_one", "deaths_other"), int(n)) end
     col.tip = tip
@@ -2083,7 +2097,7 @@ local function forecastOf(st, level, curDur)
     return out
   end
   out.ok, out.hours = true, remaining / 3600
-  local h = remaining > 9999 * 3600 and TEXT("over", int(9999)) or TEXT("approx", Chronik.duration(remaining))
+  local h = remaining > 9999 * 3600 and TEXT("over", int(9999)) or Chronik.approxDuration(remaining)
   out.title = TEXT("forecastHead", int(top), h)
   out.body = TEXT("forecastBody", int(#d))
   return out

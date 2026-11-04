@@ -108,8 +108,16 @@ schedule = function(self)
   if not Core.after(self, at - now, fire) then self.timerOn = false end
 end
 
+-- setting "Automatische Screenshots" (journal/Options.lua, Pages.setting("autoShots"), default on); without the journal: on
+local function autoShotsOn()
+  local P = ns.Journal and ns.Journal.Pages
+  if not P or type(P.setting) ~= "function" then return true end
+  return P.setting("autoShots") ~= false
+end
+
 local function queueShot(self, reason)
   if type(Screenshot) ~= "function" or not str(reason) then return end
+  if not autoShotsOn() then return end
   if not self.reasonSet[reason] then
     self.reasonSet[reason] = true
     self.reasons[#self.reasons + 1] = reason
@@ -188,6 +196,8 @@ handlers.PLAYER_ALIVE = afterDeath
 handlers.PLAYER_UNGHOST = afterDeath
 
 handlers.FC_ZONE_NEW = function(self)
+  -- the starting zone of a character (very first login) gets no screenshot: the introduction is on screen then
+  if Store.putSnapshot("moments", "start_zone", { seen = true, level = playerLevel() }) then return end
   queueShot(self, "zone")
 end
 

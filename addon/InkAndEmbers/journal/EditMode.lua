@@ -1,4 +1,4 @@
--- HUD elements in edit mode via the embedded LibEditMode: toast, card, todo, quick, fire. Each has an unprotected holder on UIParent
+-- HUD elements in edit mode via the embedded LibEditMode: toast, slip (welcome greeting), card (campfire recap), todo, quick, fire. Each has an unprotected holder on UIParent
 -- (size = scale, opacity = alpha), saved per layout in chars[guid].editMode.layouts. The draft is committed when Blizzard saves
 -- (hooksecurefunc SaveLayouts + EventRegistry "EditMode.SavedLayouts"), discarded on revert. Writing into EditModeManagerFrame would taint: own section.
 local ADDON_NAME, ns = ...
@@ -11,20 +11,28 @@ local floor, max, min = math.floor, math.max, math.min
 local EditMode = {}
 Journal.EditMode = EditMode
 
-EditMode.IDS = { "toast", "card", "todo", "quick", "fire" }
+EditMode.IDS = { "toast", "slip", "card", "todo", "quick", "fire" }
 EditMode.SCALE = { min = 50, max = 150, step = 5, default = 100 }
+-- Toasts and cards start smaller (80 %) than the other HUD elements; saved sizes stay as they are. The welcome note keeps its
+-- real size by default (125 % x BASE_SCALE 0.8 = 1.0).
+EditMode.SCALE_DEFAULTS = { toast = 80, card = 80, slip = 125 }
+-- Default place of the welcome note: left screen edge, a figure's inset away (Begleiter.CUTOUTS inset), Begleiter.SLIP.y
+EditMode.SLIP_INSET = 12
+-- Default position of the toasts and cards: the top edge sits TOAST_BELOW_FRAC x screen height under the screen centre (not in the middle of the view)
+EditMode.TOAST_BELOW_FRAC = 0.12 -- of the screen height (see Toast.below)
+function EditMode.scaleDefault(id) return EditMode.SCALE_DEFAULTS[id] or EditMode.SCALE.default end
 EditMode.BASE_SCALE = 0.8   -- 100 % in edit mode = 80 % of the base size
 EditMode.ALPHA = { min = 20, max = 100, step = 5, default = 100 }
 EditMode.DURATION = { min = 2, max = 30, step = 1 }
-EditMode.LEVEL = { toast = 30, card = 10, todo = 10, quick = 10, fire = 10 }
+EditMode.LEVEL = { toast = 30, slip = 20, card = 10, todo = 10, quick = 10, fire = 10 }
 EditMode.LAYOUTS_MAX = 64
 EditMode.NAME_BYTES = 64
 EditMode.POINTS = { TOPLEFT = true, TOP = true, TOPRIGHT = true, LEFT = true, CENTER = true, RIGHT = true, BOTTOMLEFT = true,
   BOTTOM = true, BOTTOMRIGHT = true }
 
 EditMode.TEXT = ns.Locale.ns("EditMode", {
-  name = { toast = "Chronik: Einblendungen", card = "Chronik: Willkommen-Karte", todo = "Chronik: Mini-To-Do-Zettel",
-    quick = "Chronik: Schnellnotizen", fire = "Chronik: Zettel am Feuer" },
+  name = { toast = "Chronik: Einblendungen", slip = "Chronik: Willkommen-Gruß", card = "Chronik: Rast-Rückblick",
+    todo = "Chronik: Mini-To-Do-Zettel", quick = "Chronik: Schnellnotizen", fire = "Chronik: Zettel am Feuer" },
   scale = "Größe",
   scaleDesc = "Größe des Elements, 50 bis 150 %.",
   alpha = "Deckkraft",
@@ -49,9 +57,12 @@ EditMode.TEXT = ns.Locale.ns("EditMode", {
   sampleHead = "Neues Gebiet",
   sampleTitle = "Tirisfal",
   sampleSub = { down = "Beispiel · wächst nach unten", up = "Beispiel · wächst nach oben" },
-  cardHead = "Beispiel",
-  cardTitle = "Willkommen zurück",
-  cardLines = { "Zuletzt: Tirisfal · vor 2 Std.", "3 offene Quests · Ruhebonus 40 %" },
+  cardHead = "Am Lagerfeuer",
+  cardTitle = "Seit der letzten Rast …",
+  cardLines = { "2 Std. unterwegs, 5 km", "12 Kills · 3 Quests abgegeben" },
+  slipTitle = "Willkommen zurück,",
+  slipName = "Reisende.",
+  slipLines = { "Zuletzt: Tirisfal · vor 9 Std.", "3 offene Quests · Ruhebonus 40 %" },
   todoSamples = {
     { kind = "item", text = "Hasenpfoten sammeln", extra = "4/10" },
     { kind = "place", text = "Den Leuchtturm besuchen", extra = "120 m" },
@@ -60,7 +71,7 @@ EditMode.TEXT = ns.Locale.ns("EditMode", {
   },
   panelTitle = "Ink & Embers",
   panelHint = "Im Bearbeitungsmodus zeigen",
-  panelNames = { toast = "Einblendungen", card = "Willkommen-Karte", todo = "Mini-To-Do-Zettel", quick = "Schnellnotizen", fire = "Zettel am Feuer" },
+  panelNames = { toast = "Einblendungen", slip = "Willkommen-Gruß", card = "Rast-Rückblick", todo = "Mini-To-Do-Zettel", quick = "Schnellnotizen", fire = "Zettel am Feuer" },
   dirty = "Ungespeicherte Änderungen",
   clean = "Alles gespeichert",
   save = "Speichern",
@@ -97,6 +108,7 @@ local function Toast() return Journal.Toast end
 local function TT() return Journal.TodoTracker end
 local function QN() return Journal.QuickNote end
 local function FN() return Journal.FireNotes end
+local function BG() return Journal.Begleiter end
 
 local function layoutKey(name)
   if isSecret(name) or type(name) ~= "string" or name == "" then return "_" end
@@ -197,7 +209,7 @@ end
 function EditMode.values(id, layout)
   local e = entry(id, false, layout) or {}
   local out = {
-    scale = clampPct(e.scale, EditMode.SCALE) or EditMode.SCALE.default,
+    scale = clampPct(e.scale, EditMode.SCALE) or EditMode.scaleDefault(id),
     alpha = clampPct(e.alpha, EditMode.ALPHA) or EditMode.ALPHA.default,
     duration = clampPct(e.duration, EditMode.DURATION),
     grow = (e.grow == "up") and "up" or "down",
@@ -220,8 +232,9 @@ function EditMode.set(id, key, value, layout)
       if not value then return false end
     end
     if key == "scale" and type(e.pos) == "table" and num(e.pos.x) and num(e.pos.y) then
-      local old = (clampPct(e.scale, R) or R.default) / 100
-      local new = (value or R.default) / 100
+      local dflt = key == "scale" and EditMode.scaleDefault(id) or R.default
+      local old = (clampPct(e.scale, R) or dflt) / 100
+      local new = (value or dflt) / 100
       e.pos.x, e.pos.y = e.pos.x * old / new, e.pos.y * old / new
     end
     e[key] = value
@@ -252,6 +265,7 @@ function EditMode.natural(id)
   local To = Toast()
   if id == "toast" then return To and To.W or 288, To and To.H or 120 end
   if id == "card" then return To and To.CARD.w or 640, To and To.CARD.h or 381 end
+  if id == "slip" then return BG() and BG().SLIP.w or 420, BG() and BG().SLIP.h or 232 end
   if id == "todo" then
     local s = TT() and TT().settings()
     return s and s.w or 250, s and s.h or 250
@@ -266,7 +280,13 @@ end
 
 function EditMode.defaultPos(id)
   local To = Toast()
-  if id == "toast" or id == "card" then return { point = "TOP", x = 0, y = To and To.TOP or -110 } end
+  if id == "toast" or id == "card" then
+    -- both share one place: top edge slightly below the screen centre (holder is centred, so half its height is added)
+    local k = EditMode.values(id).scale / 100 * EditMode.BASE_SCALE
+    local _, hh = EditMode.natural(id)
+    return { point = "CENTER", x = 0, y = -((To and To.below and To.below() or 90) + hh * k / 2) }
+  end
+  if id == "slip" then return { point = "LEFT", x = EditMode.SLIP_INSET, y = BG() and BG().SLIP.y or -40 } end
   if id == "todo" then return { point = "TOPRIGHT", x = -40, y = -250 } end
   if id == "fire" then
     local p = FN() and FN().DEFAULT_POS or { point = "CENTER", x = 0, y = 60 }
@@ -298,9 +318,81 @@ local function sampleLine(parent, Theme, kind, size, color, x, y, w)
   return fs
 end
 
+-- Welcome note preview: the same layers as the real note (Begleiter.slipFrame): narrator backdrop and figure behind the frame
+-- texture, the cut-out in front, sample text on the parchment. refresh() picks the narrator again (own race / random / fixed).
+local function buildSlipPreview(h)
+  local Theme, B = Journal.Theme, BG()
+  if not (Theme and B and B.SLIP) then return nil end
+  local S = B.SLIP
+  local p = CreateFrame("Frame", nil, h)
+  p:SetAllPoints(h)
+  p.portrait = p:CreateTexture(nil, "BACKGROUND")
+  local ps = B.slipPortraitTex()
+  p.portrait:SetSize(ps, ps)
+  p.portrait:SetPoint("CENTER", p, "TOPLEFT", S.circleX, -(S.circleY + floor(6 * ps / 512 + 0.5)))
+  p.figIn = p:CreateTexture(nil, "BACKGROUND", nil, 1)
+  p.cutout = p:CreateTexture(nil, "OVERLAY", nil, 3)
+  p.paper = p:CreateTexture(nil, "ARTWORK")
+  p.paper:SetAllPoints(p)
+  if Theme.TEX.welcomeBack then p.paper:SetTexture(Theme.TEX.welcomeBack) end
+  local TT = Journal.TodoTracker
+  local function text(size, r, g, b)
+    local fs
+    if TT and TT.fontString and TT.setFont then
+      fs = TT.fontString(p, "OVERLAY")
+      TT.setFont(fs, "text", size)
+    else
+      fs = p:CreateFontString(nil, "OVERLAY")
+    end
+    fs:SetTextColor(r, g, b)
+    fs:SetWidth(S.textW)
+    fs:SetJustifyH("LEFT")
+    fs:SetJustifyV("TOP")
+    return fs
+  end
+  p.title = text(S.titleSize, 0.36, 0.12, 0.07)
+  p.body = text(S.bodySize, 0.20, 0.13, 0.07)
+  p.body:SetSpacing(3)
+  p.title:SetText(T.slipTitle .. "\n" .. T.slipName)
+  p.body:SetText(table.concat(T.slipLines, "\n"))
+  -- text block centred on the parchment like the real note (two lines of title, then the body)
+  local th, bh = 2 * (S.titleSize + 4), #T.slipLines * (S.bodySize + 5)
+  local top = floor(max(S.textTop, S.textTop + ((S.textBottom - S.textTop) - (th + 4 + bh)) / 2) + 0.5)
+  p.title:SetPoint("TOPLEFT", p, "TOPLEFT", S.textX, -top)
+  p.body:SetPoint("TOPLEFT", p, "TOPLEFT", S.textX, -(top + th + 4))
+  function p.refresh()
+    local nar = B.narrator()
+    local tex = nar and Theme.narratorTex and Theme.narratorTex(nar) or nil
+    local co = nar and B.CUTOUTS[nar] or nil
+    local out = co and Theme.TEX["narratorFigOut_" .. nar] or nil
+    local inn = co and Theme.TEX["narratorFigIn_" .. nar] or nil
+    p.portrait:SetShown(tex ~= nil)
+    if tex then p.portrait:SetTexture(tex) end
+    p.portrait:SetVertexColor(1, 1, 1)
+    p.figIn:Hide()
+    p.cutout:Hide()
+    if out and inn then
+      for _, t in ipairs({ { p.cutout, out }, { p.figIn, inn } }) do
+        t[1]:SetTexture(t[2])
+        t[1]:SetSize(co.w, co.h)
+        t[1]:ClearAllPoints()
+        t[1]:SetPoint("TOPLEFT", p, "TOPLEFT", co.x, -co.y)
+        t[1]:Show()
+      end
+      local bg = Theme.TEX["narratorBG_" .. nar]
+      if bg then p.portrait:SetTexture(bg) end
+      p.portrait:SetVertexColor(co.dim, co.dim, co.dim)
+    end
+  end
+  p.refresh()
+  p:Hide()
+  return p
+end
+
 local function buildPreview(h, id)
   local Theme, To = Journal.Theme, Toast()
   if not (Theme and To and Theme.fontString) then return nil end
+  if id == "slip" then return buildSlipPreview(h) end
   local p = CreateFrame("Frame", nil, h)
   p:SetAllPoints(h)
   local paper = p:CreateTexture(nil, "BACKGROUND")
@@ -347,14 +439,14 @@ local function newHolder(id)
   local h = CreateFrame("Frame", "EveNChronicleEditMode" .. string.upper(string.sub(id, 1, 1)) .. string.sub(id, 2), UIParent)
   local w, hh = EditMode.natural(id)
   h:SetSize(w, hh)
-  h:SetFrameStrata((id == "toast" or id == "card") and "DIALOG" or "MEDIUM")
+  h:SetFrameStrata((id == "toast" or id == "card" or id == "slip") and "DIALOG" or "MEDIUM")
   if h.SetClampedToScreen then h:SetClampedToScreen(true) end
   if h.SetDontSavePosition then h:SetDontSavePosition(true) end
   h:EnableMouse(false)
   h:SetFrameLevel(EditMode.LEVEL[id] or 10)
   h.editModeName = T.name[id]
   h.elementId = id
-  if id == "toast" or id == "card" then h.preview = buildPreview(h, id) end
+  if id == "toast" or id == "card" or id == "slip" then h.preview = buildPreview(h, id) end
   if id == "fire" and FN() and FN().buildPreview then h.preview = FN().buildPreview(h) end
   h:Show()
   st.holders[id] = h
@@ -395,7 +487,8 @@ end
 
 function EditMode.toastId(item)
   local key = type(item) == "table" and item.key or nil
-  if key == "welcome" or (type(key) == "string" and string.sub(key, 1, 5) == "rest:") then return "card" end
+  -- the big card is only the campfire recap now; the welcome greeting is the note ("slip", Begleiter.slipSpot)
+  if type(key) == "string" and string.sub(key, 1, 5) == "rest:" then return "card" end
   return "toast"
 end
 
@@ -408,6 +501,7 @@ function hud.toastPlace(f, item)
   local v = EditMode.values(id)
   if f:GetParent() ~= h then f:SetParent(h) end
   f:SetFrameStrata("DIALOG")
+  f:SetScale(1)
   f:ClearAllPoints()
   if v.grow == "up" then f:SetPoint("BOTTOM", h, "BOTTOM", 0, 0) else f:SetPoint("TOP", h, "TOP", 0, 0) end
   return true
@@ -578,6 +672,15 @@ local function hookBlizzard()
 end
 EditMode.hookBlizzard = hookBlizzard
 
+-- is the element in use at all? The campfire recap only exists while its option is on (default off).
+function EditMode.available(id)
+  if id == "card" then
+    local B = BG()
+    return B ~= nil and type(B.restOn) == "function" and B.restOn() == true
+  end
+  return true
+end
+
 function EditMode.shownInEdit(id)
   local em = emStore(false)
   local hid = em and em.hidden
@@ -653,11 +756,24 @@ end
 updatePanel = function()
   local p = st.panel
   if not p then return end
-  for id, cb in pairs(p.checks) do
-    local on = EditMode.shownInEdit(id)
-    cb:SetChecked(on)
-    cb.checked = on
+  -- rows of unavailable elements (campfire recap with its option off) are left out and the rest moves up
+  local row = 0
+  for _, id in ipairs(EditMode.IDS) do
+    local cb = p.checks[id]
+    if cb then
+      local on = EditMode.shownInEdit(id)
+      cb:SetChecked(on)
+      cb.checked = on
+      local avail = EditMode.available(id)
+      cb:SetShown(avail)
+      if avail then
+        cb:ClearAllPoints()
+        cb:SetPoint("TOPLEFT", p, "TOPLEFT", 8, -(PANEL.top + 14 + row * PANEL.row))
+        row = row + 1
+      end
+    end
   end
+  p:SetHeight(PANEL.top + 18 + row * PANEL.row + 64)
   local dirty = EditMode.isDirty()
   p.status:SetText(dirty and T.dirty or T.clean)
   setEnabled(p.save, dirty)
@@ -757,12 +873,16 @@ end
 local function showElement(id)
   local h = holder(id)
   if not h then return end
-  if not EditMode.shownInEdit(id) then
+  if not (EditMode.shownInEdit(id) and EditMode.available(id)) then
+    if h.preview then h.preview:Hide() end
     h:Hide()
     return
   end
   h:Show()
-  if h.preview then h.preview:Show() end
+  if h.preview then
+    if h.preview.refresh then h.preview.refresh() end
+    h.preview:Show()
+  end
   if id == "todo" or id == "quick" then
     if wantsPreview(id) then startPreview(id) else stopPreview(id) end
   end
@@ -779,6 +899,8 @@ function EditMode.syncPreview()
   if not st.editing then return end
   showElement("todo")
   showElement("quick")
+  showElement("card")
+  updatePanel()
 end
 
 function EditMode.setShown(id, on)
@@ -876,7 +998,7 @@ end
 
 local function pctSetting(lib, id, key, R, name, desc)
   return {
-    kind = lib.SettingType.Slider, name = name, desc = desc, default = R.default,
+    kind = lib.SettingType.Slider, name = name, desc = desc, default = key == "scale" and EditMode.scaleDefault(id) or R.default,
     minValue = R.min, maxValue = R.max, valueStep = R.step, formatter = pctFormat,
     get = function(layout) return EditMode.values(id, layout)[key] end,
     set = function(layout, value, fromReset)
@@ -1019,7 +1141,9 @@ function EditMode.init()
   local To, Tr, Q, F = Toast(), TT(), QN(), FN()
   st.lib = lib
   local ids = {}
-  if To then ids[#ids + 1] = "toast" ids[#ids + 1] = "card" end
+  if To then ids[#ids + 1] = "toast" end
+  if BG() then ids[#ids + 1] = "slip" end
+  if To then ids[#ids + 1] = "card" end
   if Tr then ids[#ids + 1] = "todo" end
   if Q then ids[#ids + 1] = "quick" end
   if F then ids[#ids + 1] = "fire" end

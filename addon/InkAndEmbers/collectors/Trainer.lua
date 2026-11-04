@@ -31,6 +31,9 @@ Trainer.SERVICE_TYPES = { available = true, unavailable = true, used = true, hea
 local T = ns.Locale.ns("col.Trainer", {
   todo_one = "Zum Lehrer: %s neuer Zauber (%s)",
   todo_other = "Zum Lehrer: %s neue Zauber (%s)",
+  unitG = "G",
+  unitS = "S",
+  unitK = "K",
   talentHead = "Talentpunkte",
   talent_one = "%s Punkt wartet auf Euch",
   talent_other = "%s Punkte warten auf Euch",
@@ -41,6 +44,7 @@ local T = ns.Locale.ns("col.Trainer", {
   diagNoData = "keine Daten für Klasse %s",
   diagShape = ", Lehrerliste: %s",
   unknown = "?",
+  unknownArg = "Unbekannter Zusatz \"%s\". /chronik lehrplan öffnet die Seite, /chronik lehrplan status zeigt den Stand.",
   retailOnly = "Den Lehrplan gibt es nur in WoW Forever (in Retail kommen Klassenzauber von selbst).",
 })
 Trainer.TEXT = T
@@ -82,7 +86,11 @@ end
 
 local function moneyText(copper)
   local Tx = ns.Journal and ns.Journal.Texts
-  if Tx and type(Tx.money) == "function" then return Tx.money(copper, "plain") end
+  if Tx and type(Tx.money) == "function" then
+    -- The to-do text is stored sanitized (no |T/|A coin icons survive), so the units are capital letters: "5 S 10 K"
+    local units = { g = T.unitG, s = T.unitS, k = T.unitK }
+    return (Tx.money(copper, "plain"):gsub("(%d) ([gsk])%f[%A]", function(d, u) return d .. " " .. units[u] end))
+  end
   return tostring(copper)
 end
 
@@ -400,6 +408,10 @@ end
 function Trainer.slash(rest)
   local print_ = Core.print
   local LP = L()
+  if type(rest) == "string" and rest ~= "" and rest ~= "status" and rest ~= "diag" then
+    print_(T("unknownArg", ns.Sanitize.field(rest)))
+    return false
+  end
   if rest == "status" or rest == "diag" then
     print_(Trainer.diagLine())
     return true

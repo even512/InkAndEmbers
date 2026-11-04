@@ -94,10 +94,22 @@ local TX = ns.Locale.ns("Options", {
   toastZoneTip = "Einblendung beim ersten Betreten eines Gebiets.",
   toastSoundLabel = "Ton der Einblendungen",
   toastSoundTip = "Klang zu jeder Einblendung (wie /chronik ton). Welcher Klang, steht unter Klänge.",
-  welcomeLabel = "Begrüßung beim Einloggen",
-  welcomeTip = "Kurze Karte mit dem Stand der Reise beim Einloggen.",
-  narratorLabel = "Erzähler auf der Willkommen-Karte",
-  narratorTip = "Wer Euch auf der Begrüßungskarte empfängt: jemand Eures Volks, bei jeder Karte ein anderer oder immer derselbe.",
+  welcomeLabel = "Willkommen-Gruß",
+  welcomeTip = "Kleiner Zettel am linken Bildschirmrand beim Einloggen: beim ersten Besuch eines Charakters und, wenn Ihr nach einer Pause zurückkehrt, mit dem Stand der Reise.",
+  welcomeAfterLabel = "Zeigen nach Abwesenheit von",
+  welcomeAfterTip = "Wie lange Ihr mindestens weg gewesen sein müsst, damit der Zettel beim Einloggen kommt. „Sofort“ zeigt ihn bei jedem Einloggen (nicht bei /reload). Der erste Besuch eines Charakters wird immer begrüßt.",
+  afterNow = "Sofort",
+  afterHours = { [3600] = "1 Std.", [7200] = "2 Std.", [14400] = "4 Std.", [28800] = "8 Std.", [86400] = "24 Std." },
+  welcomeSeenLabel = "Zettel zeigt: zuletzt gesehen",
+  welcomeSeenTip = "Gebiet, in dem Ihr zuletzt wart, und wie lange das her ist.",
+  welcomeQuestsLabel = "Zettel zeigt: offene Quests",
+  welcomeQuestsTip = "Wie viele Quests im Questlog offen sind.",
+  welcomeRestedLabel = "Zettel zeigt: Ruhebonus",
+  welcomeRestedTip = "Euren Ruhebonus in Prozent.",
+  welcomePlanLabel = "Zettel zeigt: To Do in der Nähe",
+  welcomePlanTip = "Ein To Do in der Nähe oder, wenn dort keins wartet, die zuletzt angenommene Quest.",
+  narratorLabel = "Erzähler im Willkommen-Gruß",
+  narratorTip = "Wer Euch im Willkommen-Gruß empfängt: jemand Eures Volks, bei jedem Gruß ein anderer oder immer derselbe.",
   narratorOwn = "Eigenes Volk",
   narratorRandom = "Zufällig",
   narratorNames = { human = "Mensch", dwarf = "Zwerg", nightelf = "Nachtelf", gnome = "Gnom", orc = "Orc", undead = "Untoter",
@@ -127,6 +139,8 @@ local TX = ns.Locale.ns("Options", {
   fireMix = "Gemischt",
   firePlatesLabel = "Plaketten beim Hinsetzen einschalten",
   firePlatesTip = "Schaltet beim Hinsetzen die Namensplaketten freundlicher Spieler ein, damit die Chronik erkennt, wer mit am Feuer sitzt; beim Aufstehen kommt die alte Einstellung zurück.",
+  shotsLabel = "Automatische Screenshots",
+  shotsTip = "Bei besonderen Momenten (Stufenaufstieg, seltene Gegner, Tod, neues Gebiet, Bosse) macht die Chronik selbst einen Screenshot. Abgeschaltet entstehen nur noch Eure eigenen.",
   meterLabel = "Schadensanzeige automatisch einschalten",
   meterTip = "Schaltet die Schadensanzeige des Spiels ein, damit Kämpfe Schaden und Heilung festhalten (wie /chronik messer).",
   diagLabel = "Diagnose",
@@ -426,7 +440,33 @@ Options.GROUPS = {
         end,
         get = function() local B = Journal.Begleiter return B and B.narratorChoice() or "own" end,
         set = function(v) local B = Journal.Begleiter if B then call(B.setNarrator, v) end end },
-      { kind = "check", key = "restReview", label = tx("restLabel"), default = true,
+      -- the next five depend on the greeting: greyed out while it is off (enabledBy)
+      { kind = "dropdown", key = "welcomeAfter", label = tx("welcomeAfterLabel"), default = 3600, varType = "number",
+        tip = tx("welcomeAfterTip"), enabledBy = "welcome",
+        options = function()
+          local list = { { value = 0, label = TX.afterNow } }
+          for _, sec in ipairs({ 3600, 7200, 14400, 28800, 86400 }) do list[#list + 1] = { value = sec, label = TX.afterHours[sec] } end
+          return list
+        end,
+        get = function() local B = Journal.Begleiter return B and B.afterSeconds() or 3600 end,
+        set = function(v) local B = Journal.Begleiter if B then call(B.setAfter, v) end end },
+      { kind = "check", key = "welcomeSeen", label = tx("welcomeSeenLabel"), default = true,
+        tip = tx("welcomeSeenTip"), enabledBy = "welcome",
+        get = function() local B = Journal.Begleiter return not B or B.infoOn("seen") end,
+        set = function(v) local B = Journal.Begleiter if B then call(B.setInfo, "seen", v) end end },
+      { kind = "check", key = "welcomeQuests", label = tx("welcomeQuestsLabel"), default = true,
+        tip = tx("welcomeQuestsTip"), enabledBy = "welcome",
+        get = function() local B = Journal.Begleiter return not B or B.infoOn("quests") end,
+        set = function(v) local B = Journal.Begleiter if B then call(B.setInfo, "quests", v) end end },
+      { kind = "check", key = "welcomeRested", label = tx("welcomeRestedLabel"), default = true,
+        tip = tx("welcomeRestedTip"), enabledBy = "welcome",
+        get = function() local B = Journal.Begleiter return not B or B.infoOn("rested") end,
+        set = function(v) local B = Journal.Begleiter if B then call(B.setInfo, "rested", v) end end },
+      { kind = "check", key = "welcomePlan", label = tx("welcomePlanLabel"), default = true,
+        tip = tx("welcomePlanTip"), enabledBy = "welcome",
+        get = function() local B = Journal.Begleiter return not B or B.infoOn("plan") end,
+        set = function(v) local B = Journal.Begleiter if B then call(B.setInfo, "plan", v) end end },
+      { kind = "check", key = "restReview", label = tx("restLabel"), default = false,
         tip = tx("restTip"),
         get = function() local B = Journal.Begleiter return not B or B.restOn() end,
         set = function(v) local B = Journal.Begleiter if B then call(B.setRest, v) end end },
@@ -490,6 +530,10 @@ Options.GROUPS = {
   {
     title = tx("gMisc"),
     items = {
+      { kind = "check", key = "autoShots", label = tx("shotsLabel"), default = true,
+        tip = tx("shotsTip"),
+        get = function() local P = Journal.Pages return not P or P.setting("autoShots") ~= false end,
+        set = function(v) local P = Journal.Pages if P then P.setSetting("autoShots", bool(v)) end end },
       { kind = "check", key = "meterAuto", label = tx("meterLabel"), default = true,
         tip = tx("meterTip"),
         get = function() return type(ns.meterAutoOn) ~= "function" or ns.meterAutoOn() end,
@@ -573,6 +617,24 @@ local function soundMenu(item, setting)
   end
 end
 
+local inits = {}
+
+-- greys a row out while the row it depends on (item.enabledBy = key of a check) is off: the client's own parent mechanism
+-- (initializer:SetParentInitializer(parent, predicate)); clients without it simply keep the row enabled
+local function bindParent(init, item)
+  local parent = item.enabledBy and inits[item.enabledBy]
+  if type(init) ~= "table" or not parent then return end
+  local function enabled()
+    local ok, v = pcall(parent.item.get)
+    return not ok or v == true
+  end
+  if type(init.SetParentInitializer) == "function" then
+    pcall(init.SetParentInitializer, init, parent.init, enabled)
+  elseif type(init.AddModifyPredicate) == "function" then
+    pcall(init.AddModifyPredicate, init, enabled)
+  end
+end
+
 local function register(category, layout, item)
   local var = Options.PREFIX .. item.key
   if item.kind == "button" then
@@ -597,7 +659,9 @@ local function register(category, layout, item)
   Options.settings[item.key] = setting
   Options.order[#Options.order + 1] = item.key
   if item.kind == "check" then
-    Settings.CreateCheckbox(category, setting, tip)
+    local init = Settings.CreateCheckbox(category, setting, tip)
+    inits[item.key] = { init = init, item = item }
+    bindParent(init, item)
   elseif item.kind == "slider" then
     local opts = Settings.CreateSliderOptions(item.min, item.max, item.step)
     local M = rawget(_G, "MinimalSliderWithSteppersMixin")
@@ -606,7 +670,9 @@ local function register(category, layout, item)
     end
     Settings.CreateSlider(category, setting, opts, tip)
   elseif item.kind == "dropdown" then
-    Settings.CreateDropdown(category, setting, function() return textContainer(item.options()) end, tip)
+    local init = Settings.CreateDropdown(category, setting, function() return textContainer(item.options()) end, tip)
+    inits[item.key] = { init = init, item = item }
+    bindParent(init, item)
   elseif item.kind == "sound" then
     local S = Sound()
     local init = Settings.CreateDropdown(category, setting, function()

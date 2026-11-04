@@ -48,13 +48,13 @@ local T = ns.Locale.ns("p.QuestsLehrplan", {
   todoDone = "To Do angelegt.", todoFail = "Kein To Do angelegt.",
   talentHead = "Talente",
   talentFree_one = "%s Talentpunkt ist frei.", talentFree_other = "%s Talentpunkte sind frei.",
-  talentNone = "Alle Talentpunkte sind verteilt.", talentUnknown = "Talentpunkte nicht lesbar.",
+  talentNone = "Alle Talentpunkte sind verteilt.", talentEarly = "Talentpunkte bekommt Ihr erst später auf Eurer Reise.", talentUnknown = "Talentpunkte nicht lesbar.",
   fees = "Bisher gezahltes Lehrgeld: %s",
   retailHead = "Nur in WoW Forever",
   retailBody = "In Retail lernt Ihr Klassenzauber von selbst – einen Lehrplan braucht es dort nicht.",
   noDataHead = "Kein Lehrplan",
   noDataBody = "Für diese Klasse gibt es keine Lehrplan-Daten.",
-  emptyNow = "Gerade gibt es nichts zu lernen.", emptyNext = "Nichts mehr in Sicht.", emptyLearned = "Noch nichts gelernt.",
+  emptyNow = "Gerade gibt es nichts zu lernen. Mit der nächsten Stufe könnt Ihr wieder zum Lehrer.", emptyNext = "Nichts mehr in Sicht.", emptyLearned = "Noch nichts gelernt. Besucht Euren Klassenlehrer.",
   prevPage = "Vorige Seite", nextPage = "Nächste Seite",
 })
 View.TEXT = T
@@ -416,7 +416,7 @@ function View:Render()
   elseif free > 0 then
     W.setText(ui.talentLine, plural(free, "talentFree_one", "talentFree_other"))
   else
-    W.setText(ui.talentLine, T.talentNone)
+    W.setText(ui.talentLine, (tonumber(view.level) or 0) < 10 and T.talentEarly or T.talentNone)
   end
   ui.talentLine:SetTextColor(W.color(free and free > 0 and "red" or "ink"))
   W.setText(ui.fees, T("fees", money(LP.feesPaid())))

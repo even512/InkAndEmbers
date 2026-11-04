@@ -72,7 +72,7 @@ local CLS_TEXT = { elite = "Elite", rare = "Rar", boss = "Boss" }
 local MT
 do
   local de = {
-    mapN = "Karte %s", lvShort = "St. %s", underway = "Unterwegs", levelN = "Stufe %s", unknownPlace = "unbekannter Ort",
+    stampFmt = "{d}.{m}. {h}:{mi}", mapN = "Karte %s", lvShort = "St. %s", underway = "Unterwegs", levelN = "Stufe %s", unknownPlace = "unbekannter Ort",
     unknown = "unbekannt", zeroMin = "0 Min.", timesN = "%s-mal", whenFmt = "Tag %s, %s",
     firstDeath = "erster Tod", firstDeathIn = "erster Tod in %s", deathsN = "%s Tode", bossDown = "%s bezwungen",
     rareDown = "%s gestellt", level60 = "Stufe %s, das Ziel", levelReached = "Stufe %s erreicht",
@@ -1077,7 +1077,7 @@ local function stamp(J, t)
   local lt = t + tzAt(J, t)
   local _, m, d = civil(floor(lt / 86400))
   local s = lt % 86400
-  return format("%02d.%02d. %02d:%02d", d, m, floor(s / 3600), floor(s % 3600 / 60))
+  return MT("stampFmt", { d = format("%02d", d), m = format("%02d", m), h = format("%02d", floor(s / 3600)), mi = format("%02d", floor(s % 3600 / 60)) })
 end
 Model._stamp = function(t, tz) return stamp({ tzT = {}, tzV = {}, tz0 = tz or 0 }, t) end
 

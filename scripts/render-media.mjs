@@ -1800,6 +1800,167 @@ export function diaryTextures(source = diarySheetSource()) {
 }
 const DIARY_TEXTURES = diaryTextures();
 
+// Willkommen-zurueck-Zettel (B08, journal/Begleiter.lua): art/toast/welcome_back_v2.jpg (2752 x 1536, Gemini, freigegeben
+// 03.11.2026; Magenta-Grund, links runder Holz-Bronze-Rahmen mit Laterne und Feder, der innere Kreis ist Magenta, rechts Pergament mit
+// rotem Lesezeichen). Gemessen 03.11.2026 (Flutfuellung des Magenta im Kreis, Schwelle min(R,B)-G > 120): Kreis x 325..1066,
+// y 344..1110 (742 x 767, Mitte 695,5 | 727, flaechengleicher Radius 378); Motiv x 72..2617, y 86..1479 (mit Laternenschimmer).
+// Zuschnitt x 56..2640, y 70..1500 (2584 x 1430, 1,807 : 1) -> auf 1024 x 512 gestreckt, im Spiel mit 420 x 232 wieder zurueck.
+// Die Konstanten in journal/Begleiter.lua (SLIP: circleX/circleY/circleR, Papierflaeche) rechnen daraus (Massstab 420 / 2584).
+// Das Erzaehler-Portraet liegt UNTER dieser Textur im durchsichtigen Kreis. Neues Bild: Zuschnitt neu messen,
+// `node scripts/render-media.mjs --only WelcomeBack`.
+export const WELCOME_BACK_CROP = { file: "toast/welcome_back_v2.jpg", x: 56, y: 70, w: 2584, h: 1430, srcW: 2752, srcH: 1536 };
+export const WELCOME_BACK_CIRCLE = { cx: 695.5, cy: 727, r: 378 }; // Pixel des Quellbilds
+
+// Freigestellte Erzaehler-Figur des Willkommen-Zettels: art/toast/narrator_cutout_<volk>_v2.jpg (2048 x 2048, Magenta-Grund,
+// Oberkoerper). Die Figur steht HINTER dem Ring im Kreis, nur der obere Teil schaut davor heraus. Ebenen von unten nach oben:
+// (1) NarratorBG_<volk> (Hintergrund im Kreis), (2) NarratorFigIn_<volk> = Figur auf das Kreisinnere maskiert (Radius CUTOUT_GEO.rIn),
+// (3) der Rahmen WelcomeBack, (4) NarratorFigOut_<volk> = dieselbe Figur oberhalb der Schnittlinie CUTOUT_GEO.cut (9 px weich) UND
+// alles, was ausserhalb der Rahmen-Silhouette liegt (Media/WelcomeBack.tga durchsichtig, ohne Hoehengrenze: Aermel, Robe bleiben immer
+// sichtbar; WelcomeBack muss vorher gerendert sein).
+// Zuschnitt = ganze Figur (Bounding-Box des Nicht-Magenta, ab Kopf bis zum Bildunterrand bzw. untenY) -> 512 x 512 (gestreckt);
+// `game` = Lage/Groesse im Zettel in px (identisch zu Begleiter.CUTOUTS). Die Unterkante liegt bei y 178, also hinter dem Ring bzw. im
+// Kreis unter der Schnittlinie; ausserhalb des Rings blendet nur der unterste Streifen (fade) weich aus.
+// Overrides je Volk (Zettelpixel; e = Ellipse [cx, cy, rx, ry], r = Rechteck [x0, y0, x1, y1]): frontKeep = immer vor dem Ring (ganze Hand), frontDrop =
+// nie vor dem Ring (bleibt hinter dem Ring bzw. faellt weg). Grundregel: ein Koerperteil liegt ganz vor oder ganz hinter dem Ring.
+// Zuschnitt und Zeilen liefert `python scripts/measure-cutout.py <volk>` (Troll: Schaedel 340, Mensch: untenY 1840 wegen rundem Rand);
+// Zwerg: despill gegen rosa Dampf. Kreis: Mitte 104|107 (Zettel), Loch-Radius 61.
+export const CUTOUT_GEO = { cx: 104, cy: 107, rIn: 64, cut: 134, soft: 9, fade: 6 };
+export const NARRATOR_CUTOUTS = {
+  undead: { file: "toast/narrator_cutout_undead_v2.jpg", x: 350, y: 160, w: 1576, h: 1888, srcW: 2048, srcH: 2048, game: { x: 25.9, y: -21.8, w: 166.8, h: 199.8 } },
+  human: { file: "toast/narrator_cutout_human_v2.jpg", x: 190, y: 133, w: 1732, h: 1707, srcW: 2048, srcH: 2048, game: { x: -8.2, y: -21.9, w: 202.8, h: 199.9 } },
+  dwarf: { file: "toast/narrator_cutout_dwarf_v2.jpg", x: 31, y: 109, w: 2010, h: 1939, srcW: 2048, srcH: 2048, despill: { x0: 400, y0: 90, x1: 512, y1: 215 }, frontKeep: [{ e: [34, 132, 18, 20] }], game: { x: -8.0, y: -21.7, w: 207.0, h: 199.7 } },
+  nightelf: { file: "toast/narrator_cutout_nightelf_v2.jpg", x: 191, y: 184, w: 1726, h: 1864, srcW: 2048, srcH: 2048, frontDrop: [{ r: [-20, 134, 45, 190] }, { e: [39, 127, 11, 8] }, { e: [31, 132, 5, 4] }, { r: [150, 68, 185, 190] }], frontKeep: [{ e: [152, 50, 24, 14] }], game: { x: -8.1, y: -21.8, w: 185.0, h: 199.8 } },
+  gnome: { file: "toast/narrator_cutout_gnome_v2.jpg", x: 409, y: 18, w: 1626, h: 2030, srcW: 2048, srcH: 2048, game: { x: 28.0, y: -21.7, w: 159.9, h: 199.7 } },
+  orc: { file: "toast/narrator_cutout_orc_v2.jpg", x: 386, y: 59, w: 1606, h: 1989, srcW: 2048, srcH: 2048, game: { x: 21.0, y: -21.7, w: 161.2, h: 199.7 } },
+  tauren: { file: "toast/narrator_cutout_tauren_v2.jpg", x: 163, y: 123, w: 1849, h: 1925, srcW: 2048, srcH: 2048, game: { x: -8.0, y: -21.7, w: 191.9, h: 199.7 } },
+  troll: { file: "toast/narrator_cutout_troll_v2.jpg", x: 264, y: 0, w: 1708, h: 2048, srcW: 2048, srcH: 2048, game: { x: -8.2, y: -60.0, w: 198.5, h: 238.0 } },
+  skyborne: { file: "toast/narrator_cutout_skyborne_v2.jpg", x: 137, y: 178, w: 1789, h: 1870, srcW: 2048, srcH: 2048, frontDrop: [{ r: [-20, 134, 22, 190] }, { r: [-20, 118, 38, 140] }], game: { x: 8.9, y: -21.8, w: 191.1, h: 199.8 } },
+};
+export const NARRATOR_CUTOUTS_PENDING = [];
+// Fig_out: ausserhalb des Rings bleibt nur, was ueber sichtbare Pixel mit dem Teil OBERHALB der Schnittlinie zusammenhaengt (8er-Nachbarschaft,
+// Deckkraft >= MIN_A). Lose Stuecke (Aermel-/Umhangzipfel, Haende, Buchecken, deren Verbindung hinter dem Ring liegt) und kleine Inseln
+// (< MIN_AREA Texturpixel) fallen weg; schwache Randpixel bleiben nur neben einer behaltenen Flaeche.
+const inShapes = (list, x, y) => {
+  let m = 0;
+  for (const sh of list || []) {
+    let v;
+    if (sh.e) { const rho = Math.hypot((x - sh.e[0]) / sh.e[2], (y - sh.e[1]) / sh.e[3]); v = Math.max(0, Math.min(1, (1 - rho) / 0.12)); }
+    else v = x >= sh.r[0] && x <= sh.r[2] && y >= sh.r[1] && y <= sh.r[3] ? 1 : 0;
+    m = Math.max(m, v);
+  }
+  return m;
+};
+const CUTOUT_MIN_A = 24;
+const CUTOUT_MIN_AREA = 30;
+function keepConnectedToTop(rgba, w, h, g, G, c) {
+  const A = (i) => rgba[i * 4 + 3];
+  const label = new Int32Array(w * h).fill(-1);
+  const keep = new Uint8Array(w * h);
+  const stack = new Int32Array(w * h);
+  let n = 0;
+  for (let s0 = 0; s0 < w * h; s0++) {
+    if (label[s0] !== -1 || A(s0) < CUTOUT_MIN_A) continue;
+    let sp = 0, area = 0, top = false;
+    const members = [];
+    stack[sp++] = s0; label[s0] = n;
+    while (sp) {
+      const p = stack[--sp];
+      members.push(p);
+      area++;
+      const py = Math.floor(p / w), px = p - py * w;
+      if (g.y + ((py + 0.5) / h) * g.h < G.cut || inShapes(c.frontKeep, g.x + ((px + 0.5) / w) * g.w, g.y + ((py + 0.5) / h) * g.h) > 0.5) top = true;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const qx = px + dx, qy = py + dy;
+          if (qx < 0 || qy < 0 || qx >= w || qy >= h) continue;
+          const q = qy * w + qx;
+          if (label[q] === -1 && A(q) >= CUTOUT_MIN_A) { label[q] = n; stack[sp++] = q; }
+        }
+      }
+    }
+    if (top && area >= CUTOUT_MIN_AREA) for (const p of members) keep[p] = 1;
+    n++;
+  }
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = y * w + x;
+      if (keep[p]) continue;
+      let near = false;
+      if (A(p) > 0 && A(p) < CUTOUT_MIN_A) {
+        for (let dy = -1; dy <= 1 && !near; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const qx = x + dx, qy = y + dy;
+          if (qx >= 0 && qy >= 0 && qx < w && qy < h && keep[qy * w + qx]) { near = true; break; }
+        }
+      }
+      if (!near) rgba[p * 4 + 3] = 0;
+    }
+  }
+}
+
+// despill = {x0, y0, x1, y1} (Texturpixel 512 x 512): rosa Reste (halbtransparenter Dampf, Magenta-Spill) in diesem Bereich zu hellem
+// Grau entfaerben; die Deckkraft bleibt. Zwerg: Dampf ueber dem Krug.
+// mode "in" = Figur im Kreis (hinter dem Ring), "out" = Figur vor dem Ring (siehe CUTOUT_GEO). Texturpixel -> Zettelpixel ueber c.game.
+export function cutoutKey(rgba, w, h, c, mode) {
+  keyMagenta(rgba, w, h, { noise: 60 });
+  const despill = c && c.despill;
+  if (despill) {
+    for (let y = despill.y0; y < Math.min(h, despill.y1); y++) {
+      for (let x = despill.x0; x < Math.min(w, despill.x1); x++) {
+        const i = (y * w + x) * 4;
+        const r = rgba[i], g = rgba[i + 1], b = rgba[i + 2];
+        if (Math.min(r, b) - g > 25) {
+          const l = Math.round((r + g + b * 0.5) / 2.5 * 0.35 + 205 * 0.65);
+          rgba[i] = l; rgba[i + 1] = Math.max(0, l - 3); rgba[i + 2] = Math.max(0, l - 8);
+        }
+      }
+    }
+  }
+  if (c && c.game && mode) {
+    const G = CUTOUT_GEO, g = c.game, clamp = (v) => Math.max(0, Math.min(1, v));
+    const frame = mode === "out" ? decodeTga(readFileSync(path.join(MEDIA_DIR, "WelcomeBack.tga"))) : null;
+    for (let y = 0; y < h; y++) {
+      const gy = g.y + ((y + 0.5) / h) * g.h;
+      const fade = clamp((g.y + g.h - gy) / G.fade); // unterster Streifen weich (nur dort sichtbar, wo die Kante nicht hinter dem Ring liegt)
+      for (let x = 0; x < w; x++) {
+        const gx = g.x + ((x + 0.5) / w) * g.w;
+        const d = Math.hypot(gx - G.cx, gy - G.cy);
+        let k;
+        if (mode === "in") k = clamp(G.rIn - d + 0.5);
+        else {
+          const fx = Math.floor((gx / 420) * frame.w), fy = Math.floor((gy / 232) * frame.h);
+          const fa = fx >= 0 && fy >= 0 && fx < frame.w && fy < frame.h ? frame.rgba[(fy * frame.w + fx) * 4 + 3] : 0;
+          k = Math.max(clamp((G.cut - gy) / G.soft + 0.5), clamp(1 - fa / 200));
+          k = Math.max(k * (1 - inShapes(c.frontDrop, gx, gy)), inShapes(c.frontKeep, gx, gy));
+        }
+        const i = (y * w + x) * 4 + 3;
+        rgba[i] = Math.round(rgba[i] * k * fade);
+      }
+    }
+    if (mode === "out") keepConnectedToTop(rgba, w, h, g, G, c);
+  }
+  return rgba;
+}
+
+// Kreis-Hintergruende des Willkommen-Gruesses (art/toast/narrator_bg_<volk>_v1.jpg, 2048 x 2048, Landschaft ohne Figur, freigegeben
+// 04.11.2026): ersetzen im Kreis hinter der Pop-out-Figur das Erzaehler-Portraet. Ziel Media/NarratorBG_<volk>.tga (512 x 512, Kreis
+// wie Narrator_<volk>: Mitte 256 | 250, sichtbarer Radius 176, 4 px Ueberstand unter dem Rahmen), rund maskiert, Vignette zum Rand
+// (je Volk `vignette` = Staerke am Rand, `dim` = leichte Abdunklung ueber alles; helle Szenen Zwerg/Gnom und der einfarbige Ork-Boden
+// dunkler, damit sich die Figur abhebt).
+export const NARRATOR_BG = {
+  human: { vignette: 0.45 }, dwarf: { vignette: 0.6, dim: 0.2 }, nightelf: { vignette: 0.45 }, gnome: { vignette: 0.6, dim: 0.2 },
+  orc: { vignette: 0.55, dim: 0.12 }, undead: { vignette: 0.45 }, tauren: { vignette: 0.45 }, troll: { vignette: 0.45 },
+  skyborne: { vignette: 0.45 },
+};
+const narratorBgTexture = (id) => ({
+  name: `NarratorBG_${id}`, w: 512, h: 512, source: `art/toast/narrator_bg_${id}_v1.jpg`,
+  html: () => {
+    const b = NARRATOR_BG[id];
+    return page(512, 512,
+      `<div style="position:absolute;left:${256 - 180}px;top:${250 - 180}px;width:360px;height:360px;border-radius:50%;overflow:hidden;background:url(${artUrl(`toast/narrator_bg_${id}_v1.jpg`)}) center / cover no-repeat">` +
+      `<div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 50%, rgba(0,0,0,${b.dim || 0}) 0%, rgba(0,0,0,${b.dim || 0}) 55%, rgba(0,0,0,${b.vignette}) 100%)"></div></div>`);
+  },
+});
+
 export const TEXTURES = [
   { name: "Book", w: 1024, h: 1024, html: () => ART(BOOK_FILE, BOOK_CROP, 1024, 1024), post: BOOK_KEY },
   ...PAGE_IDS.flatMap((id) => [pageTexture(id, "l"), pageTexture(id, "r")]),
@@ -1808,7 +1969,10 @@ export const TEXTURES = [
   { name: "SealFrames", w: SEAL_FRAME_ATLAS.cols * SEAL_FRAME_ATLAS.cell, h: SEAL_FRAME_ATLAS.rows * SEAL_FRAME_ATLAS.cell, html: SEAL_FRAMES_HTML, post: SEAL_FRAMES_KEY, source: "art/seals/v2/frame_bronze.jpg" },
   { name: "Toast", w: 512, h: 256, html: () => ART(TOAST_CROP.file, TOAST_CROP, 512, 256), post: TOAST_KEY },
   { name: "WelcomeCard", w: 1024, h: 512, html: () => ART(WELCOME_CARD_CROP.file, WELCOME_CARD_CROP, 1024, 512), post: WELCOME_CARD_KEY, source: "art/" + WELCOME_CARD_CROP.file },
+  { name: "WelcomeBack", w: 1024, h: 512, html: () => ART(WELCOME_BACK_CROP.file, WELCOME_BACK_CROP, 1024, 512), post: fireNoteKey, source: "art/" + WELCOME_BACK_CROP.file },
+  ...Object.entries(NARRATOR_CUTOUTS).flatMap(([id, c]) => ["In", "Out"].map((m) => ({ name: `NarratorFig${m}_${id}`, w: 512, h: 512, html: () => ART(c.file, c, 512, 512), post: (rgba, w, h) => cutoutKey(rgba, w, h, c, m.toLowerCase()), source: "art/" + c.file }))),
   ...NARRATOR_IDS.map(narratorTexture),
+  ...Object.keys(NARRATOR_BG).map(narratorBgTexture),
   { name: "ZoneSeal", w: 128, h: 128, html: ZONE_SEAL_HTML, post: ZONE_SEAL_KEY, source: "art/" + ZONE_SEAL.file },
   // Knopf "Gesamtreise": Plakette mit goldenem Lorbeer (Gemini, art/journal/btn_gesamtreise.jpg, 2752 x 1536, weisser Grund),
   // Zuschnitt 2600 x 1300 (Plakette x 85..2665, y 150..1400 plus Rand), 2 : 1 -> 256 x 128. Fehlt die Quelldatei und auch die

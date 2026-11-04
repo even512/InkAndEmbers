@@ -369,14 +369,24 @@ local function buildAlbum(index, char)
   local Idx = I()
   local maps = snapGroup(char, "maps")
   local list = {}
+  -- The starting continent and the starting zone (the first of each in the log) are no moments: nothing was
+  -- discovered, the character just woke up there. (The "Jenseits des Meeres" medal still counts the start continent.)
+  local skipContinent = true
   for _, r in ipairs(Idx.list(index, "MO")) do
     local ok, e = pcall(momentEntry, index, char, r, "MO", maps)
-    if ok and e then list[#list + 1] = e end
+    if ok and e and e.kind == "continent" and skipContinent then
+      skipContinent = false
+    elseif ok and e then
+      list[#list + 1] = e
+    end
   end
   local zones = 0
+  local skipZone = true
   for _, r in ipairs(Idx.list(index, "ZN")) do
     local ok, e = pcall(momentEntry, index, char, r, "ZN", maps)
-    if ok and e then
+    if ok and e and skipZone then
+      skipZone = false
+    elseif ok and e then
       list[#list + 1] = e
       zones = zones + 1
     end

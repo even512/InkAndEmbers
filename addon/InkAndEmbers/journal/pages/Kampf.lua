@@ -95,6 +95,9 @@ Page.TEXT = ns.Locale.ns("p.Kampf", {
   close = "UM HAARESBREITE", prevDeath = "Tod davor", openDeath = "Klicken: Todesbericht dieses Todes",
   openLastDeath = "Klicken: Todesbericht des letzten Todes hier", deathNo = "Tod %s",
   nextDeath = "Tod danach", prevCards = "Vorige Gegner", nextCards = "Weitere Gegner",
+  hintHunted = "Erlegt einen Gegner, dann erscheint er hier.", hintHuntedZone = "Erlegt hier einen Gegner, dann erscheint er in dieser Liste.",
+  hintGraves = "Jeder Tod bekommt hier einen Grabstein.", hintClose = "Gewinnt einen Kampf mit wenig Leben, dann steht er hier.",
+  hintZone = "Erlegt einen Gegner, dann zeichnen sich Eure Jagdgründe ab.",
   zoneEmpty = "Noch keine Zone mit Kills.", krit = "krit", unknownPic = "?", here = "hier",
   lowGraves = "Tode", lowClose = "Haaresbreite", backToGraves = "Zurück zu den Toden",
   noDeathTitle = "Der letzte Atemzug",
@@ -806,7 +809,8 @@ function Page.DrawCards(self)
     end
   end
   local empty = ""
-  if #list == 0 then empty = self.view.hunted.zone and Kampf.TEXT.noHuntedZone or Kampf.TEXT.noHunted end
+  if #list == 0 then empty = self.view.hunted.zone and (Kampf.TEXT.noHuntedZone .. " " .. Page.TEXT.hintHuntedZone)
+      or (Kampf.TEXT.noHunted .. " " .. Page.TEXT.hintHunted) end
   set(u.cardsEmpty, empty)
   u.cardNav:SetEnabled(p > 1, p < pages)
   set(u.cardPos, pages > 1 and Page.TEXT("pageOf", Journal.Texts.int(p), Journal.Texts.int(pages)) or "")
@@ -1026,6 +1030,12 @@ local function buildRight(self, right)
   title:SetWidth(TOP_W)
   title:SetWordWrap(false)
   u.mapTitle = title
+  u.mapTitleHover = CreateFrame("Frame", nil, right)
+  u.mapTitleHover:SetPoint("TOPLEFT", title, "TOPLEFT", 0, 0)
+  u.mapTitleHover:SetSize(TOP_W, 22)
+  u.mapTitleHover:EnableMouse(false)
+  u.mapTitleHover:SetScript("OnEnter", function(h) if h.full then Widgets.tip(h, { h.full }) end end)
+  u.mapTitleHover:SetScript("OnLeave", function(h) Widgets.hideTip(h) end)
   buildMap(self, right)
 
   -- control line of the lower block (grid): left the switch Tode | Haaresbreite, right the paging of the deaths ("Tod x
@@ -1591,7 +1601,10 @@ local function drawHunt(self, hunt)
   u.map:SetHeight(H)
   u.mapFrame:SetHeight(H)
   set(u.mapTitle, Kampf.TEXT.hunt .. (hunt.zoneName and (" · " .. hunt.zoneName) or ""))
-  Widgets.fitLine(u.mapTitle, TOP_W, 14) -- "Hunting Grounds · <long zone name>" fits the column in English too
+  local mtSize = Widgets.fitLine(u.mapTitle, TOP_W, 11) -- "Hunting Grounds · <long zone name>" fits the column in English too
+  local mtCut = mtSize and (mtSize < (u.mapTitle.fitBase or mtSize) or (tonumber(u.mapTitle:GetStringWidth()) or 0) > TOP_W)
+  u.mapTitleHover.full = mtCut and u.mapTitle:GetText() or nil
+  u.mapTitleHover:EnableMouse(mtCut and true or false)
   -- new zone/new state: zoom back to the whole map
   if self.mvHunt ~= hunt or not self.mv then
     self.mv, self.mvHunt, self.lastClick = { z = 1, tx = 0, ty = 0 }, hunt, nil
@@ -1599,7 +1612,7 @@ local function drawHunt(self, hunt)
   Page.StopMapHover(self)
   self.artCache = nil -- fetch the map art (with newly uncovered areas) fresh once per redraw
   local ox, oy, w, h = Page.PaintMap(self)
-  set(u.mapEmpty, (hunt.mode == "empty" and not hunt.zone) and Kampf.TEXT.noZone or "")
+  set(u.mapEmpty, (hunt.mode == "empty" and not hunt.zone) and (Kampf.TEXT.noZone .. " " .. Page.TEXT.hintZone) or "")
   u.mapMode.frame:ClearAllPoints()
   u.mapMode.frame:SetPoint("TOPLEFT", self.right, "TOPLEFT", SR.x + ox + 8, -(MAP_Y + oy + h - 30))
   u.mapMode:SetValue(self.mapMode == "exact" and hunt.points and "exact" or "hot")
@@ -1696,7 +1709,7 @@ local function drawLow(self, view)
       row:Hide()
     end
   end
-  set(u.gravesEmpty, g.empty and Kampf.TEXT.noGraves or "")
+  set(u.gravesEmpty, g.empty and (Kampf.TEXT.noGraves .. " " .. Page.TEXT.hintGraves) or "")
   local ghost = g.ghost
   if g.more > 0 then ghost = Page.TEXT("moreZones", Journal.Texts.int(g.more)) .. (ghost and (" · " .. ghost) or "") end
   set(u.ghost, ghost)
@@ -1713,7 +1726,7 @@ local function drawLow(self, view)
       row:Hide()
     end
   end
-  set(u.closeEmpty, c.total == 0 and Kampf.TEXT.noClose or "")
+  set(u.closeEmpty, c.total == 0 and (Kampf.TEXT.noClose .. " " .. Page.TEXT.hintClose) or "")
   local foot = c.footnote
   if c.total > #c.list then foot = Page.TEXT("closeCount", Journal.Texts.int(c.total), foot) end
   set(u.closeFoot, c.total > 0 and foot or "")

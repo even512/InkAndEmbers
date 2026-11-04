@@ -411,7 +411,7 @@ export async function main(argv) {
   }
   const legacy = await removeLegacy(t.addons, { dry, log: (line) => console.log(line) });
   if (legacy) console.log(`Alte Ordner ${dry ? "gefunden" : "entfernt"}: ${legacy}.`);
-  if (!dry) console.log("Hinweis: Bei NEUEN Dateien oder einem neuen Addon-Ordner das Spiel komplett neu starten, sonst reicht /reload.");
+  if (!dry) console.log("Hinweis: Bei NEUEN Dateien oder einem neuen Addon-Ordner das Spiel komplett neu starten, sonst reicht /reload. Neu: Textur WelcomeBack.tga (Willkommen-zurück-Zettel), also /reload, im Zweifel Spiel neu starten.");
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

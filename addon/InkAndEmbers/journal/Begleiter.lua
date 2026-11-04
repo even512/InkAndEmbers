@@ -1,6 +1,6 @@
 -- Travel companion cards: welcome back, campfire recap, "plan done". No frame of its own: the cards run through the
 -- journal/Toast.lua queue. Data comes from the core (ns.Welcome, ns.Rest, ns.Plans); this file only picks and words.
--- All foreign text goes through Sanitize.display before SetText, numbers through format("%d"). The welcome card never
+-- All foreign text goes through Sanitize.display before SetText, numbers through format("%d"). The welcome greeting never
 -- shows on /reload or in combat; the recap only if ns.Rest.shouldShow allows it.
 local _, ns = ...
 
@@ -71,11 +71,11 @@ Begleiter.TEXT = ns.Locale.ns("Begleiter", {
   planOpen = "Noch %d offene To Dos",
   planOneOpen = "Noch ein offenes To Do",
   planNoneOpen = "Keine offenen To Dos mehr",
-  welcomeUsage = "/chronik willkommen zeigt die Begrüßungskarte als Vorschau.",
-  welcomeNotReady = "Die Begrüßungskarte ist noch nicht bereit.",
+  welcomeUsage = "/chronik willkommen zeigt den Willkommen-Gruß als Vorschau.",
+  welcomeNotReady = "Der Willkommen-Gruß ist noch nicht bereit.",
   restUsage = "/chronik rast zeigt den Rückblick als Vorschau.",
-  welcomeOn = "Begrüßung beim Einloggen eingeschaltet.",
-  welcomeOff = "Begrüßung beim Einloggen ausgeschaltet.",
+  welcomeOn = "Willkommen-Gruß eingeschaltet.",
+  welcomeOff = "Willkommen-Gruß ausgeschaltet.",
   agoNow = "gerade eben",
   agoMin_one = "vor 1 Minute", agoMin_other = "vor %d Minuten",
   agoHour_one = "vor 1 Stunde", agoHour_other = "vor %d Stunden",
@@ -107,6 +107,28 @@ end
 
 function Begleiter.welcomeOn() return setting("welcome") end
 function Begleiter.setWelcome(on) return setSetting("welcome", on) end
+-- the welcome-back note no longer has a switch of its own (one option "Welcome greeting" covers the first greeting and the return);
+-- the old names stay as aliases so nothing that still calls them breaks
+Begleiter.slipOn = Begleiter.welcomeOn
+Begleiter.setSlip = Begleiter.setWelcome
+-- "Show after an absence of": seconds (0 = at every login, not on /reload); default 1 hour
+Begleiter.AFTER = { 0, 3600, 7200, 14400, 28800, 86400 }
+Begleiter.AFTER_DEFAULT = 3600
+function Begleiter.afterSeconds()
+  local P = Pages()
+  local v = P and type(P.setting) == "function" and P.setting("welcomeAfter") or nil
+  if type(v) ~= "number" then return Begleiter.AFTER_DEFAULT end
+  return v
+end
+function Begleiter.setAfter(seconds)
+  local P = Pages()
+  return P ~= nil and P.setSetting("welcomeAfter", seconds) or false
+end
+-- info lines of the return note: seen (zone + how long ago), quests (open quests), rested (rested bonus), plan (to-do nearby / last accepted quest)
+Begleiter.INFOS = { "seen", "quests", "rested", "plan" }
+local INFO_KEY = { seen = "welcomeSeen", quests = "welcomeQuests", rested = "welcomeRested", plan = "welcomePlan" }
+function Begleiter.infoOn(info) return INFO_KEY[info] ~= nil and setting(INFO_KEY[info]) end
+function Begleiter.setInfo(info, on) return INFO_KEY[info] ~= nil and setSetting(INFO_KEY[info], on) end
 function Begleiter.restOn() return setting("restReview") end
 
 -- Narrator of the welcome card (portrait in the ring, Theme.NARRATORS): setting "narrator" = "own" (default, race of the
@@ -182,7 +204,13 @@ local function narratorIcon()
   local tex = Theme.narratorTex(id)
   return tex and { tex = tex, portrait = true, narrator = id } or nil
 end
-function Begleiter.setRest(on) return setSetting("restReview", on) end
+function Begleiter.setRest(on)
+  local ok = setSetting("restReview", on)
+  -- the campfire recap is an edit-mode element only while this option is on
+  local EM = Journal.EditMode
+  if EM and type(EM.syncPreview) == "function" then pcall(EM.syncPreview) end
+  return ok
+end
 
 -- Foreign text for display: only via Sanitize.display (codes, bidi, "|" -> "||"); nil if empty
 local function shown(s, max)
@@ -274,43 +302,51 @@ function Begleiter.welcomeItem(s)
     return item
   end
   item.title = name and fitted("title", T.welcomePre, name, T.namePost) or T.welcomeNoName
+  -- the player picks which info lines show (options); a deselected part is left out, the order stays
+  local wantSeen, wantQuests = Begleiter.infoOn("seen"), Begleiter.infoOn("quests")
+  local wantRested, wantPlan = Begleiter.infoOn("rested"), Begleiter.infoOn("plan")
   local zone = shown(s.lastZone)
   local ago = Begleiter.agoShort(s.lastSeenAgo)
-  if zone and ago then
-    lines[#lines + 1] = fitted("line", T.lastSeenPre, zone, T.lastSeenSep .. ago)
-  elseif zone then
-    lines[#lines + 1] = fitted("line", T.lastSeenPre, zone, "")
-  elseif ago then
-    lines[#lines + 1] = format(T.lastSeenAgo, ago)
+  if wantSeen then
+    if zone and ago then
+      lines[#lines + 1] = fitted("line", T.lastSeenPre, zone, T.lastSeenSep .. ago)
+    elseif zone then
+      lines[#lines + 1] = fitted("line", T.lastSeenPre, zone, "")
+    elseif ago then
+      lines[#lines + 1] = format(T.lastSeenAgo, ago)
+    end
   end
   local q = type(s.openQuests) == "table" and s.openQuests or nil
   local count = q and num(q.count) or 0
   local parts = {}
-  if count >= 1 then
+  if wantQuests and count >= 1 then
     parts[#parts + 1] = floor(count) == 1 and T.openOne or format(T.openMany, floor(count))
   end
   local pct = num(s.restedPct)
-  if pct and pct > 0 then
-    parts[#parts + 1] = format(T.rested, floor(pct))
-  elseif num(s.restedXP) and s.restedXP > 0 then
-    parts[#parts + 1] = T.restedPlain
+  if wantRested then
+    if pct and pct > 0 then
+      parts[#parts + 1] = format(T.rested, floor(pct))
+    elseif num(s.restedXP) and s.restedXP > 0 then
+      parts[#parts + 1] = T.restedPlain
+    end
   end
   if #parts > 0 then lines[#lines + 1] = table.concat(parts, T.sep) end
   local near = type(s.vorhabenNearby) == "table" and s.vorhabenNearby or {}
-  local plan = #near > 0 and shown(near[1] and near[1].text, Begleiter.LINE_MAX) or nil
-  local accepted = q and shown(q.lastAccepted, Begleiter.LINE_MAX) or nil
+  local plan = wantPlan and #near > 0 and shown(near[1] and near[1].text, Begleiter.LINE_MAX) or nil
+  local accepted = wantPlan and q and shown(q.lastAccepted, Begleiter.LINE_MAX) or nil
   if plan then
     lines[#lines + 1] = fitted("line", T.nearbyPre, plan, "")
   elseif accepted then
     lines[#lines + 1] = fitted("line", T.acceptedPre, accepted, T.acceptedPost)
   end
-  if #lines == 0 then lines[1] = T.noQuests end
+  -- the "no open quests" placeholder only stands in for the quest info; with it deselected the greeting stands alone
+  if #lines == 0 and wantQuests then lines[1] = T.noQuests end
   local names = {}
   for i = 1, math.min(5, q and type(q.names) == "table" and #q.names or 0) do
     local n = shown(q.names[i])
     if n then names[#names + 1] = n end
   end
-  if count >= 1 and #names > 0 then
+  if wantQuests and count >= 1 and #names > 0 then
     item.tooltip = { title = T.tipTitle, lines = names, more = floor(count) > #names and format(T.tipMore, floor(count) - #names) or nil }
   end
   return item
@@ -420,16 +456,390 @@ local function enqueue(item)
   return T.enqueue(item)
 end
 
-local function welcomeCard(summary)
-  if not setting("welcome") then return false end
-  return enqueue(Begleiter.welcomeItem(summary))
+-- Quiet first login: on the very first login of the account only the introduction (journal/Tutorial.lua) shows. No area pop-up
+-- for the starting zone and no welcome card. Journal/Toast.lua stays untouched: its enqueue is wrapped here and turns zone items
+-- down while the login is quiet. Quiet = the introduction is still to come (not seen yet, before this file's login hook ran)
+-- or it is open (until it is closed).
+Begleiter.QUIET_MAX = 600 -- s: the area-toast mute never lasts longer than this
+local quiet, handled = false, false
+function Begleiter.quietLogin()
+  if quiet then return true end
+  local Tu = Journal.Tutorial
+  return not handled and Tu ~= nil and Tu.AUTO == true and type(Tu.seen) == "function" and not Tu.seen()
 end
 
--- First login of the account: the intro (journal/Tutorial.lua) goes first, the card follows once it is closed.
+do
+  local T = Toast()
+  if T and type(T.enqueue) == "function" and not T.quietWrapped then
+    local orig = T.enqueue
+    T.enqueue = function(item, ...)
+      if type(item) == "table" and item.kind == "zone" and Begleiter.quietLogin() then return false end
+      return orig(item, ...)
+    end
+    T.quietWrapped = true
+  end
+end
+
+-- Welcome-back note, "all of one piece": Media/WelcomeBack.tga (art/toast/welcome_back_v2.jpg: round wood-bronze frame with lantern and
+-- quill, parchment with red bookmark) IS the whole note. The narrator portrait (the main element, same narratorIcon() as the card) lies
+-- UNDER the frame, exactly in the frame's transparent circle. It glides in from the LEFT screen edge and back out. Only after a longer
+-- break (more than the chosen absence, Begleiter.afterSeconds(), default 1 hour; "at once" = every login), 3 s after the area text has gone. Not on /reload (the login
+-- hook does not run there). On a character's very first session the same note greets with the first-time text ("Willkommen, <name>.").
+-- Its place, size and opacity come from the edit-mode element "slip" (Begleiter.slipSpot).
+-- Measures: texture crop 2584 x 1430 source px shown at w x h = 420 x 232 (scale 420 / 2584, measures in scripts/render-media.mjs ->
+-- WELCOME_BACK_CROP / WELCOME_BACK_CIRCLE): circle centre (circleX | circleY) from the top left, circle radius circleR (transparent hole).
+-- portrait = diameter of the narrator's circle (a few px more than the hole, the overlap is hidden under the frame); the narrator
+-- texture is 512 px with its circle (r 176) at (256 | 250), so the texture is drawn portrait * 512 / 352 wide.
+-- textX/textW/textTop/textBottom = the parchment area (right of the bookmark, inside the paper edge), the text block is centred there.
+Begleiter.SLIP = { w = 420, h = 232, circleX = 104, circleY = 107, circleR = 61, portrait = 128,
+  textX = 214, textW = 182, textTop = 44, textBottom = 196, titleSize = 14, bodySize = 11,
+  glow = { x = 26, y = 172, w = 34, h = 54, u1 = 0.0635, u2 = 0.1436, v1 = 0.74, v2 = 0.97, min = 0.08, max = 0.3, period = 3.2 },
+  anim = 0.4, hold = 12, delay = 3, y = -40, maxLines = 3, maxLinesFirst = 3, tries = 3, retry = 10, glideEdge = 210 }
+-- Pop-out figure per race (Media/NarratorFigIn_<id>.tga + NarratorFigOut_<id>.tga, scripts/render-media.mjs NARRATOR_CUTOUTS, measures from
+-- scripts/measure-cutout.py): the figure stands BEHIND the ring, inside the circle. Layers bottom to top: backdrop (f.portrait,
+-- NarratorBG_<id>), figIn (the figure masked to the circle), the frame, cutout (the same figure: only above a cut line plus everything
+-- outside the outer ring, so head, shoulders, arms reach out in front of the ring). Both figure layers share the box
+-- x, y (px from the frame's top left, negative y = above the note), w x h. Races without an entry keep the plain portrait in the circle.
+-- inset = px the whole note stops right of the screen edge, so the arm reaching out on the left is not cut off. dim = backdrop tint.
+Begleiter.CUTOUTS = {
+  undead = { x = 25.9, y = -21.8, w = 166.8, h = 199.8, inset = 12, dim = 1 },
+  human = { x = -8.2, y = -21.9, w = 202.8, h = 199.9, inset = 12, dim = 1 },
+  dwarf = { x = -8.0, y = -21.7, w = 207.0, h = 199.7, inset = 12, dim = 1 },
+  nightelf = { x = -8.1, y = -21.8, w = 185.0, h = 199.8, inset = 12, dim = 1 },
+  gnome = { x = 28.0, y = -21.7, w = 159.9, h = 199.7, inset = 12, dim = 1 },
+  orc = { x = 21.0, y = -21.7, w = 161.2, h = 199.7, inset = 12, dim = 1 },
+  tauren = { x = -8.0, y = -21.7, w = 191.9, h = 199.7, inset = 12, dim = 1 },
+  troll = { x = -8.2, y = -60.0, w = 198.5, h = 238.0, inset = 12, dim = 1 },
+  skyborne = { x = 8.9, y = -21.8, w = 191.1, h = 199.8, inset = 12, dim = 1 },
+}
+local slip = { frame = nil, phase = nil, t = 0, glowT = 0 }
+Begleiter.slipState = slip
+
+function Begleiter.slipTotalW()
+  return Begleiter.SLIP.w
+end
+
+function Begleiter.slipTextX()
+  return Begleiter.SLIP.textX
+end
+
+function Begleiter.slipTextW()
+  return Begleiter.SLIP.textW
+end
+
+-- size of the narrator texture so that its circle (352 of 512 px) has the diameter SLIP.portrait
+function Begleiter.slipPortraitTex()
+  return floor(Begleiter.SLIP.portrait * 512 / 352 + 0.5)
+end
+
+-- Where the note rests: the edit-mode element "slip" (journal/EditMode.lua: saved position, size, opacity per layout). Without a
+-- saved position it is the old default (left screen edge, SLIP.y, a figure's inset), so nothing changes unless the player moves it.
+-- -> { point, rel, x, y (rest anchor in the note's own scale), scale, alpha, custom }
+function Begleiter.slipSpot()
+  local S, EM = Begleiter.SLIP, Journal.EditMode
+  local v = EM and type(EM.values) == "function" and EM.values("slip") or nil
+  local k = v and num(v.scale) and floor(v.scale / 100 * (EM.BASE_SCALE or 1) * 1000 + 0.5) / 1000 or 1
+  local alpha = v and num(v.alpha) and v.alpha / 100 or 1
+  local p = v and v.pos
+  if type(p) == "table" and type(p.point) == "string" and num(p.x) and num(p.y) then
+    return { point = p.point, rel = p.rel or p.point, x = p.x, y = p.y, scale = k, alpha = alpha, custom = true }
+  end
+  -- default: screen distances stay the same at any size (offsets are in the note's own scale)
+  return { point = "LEFT", rel = "LEFT", x = 0, y = S.y / k, scale = k, alpha = alpha, custom = false }
+end
+
+local LEFT_POINTS = { LEFT = true, TOPLEFT = true, BOTTOMLEFT = true }
+
+-- Rest position and entrance: the note glides in from the left screen edge when it rests close to it (its left edge within
+-- SLIP.glideEdge, in the note's own scale), otherwise it fades in and out where it is: a glide across half the screen to a free
+-- position looks like a flying window, a short fade is calmer. -> spot + restX (x at rest) + startX (glide start, nil = fade)
+local function slipPlan(f, inset)
+  local sp = Begleiter.slipSpot()
+  sp.restX = sp.x + (sp.custom and 0 or inset / sp.scale)
+  local left
+  if LEFT_POINTS[sp.point] and LEFT_POINTS[sp.rel] then
+    left = sp.restX
+  elseif f.GetLeft then
+    f:ClearAllPoints()
+    f:SetPoint(sp.point, UIParent, sp.rel, sp.restX, sp.y)
+    left = num(f:GetLeft())
+  end
+  if left and left <= Begleiter.SLIP.glideEdge then sp.startX = sp.restX - (left + Begleiter.slipTotalW()) end
+  return sp
+end
+
+-- x offset of the whole note along its anchor: startX (fully outside the left edge) .. restX (in place)
+local function slipX(f, x)
+  f.slipOffset = x
+  f:ClearAllPoints()
+  f:SetPoint(f.slipSpot.point, UIParent, f.slipSpot.rel, x, f.slipSpot.y)
+end
+
+-- t: 0 (gone) .. 1 (in place), as glide position or fade opacity
+local function slipProgress(f, t)
+  local sp = f.slipSpot
+  if sp.startX then
+    slipX(f, sp.startX + (sp.restX - sp.startX) * t)
+  else
+    slipX(f, sp.restX)
+    f:SetAlpha(sp.alpha * t)
+  end
+end
+
+local function slipFrame()
+  if slip.frame then return slip.frame end
+  local S = Begleiter.SLIP
+  local TT = Journal.TodoTracker
+  local Theme = Journal.Theme
+  local tex = Theme and Theme.TEX and Theme.TEX.welcomeBack
+  local f = CreateFrame("Frame", nil, UIParent)
+  f:SetSize(S.w, S.h)
+  f:SetPoint("LEFT", UIParent, "LEFT", -S.w, S.y)
+  f:SetFrameStrata("DIALOG")
+  f:EnableMouse(true)
+  f:Hide()
+  -- narrator portrait: the main element, UNDER the frame texture, centred on the circle
+  f.portrait = f:CreateTexture(nil, "BACKGROUND")
+  local ps = Begleiter.slipPortraitTex()
+  f.portrait:SetSize(ps, ps)
+  -- the narrator circle sits 6 of 512 px above the texture centre
+  f.portrait:SetPoint("CENTER", f, "TOPLEFT", S.circleX, -(S.circleY + floor(6 * ps / 512 + 0.5)))
+  f.portrait:Hide()
+  -- the note itself (frame, parchment)
+  f.art = f:CreateTexture(nil, "ARTWORK")
+  f.art:SetAllPoints(f)
+  if tex then f.art:SetTexture(tex) end
+  -- the figure stands behind the ring inside the circle (between backdrop and frame) ...
+  f.figIn = f:CreateTexture(nil, "BACKGROUND", nil, 1)
+  f.figIn:Hide()
+  -- ... and its upper part in front of the ring (only for races with an entry in CUTOUTS)
+  f.cutout = f:CreateTexture(nil, "OVERLAY", nil, 3)
+  f.cutout:Hide()
+  -- lantern: the lantern region of the same texture, additive, pulses softly (no extra graphic)
+  local G = S.glow
+  f.glow = f:CreateTexture(nil, "OVERLAY")
+  if tex then f.glow:SetTexture(tex) end
+  f.glow:SetTexCoord(G.u1, G.u2, G.v1, G.v2)
+  f.glow:SetSize(G.w, G.h)
+  f.glow:SetPoint("TOPLEFT", f, "TOPLEFT", G.x, -G.y)
+  if f.glow.SetBlendMode then f.glow:SetBlendMode("ADD") end
+  f.glow:SetAlpha(G.min)
+  local fontString, setFont
+  if TT then fontString, setFont = TT.fontString, TT.setFont end
+  if fontString then
+    f.title = fontString(f, "OVERLAY")
+    setFont(f.title, "text", S.titleSize)
+    f.setFont = setFont
+    f.body = fontString(f, "OVERLAY")
+    setFont(f.body, "text", S.bodySize)
+  else
+    f.title = f:CreateFontString(nil, "OVERLAY")
+    f.body = f:CreateFontString(nil, "OVERLAY")
+  end
+  f.title:SetTextColor(0.36, 0.12, 0.07) -- dark red-brown ink
+  f.body:SetTextColor(0.20, 0.13, 0.07)  -- dark brown ink
+  for _, fs in ipairs({ f.title, f.body }) do
+    fs:SetWidth(S.textW)
+    fs:SetJustifyH("LEFT")
+    fs:SetJustifyV("TOP")
+  end
+  f.body:SetSpacing(3)
+  f:SetScript("OnMouseUp", function() Begleiter.closeSlip() end)
+  f:SetScript("OnHide", function(self)
+    slip.phase = nil
+    self:SetScript("OnUpdate", nil)
+  end)
+  slip.frame = f
+  return f
+end
+
+-- decelerating glide (ease-out cubic)
+local function ease(p)
+  local q = 1 - p
+  return 1 - q * q * q
+end
+
+function Begleiter.slipStep(dt)
+  local f, S = slip.frame, Begleiter.SLIP
+  if not f or not slip.phase then return end
+  slip.t = slip.t + (num(dt) or 0)
+  local G = S.glow
+  slip.glowT = slip.glowT + (num(dt) or 0)
+  if f.glow then f.glow:SetAlpha(G.min + (G.max - G.min) * (0.5 + 0.5 * math.sin(slip.glowT * 2 * math.pi / G.period))) end
+  if slip.phase == "open" then
+    local p = math.min(1, slip.t / S.anim)
+    slipProgress(f, ease(p))
+    if p >= 1 then slip.phase, slip.t = "hold", 0 end
+  elseif slip.phase == "hold" then
+    if slip.t >= S.hold then Begleiter.closeSlip() end
+  elseif slip.phase == "close" then
+    local p = math.min(1, slip.t / S.anim)
+    slipProgress(f, 1 - ease(p))
+    if p >= 1 then f:Hide() end
+  end
+end
+
+-- the narrator leaves to the left again (click or after SLIP.hold seconds)
+function Begleiter.closeSlip()
+  local f = slip.frame
+  if not f or not f:IsShown() or slip.phase == "close" then return false end
+  slip.phase, slip.t = "close", 0
+  return true
+end
+
+function Begleiter.slipShown()
+  return slip.frame ~= nil and slip.frame:IsShown() and true or false
+end
+
+-- is the break long enough? s.lastSeenAgo = seconds since the character's last session (nil: unknown -> no note). With the
+-- choice "at once" (0) every real login qualifies (the login hook does not run on /reload).
+function Begleiter.slipDue(s)
+  if type(s) ~= "table" then return false end
+  local pause = Begleiter.afterSeconds()
+  if pause <= 0 then return true end
+  local ago = num(s.lastSeenAgo)
+  return ago ~= nil and ago > pause
+end
+
+local function inCombat()
+  if type(InCombatLockdown) ~= "function" then return false end
+  local ok, v = pcall(InCombatLockdown)
+  return ok and not isSecret(v) and v == true
+end
+
+-- show the note now (force: also for the preview /chronik willkommen zettel). Waits in combat and tries again a few times.
+function Begleiter.showSlip(s, tries, force)
+  local S = Begleiter.SLIP
+  if type(s) ~= "table" then return false end
+  if not force and not setting("welcome") then return false end
+  if inCombat() then
+    if (tries or 1) < S.tries and type(C_Timer) == "table" then
+      C_Timer.After(S.retry, function() Begleiter.showSlip(s, (tries or 1) + 1, force) end)
+    end
+    return false
+  end
+  local item = Begleiter.welcomeItem(s)
+  if not item then return false end
+  local f = slipFrame()
+  -- title on two lines ("Willkommen zurück," / name) so even long names stay on the parchment; if the name is still wider than
+  -- the text area, the font shrinks step by step (TITLE_SIZES)
+  local title = item.title or ""
+  local nm = shown(s.name, Begleiter.NAME_MAX)
+  if nm then
+    local pre = s.first and Begleiter.TEXT.firstPre or Begleiter.TEXT.welcomePre
+    title = (pre:gsub("%s+$", "")) .. "\n" .. nm .. Begleiter.TEXT.namePost
+  end
+  f.title:SetText(title)
+  if f.setFont and f.title.SetWidth and f.title.GetStringWidth then
+    f.title:SetWidth(1000)
+    for _, size in ipairs({ S.titleSize, 13, 12, 11, 10 }) do
+      if size <= S.titleSize then
+        f.setFont(f.title, "text", size)
+        local w = num(f.title:GetStringWidth())
+        if not w or w <= S.textW then break end
+      end
+    end
+    f.title:SetWidth(S.textW)
+  end
+  -- up to three lines (the first visit: the three first-time lines, the last one says how to open the book; the return: the info
+  -- lines the player picked); if they do not fit the parchment, the first visit drops the second line first, the return its last
+  local lines = {}
+  for i = 1, math.min(s.first and S.maxLinesFirst or S.maxLines, #item.lines) do lines[#lines + 1] = item.lines[i] end
+  f.body:ClearAllPoints()
+  f.title:ClearAllPoints()
+  local th, bh
+  local gap = 4
+  while true do
+    f.body:SetText(table.concat(lines, "\n"))
+    th = num(f.title.GetStringHeight and f.title:GetStringHeight()) or 18
+    if th < 8 then th = 18 end
+    if #lines == 0 then
+      bh, gap = 0, 0 -- all info lines deselected: the greeting stands alone
+      break
+    end
+    bh = num(f.body.GetStringHeight and f.body:GetStringHeight()) or (14 * #lines)
+    if bh < 8 then bh = 14 * math.max(1, #lines) end
+    if th + 4 + bh <= S.textBottom - S.textTop or #lines <= 1 then break end
+    table.remove(lines, (s.first and #lines >= 3) and 2 or #lines)
+  end
+  -- text block centred on the parchment (not above the bookmark: textX is right of it)
+  local block = th + gap + bh
+  local top = S.textTop + ((S.textBottom - S.textTop) - block) / 2
+  if top < S.textTop then top = S.textTop end
+  top = floor(top + 0.5)
+  f.title:SetPoint("TOPLEFT", f, "TOPLEFT", S.textX, -top)
+  f.body:SetPoint("TOPLEFT", f, "TOPLEFT", S.textX, -(top + th + gap))
+  local nar = narratorIcon()
+  if nar and nar.tex then f.portrait:SetTexture(nar.tex) end
+  f.portrait:SetShown(nar ~= nil and nar.tex ~= nil)
+  -- pop-out figure: the portrait becomes the landscape backdrop, the figure stands in the circle behind the ring, upper body in front
+  local Theme = Journal.Theme
+  local co = nar and Begleiter.CUTOUTS[nar.narrator] or nil
+  local cotex = co and Theme and Theme.TEX and Theme.TEX["narratorFigOut_" .. nar.narrator] or nil
+  local intex = co and Theme and Theme.TEX and Theme.TEX["narratorFigIn_" .. nar.narrator] or nil
+  if cotex and intex then
+    for _, t in ipairs({ { f.cutout, cotex }, { f.figIn, intex } }) do
+      t[1]:SetTexture(t[2])
+      t[1]:SetSize(co.w, co.h)
+      t[1]:ClearAllPoints()
+      t[1]:SetPoint("TOPLEFT", f, "TOPLEFT", co.x, -co.y)
+      t[1]:Show()
+    end
+    -- the circle shows the race's landscape backdrop (Media/NarratorBG_<id>.tga, same circle geometry as the portrait), not the portrait
+    local bg = Theme.TEX["narratorBG_" .. tostring(nar.narrator)]
+    if bg then f.portrait:SetTexture(bg) end
+    f.portrait:SetVertexColor(co.dim, co.dim, co.dim)
+    f.slipInset = co.inset or 0
+  else
+    f.cutout:Hide()
+    f.figIn:Hide()
+    f.portrait:SetVertexColor(1, 1, 1)
+    f.slipInset = 0
+  end
+  f.slipNarrator = nar and nar.narrator or nil
+  f.slipH = S.h
+  slip.glowT = 0
+  slip.phase, slip.t = "open", 0
+  -- position, size and opacity from the edit-mode element (default: old place at the left edge)
+  -- scale first: the glide/fade decision in slipPlan measures the note's left edge (GetLeft) with the current scale
+  f:SetScale(Begleiter.slipSpot().scale)
+  f.slipSpot = slipPlan(f, f.slipInset or 0)
+  f:SetAlpha(f.slipSpot.startX and f.slipSpot.alpha or 0)
+  slipProgress(f, 0)
+  f:Show()
+  f:SetScript("OnUpdate", function(_, dt)
+    if ns.Core then ns.Core.safe(Begleiter.slipStep, dt) else Begleiter.slipStep(dt) end
+  end)
+  local T, Snd = Toast(), Journal.Sound
+  if T and T.soundOn() and Snd and type(Snd.play) == "function" then pcall(Snd.play, "feather") end
+  return true
+end
+
+-- First login of the account: only the introduction (journal/Tutorial.lua); no card, no area pop-up while it is open.
+-- Every later login: the note with the first-time text for a character's first session, otherwise the welcome-back note after a
+-- long break. The big welcome card is gone (it only remains for the campfire recap, key "rest:").
 function Begleiter.onWelcome(summary)
+  handled = true
   local Tu = Journal.Tutorial
-  if Tu and type(Tu.firstRun) == "function" and Tu.firstRun(function() welcomeCard(summary) end) then return true end
-  return welcomeCard(summary)
+  local function release() quiet = false end
+  if Tu and type(Tu.firstRun) == "function" and Tu.firstRun(release) then
+    quiet = true
+    -- safety net: if the introduction closes another way and the callback never runs, the mute still ends
+    -- (when the window hides, at the latest after QUIET_MAX seconds)
+    local f = type(Tu.state) == "table" and Tu.state.frame or nil
+    if f and type(f.HookScript) == "function" then pcall(f.HookScript, f, "OnHide", release) end
+    if type(C_Timer) == "table" and type(C_Timer.After) == "function" then C_Timer.After(Begleiter.QUIET_MAX, release) end
+    return true
+  end
+  if not setting("welcome") then return false end
+  -- one switch covers both: the first greeting of a character and the return after the chosen absence
+  local firstSession = type(summary) == "table" and summary.first == true
+  if not firstSession and not Begleiter.slipDue(summary) then return false end
+  if type(C_Timer) == "table" then
+    C_Timer.After(Begleiter.SLIP.delay, function() Begleiter.showSlip(summary, 1) end)
+    return true
+  end
+  return Begleiter.showSlip(summary, 1)
 end
 
 -- recap; the index may still be building right after login: retry a few times
@@ -470,7 +880,7 @@ function Begleiter.onPlanDone(plan)
   return enqueue(item)
 end
 
-function Begleiter.slash(cmd)
+function Begleiter.slash(cmd, rest)
   local print_ = ns.Core and ns.Core.print or function() end
   local T = Begleiter.TEXT
   if cmd == "willkommen" then
@@ -478,11 +888,8 @@ function Begleiter.slash(cmd)
       print_(T.welcomeNotReady)
       return true
     end
-    local item = Begleiter.welcomeItem(ns.Welcome.summary())
-    if item then
-      item.key = "welcome:preview"
-      enqueue(item)
-    end
+    -- the big welcome card no longer exists: the preview always shows the note ("zettel" / "note" stay as an optional word)
+    Begleiter.showSlip(ns.Welcome.summary(), 1, true)
     return true
   elseif cmd == "rast" then
     local Rest = ns.Rest

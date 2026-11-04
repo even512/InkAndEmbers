@@ -13,7 +13,10 @@ Toast.DURATION = 5
 Toast.FADE_IN = 0.35
 Toast.FADE_OUT = 0.5
 Toast.GAP = 0.5
-Toast.MAX_QUEUE = 3
+Toast.MAX_QUEUE = 6      -- above this, queued toasts of the same kind (medals, new zones) are merged into one
+Toast.HARD_QUEUE = 14    -- last resort: the oldest zone toast (else the oldest) falls out
+Toast.ZONETEXT_WAIT = 5  -- s after ZONE_CHANGED_NEW_AREA during which the game's own zone text is assumed to be showing
+Toast.ZONETEXT_MAX = 12  -- never wait longer than this (s) for the zone text
 Toast.MAX_AGE = 30
 Toast.CHECK_DELAY = 3
 -- Size and grid of the parchment strip: Toast.W : Toast.H = aspect ratio of the crop (scripts/render-media.mjs TOAST_CROP,
@@ -38,6 +41,13 @@ Toast.MIN_SCALE = 0.75
 Toast.WRAP_FILL = 0.9
 Toast.LINE_H = 1.25
 Toast.TOP = -110
+Toast.BELOW_FRAC = 0.12 -- top edge this share of the screen height under the screen centre (default place of every toast)
+Toast.BELOW_FALLBACK = 768
+function Toast.below()
+  local h = type(UIParent) == "table" and UIParent.GetHeight and tonumber(UIParent:GetHeight()) or nil
+  if not h or h ~= h or h < 200 then h = Toast.BELOW_FALLBACK end
+  return h * Toast.BELOW_FRAC
+end
 Toast.NAME_MAX = 40
 -- Card (welcome, recap): own background Media/WelcomeCard.tga (art/toast/welcome_card_v2.jpg, crop and measures in
 -- scripts/render-media.mjs WELCOME_CARD_CROP; scale 640 / 2360 = 0.2712). Everything that depends on the image lives HERE:
@@ -49,7 +59,7 @@ Toast.NAME_MAX = 40
 -- portrait = narrator of the welcome card (Media/Narrator_<id>.tga): circle diameter in px; the painted circle sits in the
 -- printed ring (inner free area about 133 px, ornament ring up to 165 px), the figure may reach out of it above.
 Toast.CARD = { w = 640, h = 381, iconX = 129, iconY = 175, iconSize = 150, textX = 246, textW = 364,
-  textY = { center = 172, top = 34, bottom = 306 }, pitch = 19, gap = 8, entryGap = 5, headH = 18, titleH = 28, wrapLines = 2,
+  textY = { center = 172, top = 34, bottom = 306 }, pitch = 19, gap = 8, entryGap = 5, headH = 18, titleH = 28, wrapLines = 3,
   maxLines = 4, duration = 10, tail = 3, FONT = { head = 13, title = 21, line = 15 }, tex = "welcomeCard",
   FONTKIND = { head = "cardTitle", title = "cardTitle", line = "card" }, FALLBACK = { head = "title", title = "title", line = "text" },
   portrait = { circle = 138 } }
@@ -67,7 +77,12 @@ Toast.TEXT = ns.Locale.ns("Toast", {
   soundOff = "Ton der Einblendungen ausgeschaltet. /chronik ton schaltet ihn wieder ein.",
   soundIds = "Töne: Gebiet %s, Medaille %s.",
   soundNone = "keiner gefunden",
+  medalMany = "%d neue Medaillen", zoneMany = "%d neue Gebiete", andMore = "%s u. a.",
   testQueued = "Beispiel-Einblendungen eingereiht (nie im Kampf).",
+  testWaitCombat = "Beispiel-Einblendungen warten: Du bist im Kampf. Sie erscheinen danach.",
+  testOff = "Einblendungen sind ausgeschaltet. Mit /chronik toast an einschalten, dann nochmal testen.",
+  testKindOff = "Beispiel-Einblendungen nicht eingereiht: Medaillen- und Gebiets-Einblendungen sind einzeln ausgeschaltet.",
+  testBusy = "Eine Beispiel-Einblendung läuft schon.",
   usage = "/chronik toast [an|aus|test]",
   usageSound = "/chronik ton [an|aus]",
   noJournal = "Die Einblendungen sind noch nicht bereit.",
@@ -197,7 +212,8 @@ function Toast.getCurrent() return current end
 local function place(f, item)
   if Toast.hud and Toast.hud.place(f, item) then return end
   f:ClearAllPoints()
-  f:SetPoint("TOP", UIParent, "TOP", 0, Toast.TOP)
+  f:SetScale(0.64) -- without the edit-mode holder: 80 % of the HUD base size, like EditMode.SCALE_DEFAULTS
+  f:SetPoint("TOP", UIParent, "CENTER", 0, -Toast.below() / 0.64)
 end
 
 -- Card font: Spectral from Media/Fonts (Theme.FONT.card / cardTitle). The client loads an addon font file on the first SetFont;
@@ -535,18 +551,24 @@ local function fillCard(f, item)
   for _, fs in ipairs({ f.head, f.title, f.sub }) do fs:Hide() end
   local slack = 4
   local headText = Toast.fit("head", "", item.head or "", "", C.textW - slack)
-  local titleText = Toast.fit("title", "", item.title or "", "", C.textW - slack)
-  local entries, total = {}, 0
-  for i = 1, #f.cardLines do
-    local t = item.lines[i]
-    if type(t) == "string" then
-      local ls = Toast.wrap("line", t, C.textW - slack, C.wrapLines)
-      entries[i] = ls
-      total = total + #ls * C.pitch + (i > 1 and C.entryGap or 0)
-    end
-  end
   local headH = headText ~= "" and C.headH or 0
-  total = total + headH + C.titleH + (next(entries) and C.gap or 0)
+  -- up to C.wrapLines lines per entry; if the block would leave top..bottom, fewer lines per entry (down to 2, "…" only then)
+  local entries, total, titleLines
+  for lim = C.wrapLines, 2, -1 do
+    titleLines = Toast.wrap("title", item.title or "", C.textW - slack, lim)
+    entries, total = {}, headH + #titleLines * C.titleH
+    for i = 1, #f.cardLines do
+      local t = item.lines[i]
+      if type(t) == "string" then
+        local ls = Toast.wrap("line", t, C.textW - slack, lim)
+        entries[i] = ls
+        total = total + #ls * C.pitch + (i > 1 and C.entryGap or 0)
+      end
+    end
+    total = total + (next(entries) and C.gap or 0)
+    if total <= C.textY.bottom - C.textY.top then break end
+  end
+  local titleText = table.concat(titleLines, "\n")
   local y = math.max(C.textY.top, math.min(C.textY.center - total / 2, C.textY.bottom - total))
   local function place(fs, text, h)
     fs:SetText(text)
@@ -562,8 +584,8 @@ local function fillCard(f, item)
     f.cardHead:SetText("")
     f.cardHead:Show()
   end
-  place(f.cardTitle, titleText, C.titleH)
-  y = y + C.titleH + (next(entries) and C.gap or 0)
+  place(f.cardTitle, titleText, #titleLines * C.titleH)
+  y = y + #titleLines * C.titleH + (next(entries) and C.gap or 0)
   for i, fs in ipairs(f.cardLines) do
     local ls = entries[i]
     if ls then
@@ -762,6 +784,43 @@ local function dropStale()
   end
 end
 
+-- The game's own zone text (ZoneTextFrame / SubZoneTextFrame) comes first: while it shows, or for ZONETEXT_WAIT seconds after
+-- ZONE_CHANGED_NEW_AREA, the queue waits (at most ZONETEXT_MAX seconds per toast, nothing is lost).
+local zoneChangeAt = nil
+
+local function frameShown(name)
+  local f = rawget(_G, name)
+  if type(f) ~= "table" or type(f.IsShown) ~= "function" then return false end
+  local ok, shown = pcall(f.IsShown, f)
+  if not ok or shown ~= true then return false end
+  -- the game's FadingFrame can stay "shown" with alpha 0 after fading out: only visible and opaque counts
+  if type(f.IsVisible) == "function" then
+    local okV, vis = pcall(f.IsVisible, f)
+    if okV and vis ~= true then return false end
+  end
+  if type(f.GetAlpha) == "function" then
+    local okA, a = pcall(f.GetAlpha, f)
+    if okA and type(a) == "number" and a <= 0.05 then return false end
+  end
+  return true
+end
+
+function Toast.zoneTextBusy()
+  if frameShown("ZoneTextFrame") or frameShown("SubZoneTextFrame") then return true end
+  return zoneChangeAt ~= nil and now() - zoneChangeAt < Toast.ZONETEXT_WAIT
+end
+
+local waitPlanned = false
+
+-- Why the queue is not showing right now: "off" | "combat" | "zonetext" | nil (free)
+function Toast.waitReason()
+  if not Toast.enabled() then return "off" end
+  if inCombat() then return "combat" end
+  local first = Toast.queue[1]
+  if first and not first.immediate and Toast.zoneTextBusy() then return "zonetext" end
+  return nil
+end
+
 function Toast.pump()
   if current then return end
   dropStale()
@@ -774,6 +833,17 @@ function Toast.pump()
     if #keep == 0 then return end
   end
   if inCombat() then return end
+  local first = Toast.queue[1]
+  if first and not first.immediate and Toast.zoneTextBusy() and now() - (first.born or now()) < Toast.ZONETEXT_MAX then
+    if not waitPlanned and type(C_Timer) == "table" then
+      waitPlanned = true
+      C_Timer.After(0.5, function()
+        waitPlanned = false
+        Toast.pump()
+      end)
+    end
+    return
+  end
   local item = table.remove(Toast.queue, 1)
   if not item then return end
   local ok = pcall(present, item)
@@ -781,6 +851,35 @@ function Toast.pump()
     current = nil
     if ns.Core and ns.Core.coreError then ns.Core.coreError("Einblendung konnte nicht angezeigt werden") end
   end
+end
+
+-- Merge queued toasts of one kind into a single one ("3 neue Medaillen"); nothing is dropped, only combined.
+local function mergeKind(q, kind)
+  local idx = {}
+  for i, x in ipairs(q) do
+    if x.kind == kind then idx[#idx + 1] = i end
+  end
+  if #idx < 2 then return false end
+  local n, names = 0, {}
+  for _, i in ipairs(idx) do
+    local x = q[i]
+    n = n + (x.count or 1)
+    if kind == "medal" and type(x.title) == "string" and #names < 3 then names[#names + 1] = x.title end
+  end
+  local first = q[idx[1]]
+  local merged
+  if kind == "medal" then
+    local sub = table.concat(names, ", ")
+    if n > #names then sub = Toast.TEXT("andMore", sub) end
+    merged = { kind = "medal", key = "merge:medal", open = "chronik", count = n, born = first.born, head = Toast.TEXT.medal,
+      title = Toast.TEXT("medalMany", n), sub = sub, icon = first.icon }
+  else
+    merged = { kind = "zone", key = "merge:zone", open = "reise", count = n, born = first.born, head = Toast.TEXT.zone,
+      title = Toast.TEXT("zoneMany", n), sub = Toast.TEXT.zoneSub, icon = Toast.zoneIcon() }
+  end
+  for k = #idx, 2, -1 do table.remove(q, idx[k]) end
+  q[idx[1]] = merged
+  return true
 end
 
 function Toast.enqueue(item)
@@ -792,8 +891,18 @@ function Toast.enqueue(item)
   end
   item.born = now()
   local q = Toast.queue
-  q[#q + 1] = item
-  while #q > Toast.MAX_QUEUE do
+  if item.immediate then
+    local at = 1
+    while q[at] and q[at].immediate do at = at + 1 end
+    table.insert(q, at, item)
+  else
+    q[#q + 1] = item
+  end
+  if #q > Toast.MAX_QUEUE then
+    mergeKind(q, "medal")
+    if #q > Toast.MAX_QUEUE then mergeKind(q, "zone") end
+  end
+  while #q > Toast.HARD_QUEUE do
     -- full: sacrifice the oldest zone toast first (medals are rarer and more valuable), else the oldest
     local drop = 1
     for i, x in ipairs(q) do
@@ -1197,20 +1306,32 @@ function Toast.slash(cmd, rest)
   local print_ = ns.Core and ns.Core.print or function() end
   rest = type(rest) == "string" and string.lower(rest) or ""
   if cmd == "toast" or cmd == "zettel" then
+    local res
     local function test()
       local Chronik = Journal.Chronik
       if Chronik then
         local m = Toast.medalItem(Chronik.SEAL_BY_ID.quests.index, Chronik.SEAL_BY_ID.quests, "silver")
         m.key = "test:medal"
-        Toast.enqueue(m)
+        m.immediate, m.maxAge = true, 120
+        res[#res + 1] = Toast.enqueue(m)
       end
       local z = Toast.zoneItem(0, Toast.TEXT.testZone)
       z.key = "test:zone"
-      Toast.enqueue(z)
+      z.immediate, z.maxAge = true, 120
+      res[#res + 1] = Toast.enqueue(z)
     end
     if rest == "test" then
+      if not Toast.enabled() then
+        print_(Toast.TEXT.testOff)
+        return true
+      end
+      res = {}
       test()
-      print_(Toast.TEXT.testQueued)
+      local why = Toast.waitReason()
+      if #res == 0 or not (res[1] or res[2]) then
+        print_((not Toast.kindOn("medal") and not Toast.kindOn("zone")) and Toast.TEXT.testKindOff or Toast.TEXT.testBusy)
+      elseif why == "combat" then print_(Toast.TEXT.testWaitCombat)
+      else print_(Toast.TEXT.testQueued) end
       return true
     elseif rest ~= "" and ns.Core.onOff(rest) == nil then
       print_(Toast.TEXT.usage)
@@ -1251,6 +1372,7 @@ install()
 if Journal.Index and Journal.Index.onReady then Journal.Index.onReady(function(index) Toast.safe(onReady, index) end) end
 if ns.Core and ns.Core.on then
   ns.Core.on("PLAYER_LOGIN", function() Toast.reset() end)
+  ns.Core.on("ZONE_CHANGED_NEW_AREA", function() zoneChangeAt = now() end)
   ns.Core.on("PLAYER_REGEN_DISABLED", function()
     if current then
       local item = current

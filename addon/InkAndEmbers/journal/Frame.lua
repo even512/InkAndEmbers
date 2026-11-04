@@ -124,7 +124,10 @@ Frame.TEXT = ns.Locale.ns("Frame", {
   tabTip_reise = "Karte mit Eurer Route, Kapitel für Kapitel, und Eure To Dos.",
   tabTip_chronik = "Steckbrief, Stufenfluss, Tagebuch, Weggefährten und Lagerfeuer-Gäste.",
   tabTip_kampf = "Kills, Gegner, knappe Siege und Tode.",
-  tabTip_quests = "Alle abgeschlossenen Quests mit Questtext und Belohnung.",
+  tabTip_quests = "Abgeschlossene Quests mit Questtext und Belohnung, offene Quests der Zone und der Lehrplan.",
+  tabTip_questsRetail = "Abgeschlossene Quests mit Questtext und Belohnung und die offenen Quests der Zone.",
+  tabTip_chronikRetail = "Steckbrief, Stufenfluss, Tagebuch und Weggefährten.",
+  tabTip_notizen = "Eure eigenen Notizen, gern mit einem Pin auf der Karte.",
   tabTip_schaetze = "Gold im Beutel, Haushaltsbuch, Goldfluss und Ausrüstung.",
   tabTip_momente = "Album der besonderen Augenblicke, Spielzeit-Uhr und Bibliothek.",
   closeTip = "Schließen (Esc)",
@@ -304,6 +307,17 @@ local function buildCard(parent)
   end)
   sh:SetScript("OnLeave", function(self) if Journal.Widgets then Journal.Widgets.hideTip(self) end end)
   card.subHover = sh
+  -- long chapter/zone title shrinks (fitLine in setCard); full text on hover
+  local th = CreateFrame("Frame", nil, card)
+  th:SetPoint("TOPLEFT", title, "TOPLEFT", 0, 0)
+  th:SetSize(L.w, 34)
+  th:EnableMouse(false)
+  th:SetScript("OnEnter", function(self)
+    local t = card.titleFull
+    if t and Journal.Widgets then Journal.Widgets.tip(self, { t }) end
+  end)
+  th:SetScript("OnLeave", function(self) if Journal.Widgets then Journal.Widgets.hideTip(self) end end)
+  card.titleHover = th
   card.scribble = Frame.buildScribble(card, title)
   return card, anchor
 end
@@ -431,6 +445,15 @@ function Frame.setDetourLine(card, text)
   card.rule:SetPoint("TOPLEFT", show and d or card.story, "BOTTOMLEFT", 0, show and -8 or -12)
 end
 
+-- 28 pt title: shrinks down to 18 pt before it would be cut; the hover shows the full text only when it was too wide
+function Frame.setCardTitle(card, text)
+  card.title:SetText(text)
+  local size = Journal.Widgets.fitLine(card.title, Frame.LEFT.w, 18)
+  local cut = size and (size < (card.title.fitBase or size) or (tonumber(card.title:GetStringWidth()) or 0) > Frame.LEFT.w)
+  card.titleFull = cut and text or nil
+  if card.titleHover then card.titleHover:EnableMouse(cut and true or false) end
+end
+
 function Frame.setCard(c)
   local card = J.card
   if not card then return end
@@ -449,13 +472,13 @@ function Frame.setCard(c)
     card.label:SetText(Frame.TEXT.unexplored)
     local lw = strWidth(card.measure, Frame.TEXT.unexplored)
     card.label:SetWidth(lw > 0 and (lw + 2) or Frame.LEFT.w)
-    card.title:SetText(c.zoneName or Frame.TEXT.unknownArea)
+    Frame.setCardTitle(card, c.zoneName or Frame.TEXT.unknownArea)
     card.shown = c.index
     card:Show()
     return
   end
   card.label:SetText(c.total and Frame.TEXT.totalLabel or Frame.TEXT("chapterUpper", c.roman or ""))
-  card.title:SetText(c.zoneName or Frame.TEXT.underway)
+  Frame.setCardTitle(card, c.zoneName or Frame.TEXT.underway)
   Frame.fitCardLine(card, c.subtitle or c.label or "")
   card.story:SetText(c.story or "")
   local s = c.stats or {}
@@ -498,8 +521,12 @@ function Frame.updateTabs()
 end
 
 Frame.TAB_TIP = setmetatable({}, { __index = function(_, id)
-  if id == "reise" or id == "chronik" or id == "kampf" or id == "quests" or id == "schaetze" or id == "momente" then
-    return Frame.TEXT["tabTip_" .. id]
+  if id == "reise" or id == "chronik" or id == "kampf" or id == "quests" or id == "schaetze" or id == "momente" or id == "notizen" then
+    -- Retail: no campfire guests (bookmark "Am Feuer" hidden) and no Lehrplan
+    local ms, lp = Journal.MapSpace, Journal.Lehrplan
+    local noFire = id == "chronik" and ms ~= nil and type(ms.fireTalkHidden) == "function" and ms.fireTalkHidden() == true
+    local noPlan = id == "quests" and lp ~= nil and type(lp.active) == "function" and lp.active() == false
+    return Frame.TEXT["tabTip_" .. id .. ((noFire or noPlan) and "Retail" or "")]
   end
   return nil
 end })
@@ -1144,6 +1171,16 @@ function Frame.build()
   ts:SetWidth(Frame.TITLE_W - 130)
   ts:SetWordWrap(false)
   J.titleLabel, J.titleName, J.titleStats = tl, tn, ts
+  local tnh = CreateFrame("Frame", nil, tb)
+  tnh:SetPoint("TOPLEFT", tn, "TOPLEFT", 0, 0)
+  tnh:SetSize(Frame.TITLE_W, 34)
+  tnh:EnableMouse(false)
+  tnh:SetScript("OnEnter", function(self)
+    local t = J.titleNameFull
+    if t and Journal.Widgets then Journal.Widgets.tip(self, { t }) end
+  end)
+  tnh:SetScript("OnLeave", function(self) if Journal.Widgets then Journal.Widgets.hideTip(self) end end)
+  J.titleNameHover = tnh
   if Journal.Vorhaben then
     J.vorhaben = Journal.Vorhaben.build(over)
     Journal.Vorhaben.onChange = function() Frame.updateSubTabs() end
@@ -1458,6 +1495,11 @@ local function updateTitle(scene)
     J.titleName:SetText(cont or (scene.mapID and View.mapName(scene.mapID)) or Frame.TEXT.overview)
   end
   J.titleStats:SetText(model.header and model.header.stats or "")
+  -- 28 pt title: shrinks down to 18 pt before it would be cut; full text on hover when it had to shrink
+  local size = Journal.Widgets.fitLine(J.titleName, Frame.TITLE_W, 18)
+  local cut = size and (size < (J.titleName.fitBase or size) or (tonumber(J.titleName:GetStringWidth()) or 0) > Frame.TITLE_W)
+  J.titleNameFull = cut and J.titleName:GetText() or nil
+  if J.titleNameHover then J.titleNameHover:EnableMouse(cut and true or false) end
   Frame.anchorStats()
 end
 

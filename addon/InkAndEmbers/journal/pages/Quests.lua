@@ -42,7 +42,7 @@ local T = ns.Locale.ns("p.Quests", {
   goals = "Questziele", turnIn = "Abgabe", life = "Lebenslauf", rewardHead = "Belohnung",
   noDetail = "Kein Beschreibungstext aufgezeichnet.", noGoals = "Keine Ziele aufgezeichnet.", noReward = "Kein Abgabetext aufgezeichnet.",
   emptyHead = "Noch keine abgeschlossenen Quests.",
-  emptyBody = "Sobald Ihr eine Quest abschließt, schreibt die Chronik sie hier auf.",
+  emptyBody = "Sobald Ihr eine Quest abschließt, schreibt die Chronik sie hier auf. Welche Quests es hier noch gibt, seht Ihr unter \"Offen\".",
   emptyRight = "Lebenslauf und Belohnungen erscheinen mit der ersten abgeschlossenen Quest.",
   accepted = "Angenommen", abandoned = "Abgebrochen", turned = "Abgegeben", between = "Unterwegs",
   done = "abgeschlossen",
