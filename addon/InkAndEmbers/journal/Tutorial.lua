@@ -179,7 +179,7 @@ function Tutorial.setSeen(on)
 end
 
 function Tutorial.texture(atlas)
-  local lang = (ns.Locale and ns.Locale.active == "enUS") and "enUS" or "deDE"
+  local lang = (ns.Locale and ns.Locale.active == "deDE") and "deDE" or "enUS"
   return (Theme().MEDIA or "Interface\\AddOns\\InkAndEmbers\\Media\\") .. "Tutorial_" .. lang .. "_" .. (tonumber(atlas) or 1)
 end
 

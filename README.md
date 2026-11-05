@@ -34,7 +34,10 @@ When you sit down at a campfire (WoW Forever), a few singed scraps of paper floa
 that you can say in /say with a click, or throw away. Who sat with you is written to the log and shows up in the journal.
 
 Smaller things: pop-ups for new medals and areas, a welcome greeting, a short introduction book (`/chronik tutorial`), and
-HUD elements that can be moved in the game's Edit Mode. The interface and the texts are available in English and German.
+HUD elements that can be moved in the game's Edit Mode. The interface and the texts are available in English, German and
+Brazilian Portuguese. The Portuguese interface is selected automatically on a ptBR client; use the language setting or
+`/chronik language ptbr` to select it on another client, then reload. Tutorial illustrations and bundled offline search
+names are available in English and German only; Portuguese uses the English versions.
 
 ## Installation
 
@@ -66,7 +69,7 @@ New files such as textures and fonts are only picked up after a full restart of 
 | `/chronik note` | show or hide the quick note field |
 | `/chronik open` | open the Open tab under Quests |
 | `/chronik training` | open the Training tab under Quests (WoW Forever only; `training status` prints the state) |
-| `/chronik language` | `auto`, `de` or `en`; takes effect after `/reload` |
+| `/chronik language` | `auto`, `de`, `en` or `ptbr`; takes effect after `/reload` |
 | `/chronik save` | open the save window; saving reloads the interface |
 | `/chronik backup` | state of the data safety: this character's backup copy, last save, how full the main file is, last restore |
 | `/chronik reset` | reset size and position of the journal |

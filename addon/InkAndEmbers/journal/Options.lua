@@ -257,7 +257,7 @@ end
 
 Options.GROUPS = {
   {
-    title = "Sprache / Language",
+    title = function() return LT().name end,
     items = {
       { kind = "dropdown", key = "locale", label = function() return LT().name end, default = "auto", varType = "string",
         tip = function() return LT().tip end,

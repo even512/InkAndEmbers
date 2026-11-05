@@ -1,5 +1,5 @@
--- UI language (German/English). Loads first so modules can register texts; English tables are in locales/enUS_*.lua (docs/i18n.md).
--- EveNChronicleDB.locale = 'auto' | 'deDE' | 'enUS' ('auto': deDE -> German, anything else English); a change applies after /reload.
+-- UI language. Translation tables are in locales/enUS_*.lua and locales/ptBR_*.lua.
+-- EveNChronicleDB.locale = 'auto' | 'deDE' | 'enUS' | 'ptBR'; a change applies after /reload.
 -- German is the source (Locale.ns); fallback: active language -> German -> the key (noted in Locale.unknown). Stored data is never translated.
 local _, ns = ...
 
@@ -10,10 +10,10 @@ ns.L = Locale
 local format, type, pairs, pcall, tostring = string.format, type, pairs, pcall, tostring
 
 Locale.DEFAULT = "deDE"
-Locale.LANGS = { deDE = true, enUS = true }
-Locale.SETTINGS = { "auto", "deDE", "enUS" } -- menu order
+Locale.LANGS = { deDE = true, enUS = true, ptBR = true }
+Locale.SETTINGS = { "auto", "deDE", "enUS", "ptBR" } -- menu order
 
-local tables = { deDE = {}, enUS = {} } -- tables[lang][area] = { key = text }
+local tables = { deDE = {}, enUS = {}, ptBR = {} } -- tables[lang][area] = { key = text }
 Locale.tables = tables
 Locale.unknown = {} -- 'area.key' -> true (in neither the active language nor German)
 
@@ -22,7 +22,7 @@ local function isSecret(v)
 end
 
 local function validSetting(s)
-  return s == "auto" or s == "deDE" or s == "enUS"
+  return s == "auto" or Locale.LANGS[s] == true
 end
 
 function Locale.clientLocale()
@@ -33,8 +33,9 @@ function Locale.clientLocale()
 end
 
 function Locale.resolve(setting, client)
-  if setting == "deDE" or setting == "enUS" then return setting end
-  return client == "deDE" and "deDE" or "enUS"
+  if Locale.LANGS[setting] then return setting end
+  if client == "deDE" or client == "ptBR" then return client end
+  return "enUS"
 end
 
 Locale.client = Locale.clientLocale()
@@ -216,19 +217,21 @@ local T = Locale.ns("Locale", {
   auto = "Automatisch (Spielsprache)",
   deDE = "Deutsch",
   enUS = "English",
-  tip = "Sprache des Reisejournals. Automatisch: Deutsch im deutschen Client, sonst Englisch. Wirkt nach /reload.",
+  ptBR = "Português (Brasil)",
+  tip = "Sprache des Reisejournals. Automatisch: Deutsch oder brasilianisches Portugiesisch entsprechend dem Client, sonst Englisch. Wirkt nach /reload.",
   reloadLabel = "Sprache übernehmen",
   reloadButton = "Sichern und neu laden",
   reloadTip = "Öffnet das Sichern-Fenster (wie /chronik sichern): Sichern lädt die Oberfläche neu, danach gilt die gewählte Sprache.",
   changed = "Sprache: %s. Wirkt nach /reload (oder /chronik sichern).",
   unchanged = "Sprache: %s.",
-  usage = "Sprache: /chronik sprache auto | de | en (jetzt: %s).",
+  usage = "Sprache: /chronik sprache auto | de | en | ptbr (jetzt: %s).",
 })
 Locale.T = T
 
 function Locale.label(setting)
   if setting == "deDE" then return T.deDE end
   if setting == "enUS" then return T.enUS end
+  if setting == "ptBR" then return T.ptBR end
   return T.auto
 end
 
@@ -236,9 +239,10 @@ local ALIASES = {
   auto = "auto", automatisch = "auto", automatic = "auto",
   de = "deDE", dede = "deDE", deutsch = "deDE", german = "deDE",
   en = "enUS", enus = "enUS", englisch = "enUS", english = "enUS",
+  pt = "ptBR", ptbr = "ptBR", portugues = "ptBR",
 }
 
--- /chronik sprache <auto|de|en>; returns the chat line (Core prints it)
+-- /chronik sprache <auto|de|en|ptbr>; returns the chat line (Core prints it)
 function Locale.slash(rest)
   local key = type(rest) == "string" and ALIASES[string.lower(rest)] or nil
   if not key then return T("usage", Locale.label(Locale.setting)) end
