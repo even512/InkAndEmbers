@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Added Brazilian Portuguese interface and journal texts. It is selected automatically on a ptBR client and can also be
+  selected with `/chronik language ptbr`. Tutorial illustrations and bundled offline search names fall back to English.
+
 ## 1.0.0
 
 First stable version. It collects everything from the 0.9 line; the details are in the entries below.

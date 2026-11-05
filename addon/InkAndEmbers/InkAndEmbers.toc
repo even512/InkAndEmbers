@@ -3,6 +3,7 @@
 ## Title-deDE: Ink & Embers: An Adventurer's Journal
 ## Notes: Writes your leveling journey as a travel journal: map, chronicle, quests, moments and more.
 ## Notes-deDE: Schreibt die Levelreise als Reisejournal mit: Karte, Chronik, Quests, Momente und mehr.
+## Notes-ptBR: Registra sua jornada de evolução em um diário de viagem: mapa, crônica, missões, momentos e muito mais.
 ## Author: EveN
 ## Version: @project-version@
 ## X-License: MIT (graphics and media: all rights reserved, see LICENSE)
@@ -24,6 +25,10 @@ locales\enUS_core.lua
 locales\enUS_journal.lua
 locales\enUS_model.lua
 locales\enUS_pages.lua
+locales\ptBR_core.lua
+locales\ptBR_journal.lua
+locales\ptBR_model.lua
+locales\ptBR_pages.lua
 Core.lua
 Sanitize.lua
 Patterns.lua

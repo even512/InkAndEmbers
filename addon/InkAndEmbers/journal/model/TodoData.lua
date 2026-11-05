@@ -3,7 +3,7 @@
 -- failure keeps its reason and is retried after TodoData.RETRY s.
 -- npc = string, per enemy "\n<id>\t<name>\t<min>\t<max>\t<rank>\t<zone>" (rank "" normal, e elite, r rare, R rare
 -- elite, b boss); item = per item "\n<id>\t<name>\t<quality>"; zones = { [zoneID] = name }. These names are German
--- (English where German is missing). With the English add-on language (ns.Locale) the data add-on also runs its English
+-- (English where German is missing). For non-German add-on languages the data add-on also runs its English
 -- files (guard: the global EveNChronicleTodoLang = "enUS", set here just before LoadAddOn): npcEn / itemEn = per entry
 -- "\n<id>\t<English name>" sorted by that name, zonesEn = { [zoneID] = name } (only where it differs from German).
 -- Names and search then use the English list; level, rank and zone come from the German list by id. Without an English
@@ -120,10 +120,10 @@ local function fold(s)
 end
 TodoData.fold = fold
 
--- English names wanted? (add-on language, not the client language; fixed until /reload)
+-- Bundled names are only available in German and English; use English for other languages.
 local function english()
   local L = ns.Locale
-  return type(L) == "table" and L.active == "enUS"
+  return type(L) == "table" and L.active ~= "deDE"
 end
 
 local function display(s)
