@@ -27,7 +27,7 @@ TodoTracker.GROW_MODES = { "down", "up" }
 TodoTracker.BOOK_W, TodoTracker.BOOK_H = 18, 16
 TodoTracker.CLOSE_W = 14
 TodoTracker.DEFAULTS = { shown = false, style = "pad", locked = false, combatHide = false, hideEmpty = true, marks = true, w = 250, h = 250,
-  open = "always", grow = "down" }
+  open = "always", grow = "down", autoShow = true, dismissed = false, dock = false, dockSide = "below", dockCollapsed = false }
 TodoTracker.KINDS = { free = true, place = true, kill = true, item = true }
 
 TodoTracker.TEXT = ns.Locale.ns("TodoTracker", {
@@ -43,6 +43,7 @@ TodoTracker.TEXT = ns.Locale.ns("TodoTracker", {
   optLocked = "Notizzettel sperren",
   optCombat = "Im Kampf ausblenden",
   optEmpty = "Ausblenden, wenn nichts offen ist",
+  optAuto = "Zettel automatisch zeigen, wenn To Dos offen sind",
   lock = "Notizzettel sperren",
   unlock = "Notizzettel entsperren",
   lockHint = "Gesperrt: nicht verschiebbar, Größe fest.",
@@ -69,6 +70,14 @@ TodoTracker.TEXT = ns.Locale.ns("TodoTracker", {
   openBook = "To Do im Buch öffnen",
   openBookHint = "Öffnet das Reisejournal auf der To-Do-Seite.",
   kind = { free = "Freies Ziel", place = "Ort erreichen", kill = "Gegner töten", item = "Gegenstände finden" },
+  optDock = "To Dos am Questtracker andocken",
+  dockSideLabel = "Lage am Questtracker",
+  dockSide = { below = "Unter den Quests", above = "Über den Quests" },
+  dockCollapse = "To Dos einklappen",
+  dockExpand = "To Dos aufklappen",
+  dockToggleHint = "Klappt auch mit dem Questtracker ein und aus. Klick auf eine Zeile öffnet das Reisejournal auf der To-Do-Seite.",
+  dockHeadCount = "%s (%d)",
+  dockedSlash = "Die To Dos hängen am Questtracker. Abdocken: Optionen -> AddOns -> Ink & Embers -> „To Dos am Questtracker andocken“.",
 })
 local T = TodoTracker.TEXT
 
@@ -165,13 +174,17 @@ function TodoTracker.settings()
   local raw = charStore(false) or st.memory
   local d = TodoTracker.DEFAULTS
   local out = {}
-  for _, k in ipairs({ "shown", "locked", "combatHide", "hideEmpty", "marks" }) do
+  for _, k in ipairs({ "shown", "locked", "combatHide", "hideEmpty", "marks", "autoShow", "dismissed", "dock", "dockCollapsed" }) do
     local v = raw[k]
     if type(v) == "boolean" and not isSecret(v) then out[k] = v else out[k] = d[k] end
   end
+  -- migration: whoever had switched the note off before "dismissed" existed counts as having closed it by hand (no forced pop-up
+  -- at the first login after the update; it opens at the next new to-do). A character that never touched it (no key) is not dismissed.
+  if type(raw.dismissed) ~= "boolean" or isSecret(raw.dismissed) then out.dismissed = raw.shown == false end
   out.style = validStyle(raw.style) and raw.style or d.style
   out.open = validOpen(raw.open) and raw.open or d.open
   out.grow = validGrow(raw.grow) and raw.grow or d.grow
+  out.dockSide = (raw.dockSide == "below" or raw.dockSide == "above") and raw.dockSide or d.dockSide
   out.w, out.h = clampSize(raw.w, raw.h)
   local p = raw.pos
   if type(p) == "table" and not isSecret(p) and POINTS[p.point] and num(p.x) and num(p.y) and math.abs(p.x) <= 10000
@@ -183,7 +196,8 @@ end
 
 function TodoTracker.set(key, value)
   local t = charStore(true) or st.memory
-  if key == "shown" or key == "locked" or key == "combatHide" or key == "hideEmpty" or key == "marks" then
+  if key == "shown" or key == "locked" or key == "combatHide" or key == "hideEmpty" or key == "marks" or key == "autoShow"
+    or key == "dismissed" or key == "dock" or key == "dockCollapsed" then
     if type(value) ~= "boolean" then return false end
     t[key] = value
   elseif key == "style" then
@@ -195,6 +209,9 @@ function TodoTracker.set(key, value)
   elseif key == "grow" then
     if not validGrow(value) then return false end
     t.grow = value
+  elseif key == "dockSide" then
+    if value ~= "below" and value ~= "above" then return false end
+    t.dockSide = value
   elseif key == "size" then
     if type(value) ~= "table" then return false end
     t.w, t.h = clampSize(value.w, value.h)
@@ -1299,8 +1316,9 @@ end
 local function updateTicker()
   local s = TodoTracker.settings()
   local every
-  if s.shown and not (s.combatHide and inCombat()) then
+  if (s.shown or TodoTracker.docked()) and not (s.combatHide and inCombat()) then
     if st.frame and st.frame:IsShown() and st.hasDist then every = TodoTracker.DIST_EVERY end
+    if TodoTracker.Dock and TodoTracker.Dock.hasDist() then every = TodoTracker.DIST_EVERY end
   end
   if every == st.tickEvery then return end
   stopTicker()
@@ -1449,9 +1467,38 @@ function TodoTracker.watch(frame)
   end
 end
 
+-- Docked to the quest tracker (journal/TodoDock.lua): the mini note stays hidden and the section draws the same entries. It shows
+-- whenever to-dos are open (or always with "hide when empty" off), independent of the mini note's on/off switch.
+function TodoTracker.docked()
+  return TodoTracker.Dock ~= nil and TodoTracker.settings().dock == true
+end
+
+local function refreshDocked(s)
+  if st.frame then st.frame:Hide() end
+  local Dock = TodoTracker.Dock
+  local Store = ns.Store
+  if not (Store and Store.char and Store.char()) then
+    Dock.hide()
+    return false
+  end
+  if s.combatHide and inCombat() then
+    Dock.hide()
+    stopTicker()
+    return false
+  end
+  if TodoTracker.hookPlans then TodoTracker.hookPlans() end
+  st.shownList = TodoTracker.entries()
+  local want = #st.shownList > 0 or not s.hideEmpty
+  if want then Dock.render(st.shownList) else Dock.hide() end
+  updateTicker()
+  return want
+end
+
 function TodoTracker.refresh()
   if st.preview then return true end
   local s = TodoTracker.settings()
+  if TodoTracker.docked() then return refreshDocked(s) end
+  if TodoTracker.Dock then TodoTracker.Dock.hide() end
   if not s.shown then
     if st.frame then st.frame:Hide() end
     stopTicker()
@@ -1486,12 +1533,43 @@ function TodoTracker.refresh()
   return want
 end
 
+-- Automatic show: with the option autoShow (default on) the note opens by itself while to-dos are open. First scan of a session
+-- (login/reload): it opens if something is open and the player has not closed it (x, /chronik todo aus, checkbox: "dismissed").
+-- Later scans: a to-do id not seen before in this session (a new one, not a re-opened one) opens it again and lifts the
+-- dismissal. The collapsed/expanded state is not touched. Returns true if the note was switched on.
+function TodoTracker.autoScan()
+  if TodoTracker.hookPlans then TodoTracker.hookPlans() end -- listen for changes even while the note is off
+  local Store = ns.Store
+  if not (Store and Store.char and Store.char()) then return false end
+  local P = ns.Plans
+  if not P or type(P.list) ~= "function" then return false end
+  local list = planList(nil)
+  local initial = st.known == nil
+  local known, fresh, open = {}, false, 0
+  for _, p in ipairs(list) do
+    known[p.id] = true
+    if not p.done then
+      open = open + 1
+      if not initial and not st.known[p.id] then fresh = true end
+    end
+  end
+  st.known = known
+  local s = TodoTracker.settings()
+  if st.preview or not s.autoShow or s.shown or open == 0 or TodoTracker.docked() then return false end
+  if fresh or (initial and not s.dismissed) then
+    TodoTracker.setShown(true)
+    return true
+  end
+  return false
+end
+
 local pending = false
 function TodoTracker.changed()
   if pending then return end
   pending = true
   local function run()
     pending = false
+    if ns.Core then ns.Core.safe(TodoTracker.autoScan) else TodoTracker.autoScan() end
     if ns.Core then ns.Core.safe(TodoTracker.refresh) else TodoTracker.refresh() end
   end
   if C_Timer and C_Timer.After then C_Timer.After(0, run) else run() end
@@ -1534,6 +1612,7 @@ end
 
 function TodoTracker.setShown(on)
   TodoTracker.set("shown", on and true or false)
+  TodoTracker.set("dismissed", not on) -- closed by hand (x, slash, checkbox): stays closed until a new to-do arrives
   st.sig = nil
   TodoTracker.refresh()
   syncSettings()
@@ -1605,6 +1684,31 @@ function TodoTracker.setHideEmpty(on)
   syncSettings()
 end
 
+function TodoTracker.setAutoShow(on)
+  TodoTracker.set("autoShow", on and true or false)
+  if on then
+    st.known = nil -- like a fresh login: open to-dos open the note unless it was closed by hand
+    if ns.Core then ns.Core.safe(TodoTracker.autoScan) else TodoTracker.autoScan() end
+  end
+  syncSettings()
+end
+
+function TodoTracker.setDock(on)
+  TodoTracker.set("dock", on and true or false)
+  st.sig = nil
+  TodoTracker.refresh()
+  syncSettings()
+  return on and true or false
+end
+
+function TodoTracker.setDockSide(side)
+  if not TodoTracker.set("dockSide", side) then return false end
+  if TodoTracker.Dock and TodoTracker.Dock.state then TodoTracker.Dock.state.placed = nil end
+  TodoTracker.refresh()
+  syncSettings()
+  return true
+end
+
 function TodoTracker.reset()
   TodoTracker.set("pos", nil)
   TodoTracker.set("size", { w = TodoTracker.DEFAULTS.w, h = TodoTracker.DEFAULTS.h })
@@ -1640,6 +1744,13 @@ function TodoTracker.slash(arg)
     say(T.usage)
     return false
   end
+  if TodoTracker.docked() then
+    TodoTracker.set("shown", on and true or false)
+    TodoTracker.set("dismissed", not on)
+    syncSettings()
+    say(T.dockedSlash)
+    return on
+  end
   TodoTracker.setShown(on)
   if not on then say(T.off)
   elseif TodoTracker.isShown() then say(T.on)
@@ -1649,6 +1760,7 @@ end
 
 if ns.Core and ns.Core.on then
   ns.Core.on("PLAYER_ENTERING_WORLD", function()
+    if ns.Core then ns.Core.safe(TodoTracker.autoScan) else TodoTracker.autoScan() end
     if ns.Core then ns.Core.safe(TodoTracker.refresh) else TodoTracker.refresh() end
   end)
   ns.Core.on("PLAYER_REGEN_DISABLED", function()

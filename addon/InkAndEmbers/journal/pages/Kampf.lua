@@ -247,6 +247,40 @@ local function ensureModel(self, c)
   return m
 end
 
+-- B17: SetCreature(npcID) of a creature that is not in the client's creature cache only starts the query -- the frame
+-- stays empty and no OnModelLoaded follows, even once the answer is there. A second SetCreature a moment later loads it
+-- (why the lens, opened by a click later, showed the model while the card kept its "?"). So a card that has not loaded
+-- asks again a few times (C_Timer, rising gaps, no OnUpdate); only while the same request stands, the page is visible
+-- and not in combat. At most CARDS frames, so never more than four requests per step.
+local RETRY_DELAYS = { 0.4, 1, 2, 4, 8 }
+
+local function retryModel(self, c, gen)
+  if not (type(C_Timer) == "table" and type(C_Timer.After) == "function") then return end
+  local m = c.model
+  local step = (m.tries or 0) + 1
+  local delay = RETRY_DELAYS[step]
+  if not delay then return end
+  m.tries = step
+  pcall(C_Timer.After, delay, function()
+    Widgets.call(function()
+      local mm = c.model
+      if not (mm and mm.gen == gen and mm.want and not mm.loaded) then return end
+      if inCombat() or not (self.left and self.left:IsVisible()) or not c:IsShown() then
+        mm.tries = nil -- the next drawing starts the retries anew
+        return
+      end
+      local id = mm.want
+      try(mm, "ClearModel")
+      showModel(mm)
+      try(mm, "SetCreature", id)
+      applyCamera(mm, MODEL_DISTANCE, MODEL_ROTATION)
+      if mm.gen ~= gen or mm.want ~= id then return end
+      if not mm.loaded and modelReady(mm) then markLoaded(c) end
+      if not mm.loaded then retryModel(self, c, gen) end
+    end)
+  end)
+end
+
 -- npcID nil (instance kill without ID) or no model frame possible -> "?"
 local function drawModel(self, c, npcID)
   if isSecret(npcID) or type(npcID) ~= "number" or npcID <= 0 then npcID = nil end
@@ -263,16 +297,20 @@ local function drawModel(self, c, npcID)
     -- loaded: show; still on its way: do not request again ("?" stays until OnModelLoaded)
     c.unknown:SetShown(not m.loaded)
     showModel(m)
+    if not m.loaded and not m.tries then retryModel(self, c, m.gen) end
     return
   end
   -- other model: clear first (no old model whose OnModelLoaded wrongly reports the new one as loaded), then load
-  m.want, m.loaded = npcID, false
+  m.want, m.loaded, m.tries = npcID, false, nil
+  m.gen = (m.gen or 0) + 1
+  local gen = m.gen
   c.unknown:Show()
   try(m, "ClearModel")
   showModel(m)
   try(m, "SetCreature", npcID)
   applyCamera(m, MODEL_DISTANCE, MODEL_ROTATION)
   if m.want == npcID and not m.loaded and modelReady(m) then markLoaded(c) end
+  if m.gen == gen and m.want == npcID and not m.loaded then retryModel(self, c, gen) end
 end
 
 
@@ -1833,7 +1871,7 @@ function Page:OnHide()
     L.huntedButton:Close()
     -- a hidden model frame releases its model: set again on the next show
     for _, c in ipairs(L.cards) do
-      if c.model then c.model.want, c.model.loaded = nil, false end
+      if c.model then c.model.want, c.model.loaded, c.model.tries = nil, false, nil end
     end
   end
   -- the next open picks the area again (current zone) and starts at the list of deaths

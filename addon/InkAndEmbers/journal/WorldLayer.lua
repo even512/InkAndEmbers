@@ -222,6 +222,11 @@ local function try(obj, method, ...)
   return nil
 end
 
+-- The XML template sets OnEnter/OnLeave and OnLoad turns mouse motion on, which MapCanvasMixin:AcquirePin asserts against for a
+-- new pin (Blizzard_MapCanvas.lua: "pin:GetScript("OnEnter") == nil") unless the pin opts out of the warning. We do it on purpose.
+-- Defined on the mixin itself, so fillMixin (only fills nil keys) never lets the base mixin's false answer replace it.
+function PinMixin:DisableInheritedMotionScriptsWarning() return true end
+
 function PinMixin:OnLoad()
   try(self, "UseFrameLevelType", WL.FRAME_LEVEL)
   try(self, "SetScalingLimits", 1, WL.SCALE_MIN, WL.SCALE_MAX)

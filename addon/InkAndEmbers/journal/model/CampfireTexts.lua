@@ -15,7 +15,7 @@ local gmatch, find = string.gmatch, string.find
 CampfireTexts.CATEGORIES = {
   arrive = true, time = true, death = true, rare = true, quest = true, zone = true, level = true, medal = true,
   person = true, group = true, alone = true, past = true, place = true, general = true, farewell = true, fire = true,
-  follow = true,
+  follow = true, elite = true, bag = true, profession = true, rep = true, subzone = true, streak = true,
 }
 
 -- classes: nominative m/f, accusative m (weak declension)
@@ -54,6 +54,7 @@ local AREA = "m.CampfireTexts"
 local TX = L.ns(AREA, {
   classes = CampfireTexts.CLASSES,
   races = CampfireTexts.RACES,
+  numbers = { "eins", "zwei", "drei", "vier", "fünf", "sechs", "sieben", "acht", "neun", "zehn", "elf", "zwölf" },
   ordinals = { "erste", "zweite", "dritte", "vierte", "fünfte", "sechste", "siebte", "achte", "neunte", "zehnte" },
   ordSt = "%d.", ordNd = "%d.", ordRd = "%d.", ordTh = "%d.",
   -- indefinite article before the class (accusative): m/f, "Vowel" = name starts with a vowel (English "an")
@@ -72,6 +73,14 @@ function CampfireTexts.ordinal(n)
     if last == 1 then key = "ordSt" elseif last == 2 then key = "ordNd" elseif last == 3 then key = "ordRd" end
   end
   return TX(key, n)
+end
+
+-- number of people as a word ("drei" | "three"), digits above twelve
+function CampfireTexts.countWord(n)
+  if type(n) ~= "number" or n ~= n or n < 1 or n > 999 then return nil end
+  n = math.floor(n)
+  local w = TX.numbers[n]
+  return type(w) == "string" and w or tostring(n)
 end
 
 -- class in the active language: name (nominative matching sex), withArticle ("einen Krieger" | "a Warrior") | nil
@@ -270,6 +279,268 @@ add("bye_person", "farewell", "Pass auf dich auf, {name}. Vielleicht sieht man s
 -- the fire itself
 add("fire_who", "fire", "Wer hat dieses Feuer gemacht? Sehr gemütlich.", nil, "Ihr sitzt an einem Lagerfeuer.")
 
+-- ---------------------------------------------------------------------------------------------------------------
+-- 1.0.2: more variety (about three times the templates). Same rules as above: short, said to the others at the fire,
+-- placeholders only for foreign text.
+local function withOthers(c) return c.others >= 1 end
+local function many(c) return c.others >= 2 end
+local function lvlDiff(c) return c.myLevel ~= nil and c.person.level ~= nil and c.person.level - c.myLevel or nil end
+local function sameRace(c) return c.myRace ~= nil and c.person.raceToken == c.myRace end
+local function otherRace(c) return c.myRace ~= nil and c.person.raceToken ~= nil and c.person.raceToken ~= c.myRace end
+local function sameClass(c) return c.myClass ~= nil and c.person.classToken == c.myClass end
+local function otherClass(c) return c.myClass ~= nil and c.person.classToken ~= nil and c.person.classToken ~= c.myClass end
+local function partIs(p) return function(c) return c.part == p end end
+
+-- arrival
+add("arrive_join", "arrive", "Darf ich mich zu euch setzen?", "Darf ich mich zu Euch setzen?",
+  "Ihr seid gerade erst am Feuer angekommen.", { when = function(c) return early(c) and withOthers(c) end })
+add("arrive_road", "arrive", "Was für ein Weg bis hierher. Das Feuer kommt genau richtig.", nil,
+  "Ihr seid gerade erst am Feuer angekommen.", { when = early })
+add("arrive_cold", "arrive", "Endlich ein Feuer. Meine Hände sind ganz kalt.", nil,
+  "Ihr seid gerade erst am Feuer angekommen.", { when = early })
+add("arrive_short", "arrive", "Ich bleibe nicht lange, nur kurz aufwärmen.", nil,
+  "Ihr seid gerade erst am Feuer angekommen.", { when = early })
+add("arrive_smoke", "arrive", "Den Rauch habe ich schon von Weitem gesehen. Gut, dass ich ihm gefolgt bin.", nil,
+  "Ihr seid gerade erst am Feuer angekommen.", { when = early })
+
+-- time of day, partly with the zone
+add("time_morning_zone", "time", "Morgens ist {zone} am schönsten, bevor alle wach sind.", nil,
+  "Es ist Morgen in {zone}.", { when = partIs("morning") })
+add("time_evening_dark", "time", "Bald wird es dunkel. Ich bleibe lieber am Feuer.", nil,
+  "Es ist Abend.", { when = partIs("evening") })
+add("time_night_awake", "time", "Wer ist um diese Zeit noch wach? Ich kann nicht schlafen.", nil,
+  "Es ist Nacht.", { when = partIs("night") })
+add("time_day_zone", "time", "Mittag in {zone}, und ich habe schon einiges hinter mir.", nil,
+  "Es ist Tag in {zone}.", { when = partIs("day") })
+
+-- death
+add("death_rest", "death", "Nach meinem Tod in {todort} brauche ich erst mal Ruhe.", nil,
+  "Ihr seid vor Kurzem in {todort} gestorben.", { fact = "death" })
+add("death_warn", "death", "{toter}: Haltet Abstand. Ich spreche aus Erfahrung.", nil, "{toter} hat Euch vor Kurzem besiegt.", { fact = "death" })
+add("death_lesson", "death", "Vorhin einmal gestorben. Ich nehme es als Lehrgeld.", nil,
+  "Ihr seid vor Kurzem gestorben.", { fact = "death" })
+
+-- rare
+add("rare_found", "rare", "{rare} ist erledigt. Ich habe lange danach gesucht.", nil,
+  "Ihr habt vor Kurzem {rare} erlegt.", { fact = "rare" })
+add("rare_luck", "rare", "Wer jagt hier noch seltene Beute? Ich hatte vorhin Glück mit {rare}.", nil,
+  "Ihr habt vor Kurzem {rare} erlegt.", { fact = "rare" })
+add("rare_hard", "rare", "Mit {rare} hatte ich vorhin einen harten Kampf. Es hat sich gelohnt.", nil,
+  "Ihr habt vor Kurzem {rare} erlegt.", { fact = "rare" })
+add("rare_chance", "rare", "Kennt jemand {rare}? Ich bin vorhin zufällig darauf gestoßen.", nil,
+  "Ihr habt vor Kurzem {rare} erlegt.", { fact = "rare" })
+
+-- quest
+add("quest_happy", "quest", "„{quest}“ ist erledigt. Der Questgeber war zufrieden, ich auch.", nil,
+  "Ihr habt vor Kurzem „{quest}“ abgegeben.", { fact = "quest" })
+add("quest_tip", "quest", "Wer „{quest}“ noch vor sich hat: Ich kann einen Tipp geben.", nil,
+  "Ihr habt vor Kurzem „{quest}“ abgegeben.", { fact = "quest" })
+add("quest_break", "quest", "Nach „{quest}“ brauchte ich dringend eine Pause.", nil,
+  "Ihr habt vor Kurzem „{quest}“ abgegeben.", { fact = "quest" })
+add("quest_walk", "quest", "Für „{quest}“ bin ich ganz schön herumgelaufen. Jetzt sitze ich erst mal.", nil,
+  "Ihr habt vor Kurzem „{quest}“ abgegeben.", { fact = "quest" })
+
+-- new zone
+add("zone_trader", "zone", "Ich bin noch nicht lange in {neuzone}. Wo findet man hier einen Händler?", nil,
+  "Ihr seid kürzlich zum ersten Mal in {neuzone} angekommen.", { fact = "newzone" })
+add("zone_other", "zone", "{neuzone} hatte ich mir anders vorgestellt. Größer irgendwie.", nil,
+  "Ihr seid kürzlich zum ersten Mal in {neuzone} angekommen.", { fact = "newzone" })
+add("zone_lost", "zone", "Kennt sich jemand in {neuzone} aus? Ich habe mich schon zweimal verlaufen.", nil,
+  "Ihr seid kürzlich zum ersten Mal in {neuzone} angekommen.", { fact = "newzone" })
+add("zone_danger", "zone", "Ist {neuzone} gefährlich? Ich bin neu hier.", nil,
+  "Ihr seid kürzlich zum ersten Mal in {neuzone} angekommen.", { fact = "newzone" })
+
+-- level
+add("level_pack", "level", "Stufe {stufe}. Ich merke, dass mir die Kämpfe leichter fallen.", nil,
+  "Ihr habt kürzlich Stufe {stufe} erreicht.", { fact = "level" })
+add("level_trainer", "level", "Stufe {stufe} erreicht. Jetzt erst mal zum Lehrer.", nil,
+  "Ihr habt kürzlich Stufe {stufe} erreicht.", { fact = "level" })
+add("level_further", "level", "Mit Stufe {stufe} traue ich mich endlich etwas weiter hinaus.", nil,
+  "Ihr habt kürzlich Stufe {stufe} erreicht.", { fact = "level" })
+add("level_party", "level", "Stufe {stufe}. Wer feiert mit mir?", nil,
+  "Ihr habt kürzlich Stufe {stufe} erreicht.", { fact = "level" })
+
+-- medal
+add("medal_entry", "medal", "„{medaille}“ steht jetzt in meinem Tagebuch. Ein schöner Eintrag.", nil,
+  "Ihr habt kürzlich die Medaille „{medaille}“ verdient.", { fact = "medal" })
+add("medal_alone", "medal", "Ich habe mir kürzlich „{medaille}“ verdient. Ganz ohne Hilfe.", nil,
+  "Ihr habt kürzlich die Medaille „{medaille}“ verdient.", { fact = "medal" })
+add("medal_who", "medal", "Wer von euch hat auch „{medaille}“? Ich habe sie vor Kurzem bekommen.",
+  "Wer von Euch hat auch „{medaille}“? Ich habe sie vor Kurzem bekommen.",
+  "Ihr habt kürzlich die Medaille „{medaille}“ verdient.", { fact = "medal" })
+add("medal_proud", "medal", "„{medaille}“, schreibt mein Tagebuch. Ich bin ein bisschen stolz.", nil,
+  "Ihr habt kürzlich die Medaille „{medaille}“ verdient.", { fact = "medal" })
+add("medal_fuller", "medal", "Mein Tagebuch wird voller. Vor Kurzem kam „{medaille}“ dazu.", nil,
+  "Ihr habt kürzlich die Medaille „{medaille}“ verdient.", { fact = "medal" })
+
+-- elite kill
+add("elite_beat", "elite", "{elite}: besiegt. Vor ein paar Tagen hätte ich mich das nicht getraut.", nil,
+  "Ihr habt vor Kurzem {elite} besiegt.", { fact = "elite" })
+add("elite_tough", "elite", "Mein letzter harter Kampf: {elite}. Meine Arme spüre ich immer noch.", nil,
+  "Ihr habt vor Kurzem {elite} besiegt.", { fact = "elite" })
+add("elite_first", "elite", "Mein erster richtig starker Gegner: {elite}. Ich zittere noch ein bisschen.", nil,
+  "Ihr habt vor Kurzem zum ersten Mal einen Elitegegner besiegt: {elite}.",
+  { fact = "elite", when = function(c) return c.facts.elite.first == true end })
+add("elite_potions", "elite", "{elite}? Nur mit Tränken. Glaubt mir.", nil,
+  "Ihr habt vor Kurzem {elite} besiegt.", { fact = "elite" })
+add("elite_help", "elite", "{elite}: Da hätte ich Hilfe gebraucht. Ging dann aber doch.", nil,
+  "Ihr habt vor Kurzem {elite} besiegt.", { fact = "elite" })
+
+-- first bag
+add("bag_finally", "bag", "Endlich eine richtige Tasche. Jetzt muss ich nicht mehr alles liegen lassen.", nil,
+  "Ihr habt vor Kurzem Eure erste Tasche bekommen.", { fact = "bag" })
+add("bag_joy", "bag", "Meine erste Tasche. Wer hätte gedacht, dass mich so etwas so freut.", nil,
+  "Ihr habt vor Kurzem Eure erste Tasche bekommen.", { fact = "bag" })
+add("bag_fits", "bag", "Ich habe jetzt eine Tasche. Was da alles reinpasst, glaubt ihr nicht.",
+  "Ich habe jetzt eine Tasche. Was da alles reinpasst, glaubt Ihr nicht.",
+  "Ihr habt vor Kurzem Eure erste Tasche bekommen.", { fact = "bag" })
+add("bag_long", "bag", "Hat noch jemand so lange ohne Tasche durchgehalten wie ich?", nil,
+  "Ihr habt vor Kurzem Eure erste Tasche bekommen.", { fact = "bag" })
+
+-- profession
+add("prof_start", "profession", "Ich habe mit {beruf} angefangen. Hat jemand einen Rat für den Anfang?", nil,
+  "Ihr lernt seit Kurzem {beruf}.", { fact = "profession" })
+add("prof_fun", "profession", "{beruf} macht mehr Spaß, als ich dachte.", nil,
+  "Ihr lernt seit Kurzem {beruf}.", { fact = "profession" })
+add("prof_who", "profession", "Wer von euch kennt sich mit {beruf} aus?", "Wer von Euch kennt sich mit {beruf} aus?",
+  "Ihr lernt seit Kurzem {beruf}.", { fact = "profession" })
+add("prof_need", "profession", "Ich übe mich gerade in {beruf}. Braucht jemand etwas?", nil,
+  "Ihr lernt seit Kurzem {beruf}.", { fact = "profession" })
+add("prof_eyes", "profession", "Seit ich {beruf} lerne, schaue ich unterwegs ganz anders hin.", nil,
+  "Ihr lernt seit Kurzem {beruf}.", { fact = "profession" })
+
+-- reputation tier
+add("rep_better", "rep", "Mein Ruf bei {fraktion} wird langsam besser.", nil,
+  "Euer Ruf bei {fraktion} ist kürzlich gestiegen.", { fact = "rep" })
+add("rep_known", "rep", "Für {fraktion} habe ich einiges erledigt. Man kennt mich dort langsam.", nil,
+  "Euer Ruf bei {fraktion} ist kürzlich gestiegen.", { fact = "rep" })
+add("rep_who", "rep", "Arbeitet jemand von euch auch für {fraktion}?", "Arbeitet jemand von Euch auch für {fraktion}?",
+  "Euer Ruf bei {fraktion} ist kürzlich gestiegen.", { fact = "rep" })
+add("rep_nod", "rep", "Bei {fraktion} nickt man mir inzwischen freundlich zu.", nil,
+  "Euer Ruf bei {fraktion} ist kürzlich gestiegen.", { fact = "rep" })
+add("rep_errands", "rep", "Ein paar Gefallen für {fraktion}, und schon bin ich dort gern gesehen.", nil,
+  "Euer Ruf bei {fraktion} ist kürzlich gestiegen.", { fact = "rep" })
+
+-- new subzone
+add("sub_been", "subzone", "Wart ihr schon in {unterzone}? Ich bin vorhin dort vorbeigekommen.",
+  "Wart Ihr schon in {unterzone}? Ich bin vorhin dort vorbeigekommen.", "Ihr wart vor Kurzem zum ersten Mal in {unterzone}.",
+  { fact = "subzone" })
+add("sub_odd", "subzone", "In {unterzone} war ich vorhin zum ersten Mal. Seltsamer Ort.", nil,
+  "Ihr wart vor Kurzem zum ersten Mal in {unterzone}.", { fact = "subzone" })
+add("sub_again", "subzone", "{unterzone} habe ich vorhin entdeckt. Da muss ich noch mal hin.", nil,
+  "Ihr wart vor Kurzem zum ersten Mal in {unterzone}.", { fact = "subzone" })
+add("sub_story", "subzone", "Kennt jemand {unterzone}? Ich wüsste gern, was es damit auf sich hat.", nil,
+  "Ihr wart vor Kurzem zum ersten Mal in {unterzone}.", { fact = "subzone" })
+add("sub_quiet", "subzone", "Auf dem Weg hierher kam ich durch {unterzone}. Ruhig dort, fast zu ruhig.", nil,
+  "Ihr wart vor Kurzem zum ersten Mal in {unterzone}.", { fact = "subzone" })
+
+-- kill streak
+add("streak_pause", "streak", "{kills} Gegner in der letzten halben Stunde. Ich brauche eine Pause.", nil,
+  "Ihr habt in der letzten halben Stunde {kills} Gegner besiegt.", { fact = "streak" })
+add("streak_arms", "streak", "Mir tun die Arme weh. {kills} Kämpfe am Stück.", nil,
+  "Ihr habt in der letzten halben Stunde {kills} Gegner besiegt.", { fact = "streak" })
+add("streak_fire", "streak", "Nach {kills} Kämpfen am Stück tut so ein Feuer richtig gut.", nil,
+  "Ihr habt in der letzten halben Stunde {kills} Gegner besiegt.", { fact = "streak" })
+add("streak_count", "streak", "Irgendwann habe ich aufgehört zu zählen. Es waren um die {kills}.", nil,
+  "Ihr habt in der letzten halben Stunde {kills} Gegner besiegt.", { fact = "streak" })
+
+-- guests (only people surely at the fire): race, class and level compared with your own character
+add("person_same_race", "person", "Noch jemand von den {volk}. Schön, dich hier zu treffen, {name}.",
+  "Noch jemand von den {volk}. Schön, Euch hier zu treffen, {name}.", "{name} sitzt am Feuer und ist von Eurem Volk.",
+  { person = true, when = sameRace })
+add("person_other_race", "person", "{name}, ich hatte bisher wenig mit den {volk} zu tun. Wie lebt man bei euch?",
+  "{name}, ich hatte bisher wenig mit den {volk} zu tun. Wie lebt man bei Euch?", "{name} sitzt am Feuer.",
+  { person = true, when = otherRace })
+add("person_same_class", "person", "Schön, noch {einKlasse} zu treffen, {name}. Wir sind selten genug.", nil,
+  "{name} sitzt am Feuer und hat Eure Klasse.", { person = true, when = sameClass })
+add("person_class_why", "person", "Was hat dich dazu gebracht, {klasse} zu werden, {name}?",
+  "Was hat Euch dazu gebracht, {klasse} zu werden, {name}?", "{name} sitzt am Feuer.", { person = true, when = otherClass })
+add("person_much_higher", "person", "{name}, Stufe {stufe}? Dann hast du schon mehr gesehen als ich.",
+  "{name}, Stufe {stufe}? Dann habt Ihr schon mehr gesehen als ich.", "{name} sitzt am Feuer und ist Euch weit voraus.",
+  { person = true, when = function(c) local d = lvlDiff(c) return d ~= nil and d >= 5 end })
+add("person_much_lower", "person", "{name}, wenn du bei einer Aufgabe Hilfe brauchst, sag Bescheid.",
+  "{name}, wenn Ihr bei einer Aufgabe Hilfe braucht, sagt Bescheid.", "{name} sitzt am Feuer und ist noch früh auf dem Weg.",
+  { person = true, when = function(c) local d = lvlDiff(c) return d ~= nil and d <= -5 end })
+add("person_zone", "person", "Was führt dich nach {zone}, {name}?", "Was führt Euch nach {zone}, {name}?",
+  "{name} sitzt am Feuer.", { person = true })
+add("person_others", "person", "{name}, kennst du die anderen hier schon?", "{name}, kennt Ihr die anderen hier schon?",
+  "{name} sitzt mit mehreren am Feuer.", { person = true, when = many })
+
+-- round
+add("group_count", "group", "Schon {anzahl} Leute an einem Feuer. Hier ist ja richtig was los.", nil,
+  "Mehrere Leute sitzen am Feuer.", { when = many })
+add("group_story", "group", "Wir sind {anzahl} am Feuer. Wer erzählt die erste Geschichte?", nil,
+  "Mehrere Leute sitzen am Feuer.", { when = many })
+add("group_hands", "group", "Hat jemand von euch eine Aufgabe, bei der ein paar Hände mehr helfen?",
+  "Hat jemand von Euch eine Aufgabe, bei der ein paar Hände mehr helfen?", "Jemand sitzt mit Euch am Feuer.",
+  { when = withOthers })
+add("alone_flames", "alone", "Ganz allein am Feuer. Dann rede ich eben mit den Flammen.", nil,
+  "Niemand sonst ist am Feuer zu sehen.", { w = 0.2, when = function(c) return c.nearby == 0 end })
+add("alone_wait", "alone", "Niemand da. Vielleicht kommt noch jemand vorbei.", nil,
+  "Niemand sonst ist am Feuer zu sehen.", { w = 0.2, when = function(c) return c.nearby == 0 end })
+
+-- earlier fire
+add("past_luck", "past", "{name}, schon wieder ein Feuer zusammen. Das Glück meint es gut mit uns.", nil,
+  "Ihr kennt {name} von einem früheren Feuer.", { person = true, when = past })
+add("past_hoped", "past", "Ich hatte gehofft, dich wiederzusehen, {name}.", "Ich hatte gehofft, Euch wiederzusehen, {name}.",
+  "Ihr kennt {name} von einem früheren Feuer.", { person = true, when = past })
+add("past_road", "past", "Wie war der Weg von {altzone} hierher, {name}?", nil,
+  "Ihr kennt {name} von einem früheren Feuer in {altzone}.", { person = true, when = past })
+add("past_remember", "past", "{name}, weißt du noch, das Feuer in {altzone}? Da war es kälter.",
+  "{name}, wisst Ihr noch, das Feuer in {altzone}? Da war es kälter.", "Ihr kennt {name} von einem früheren Feuer in {altzone}.",
+  { person = true, when = past })
+add("past_travel", "past", "Das {mal} Feuer mit dir, {name}. Wir sollten langsam zusammen reisen.",
+  "Das {mal} Feuer mit Euch, {name}. Wir sollten langsam zusammen reisen.", "Ihr kennt {name} von mehreren Feuern.",
+  { person = true, when = function(c) return past(c) and c.person.past.count >= 2 end })
+add("past_fate", "past", "{name}, ich glaube langsam, wir treffen uns nicht zufällig.", nil,
+  "Ihr kennt {name} von einem früheren Feuer.", { person = true, when = past })
+add("past_face", "past", "Gut, ein bekanntes Gesicht zu sehen, {name}. Die Wege sind einsam genug.", nil,
+  "Ihr kennt {name} von einem früheren Feuer.", { person = true, when = past })
+add("past_news", "past", "{name}, seit {altzone} ist bei mir einiges passiert. Und bei dir?",
+  "{name}, seit {altzone} ist bei mir einiges passiert. Und bei Euch?", "Ihr kennt {name} von einem früheren Feuer in {altzone}.",
+  { person = true, when = past })
+add("past_was_level", "past", "{name}, beim letzten Feuer warst du noch Stufe {altstufe}. Jetzt schon {stufe}.",
+  "{name}, beim letzten Feuer wart Ihr noch Stufe {altstufe}. Jetzt schon {stufe}.",
+  "{name} ist seit dem letzten gemeinsamen Feuer gestiegen.",
+  { person = true, when = function(c) return past(c) and c.person.past.level ~= nil and c.person.level ~= nil and c.person.level > c.person.past.level end })
+
+-- place
+add("place_city", "place", "Wie kommt man von {zone} am schnellsten in die nächste Stadt?", nil, "Ihr sitzt in {zone}.")
+add("place_quiet", "place", "Ich mag {zone}. Wenig Leute, viel Ruhe.", nil, "Ihr sitzt in {zone}.")
+add("place_sight", "place", "Gibt es in {zone} etwas, das man unbedingt gesehen haben muss?", nil, "Ihr sitzt in {zone}.")
+add("place_people", "place", "Wer lebt eigentlich in {zone}, wenn nicht gerade Abenteurer durchziehen?", nil,
+  "Ihr sitzt in {zone}.")
+add("place_noise", "place", "In {zone} hört man nachts seltsame Geräusche. Weiß jemand, was das ist?", nil,
+  "Ihr sitzt in {zone}.")
+add("place_calm", "place", "Hier in {zone} ist es ruhiger, als ich dachte.", nil, "Ihr sitzt in {zone}.")
+
+-- general
+add("gen_bandage", "general", "Hat jemand Verbände übrig? Meine sind aufgebraucht.", nil, "Ein Satz für die Runde am Feuer.")
+add("gen_herbs", "general", "Wo kann man hier in der Gegend gut Kräuter sammeln?", nil, "Ein Satz für die Runde am Feuer.")
+add("gen_boots", "general", "Ich brauche dringend neue Stiefel. Die alten haben Löcher.", nil, "Ein Satz für die Runde am Feuer.")
+add("gen_home", "general", "Was macht ihr, wenn ihr nicht gerade unterwegs seid?",
+  "Was macht Ihr, wenn Ihr nicht gerade unterwegs seid?", "Ein Satz für die Runde am Feuer.")
+add("gen_inn", "general", "Kennt jemand ein gutes Gasthaus in der Nähe?", nil, "Ein Satz für die Runde am Feuer.")
+
+-- farewell
+add("bye_seat", "farewell", "Ich muss weiter. Hebt mir einen Platz am Feuer auf.", nil,
+  "Ihr sitzt schon eine Weile am Feuer.", { when = late })
+add("bye_smaller", "farewell", "Das Feuer wird kleiner, ich mache mich auf den Weg. Bis bald.", nil,
+  "Ihr sitzt schon eine Weile am Feuer.", { when = late })
+add("bye_person_nice", "farewell", "{name}, war schön, mit dir am Feuer zu sitzen.",
+  "{name}, es war schön, mit Euch am Feuer zu sitzen.", "{name} sitzt am Feuer.", { person = true, when = late })
+
+-- the fire itself
+add("fire_wood", "fire", "Das Holz knackt so schön. Ist das Eiche?", nil, "Ihr sitzt an einem Lagerfeuer.")
+add("fire_friendly", "fire", "Riecht ihr das Harz im Rauch? Das mag ich.", "Riecht Ihr das Harz im Rauch? Das mag ich.", "Ihr sitzt an einem Lagerfeuer.")
+add("fire_fetch", "fire", "Soll ich noch Holz holen? Das Feuer wird kleiner.", nil, "Ihr sitzt an einem Lagerfeuer.")
+add("fire_bread", "fire", "Am Feuer schmeckt sogar trockenes Brot gut.", nil, "Ihr sitzt an einem Lagerfeuer.")
+add("fire_watch", "fire", "Wer passt heute Nacht auf das Feuer auf?", nil, "Ihr sitzt an einem Lagerfeuer.",
+  { when = function(c) return c.part == "evening" or c.part == "night" end })
+add("fire_closer", "fire", "Rückt ruhig zusammen, das Feuer reicht für alle.", nil, "Ihr sitzt mit anderen an einem Lagerfeuer.",
+  { when = withOthers })
+add("fire_hands", "fire", "Ich wärme mir nur kurz die Hände, dann geht es weiter.", nil, "Ihr sitzt an einem Lagerfeuer.")
+
 -- follow-ups (category "follow"): only via CampfireTalk.pick with opts.follow. Person follow-ups address ctx.person
 -- (last speaker),
 -- topic follow-ups carry fact and check ctx.topic; the rest are general
@@ -304,3 +575,24 @@ add("follow_why", "follow", "Was hat euch heute eigentlich hergeführt?", "Was h
   "Eine Nachfrage, damit das Gespräch weiterläuft.")
 add("follow_tea", "follow", "Noch jemand einen Becher Tee, bevor es weitergeht?", nil,
   "Eine Nachfrage, damit das Gespräch weiterläuft.")
+
+-- 1.0.2: more follow-ups (FireNotes keeps a ring of the last ones so they do not come round again too soon)
+add("follow_p_journey", "follow", "{name}, das klingt nach einer langen Reise.", nil,
+  "{name} hat zuletzt am Feuer gesprochen.", { person = true })
+add("follow_p_right", "follow", "Da hast du recht, {name}.", "Da habt Ihr recht, {name}.",
+  "{name} hat zuletzt am Feuer gesprochen.", { person = true })
+add("follow_elite", "follow", "{elite}: Da würde ich nicht noch mal allein antreten. Und ihr?",
+  "{elite}: Da würde ich nicht noch mal allein antreten. Und Ihr?", "Ihr habt zuletzt von {elite} erzählt.",
+  { fact = "elite", when = topic("elite") })
+add("follow_profession", "follow", "Falls jemand Material für {beruf} übrig hat: Ich nehme alles.", nil,
+  "Ihr habt zuletzt von {beruf} erzählt.", { fact = "profession", when = topic("profession") })
+add("follow_first_day", "follow", "Das erinnert mich an meinen ersten Tag unterwegs.", nil,
+  "Eine Nachfrage, damit das Gespräch weiterläuft.")
+add("follow_log", "follow", "Soll ich noch ein Scheit nachlegen?", nil, "Eine Nachfrage, damit das Gespräch weiterläuft.")
+add("follow_quiet", "follow", "Schön, einfach mal still am Feuer zu sitzen.", nil,
+  "Eine Nachfrage, damit das Gespräch weiterläuft.")
+add("follow_advice", "follow", "Hat jemand einen Rat für mich, bevor ich weiterziehe?", nil,
+  "Eine Nachfrage, damit das Gespräch weiterläuft.")
+add("follow_go_on", "follow", "Erzählt ruhig weiter, ich höre zu.", nil, "Eine Nachfrage, damit das Gespräch weiterläuft.")
+add("follow_best", "follow", "Was war das Schönste, das ihr unterwegs gesehen habt?",
+  "Was war das Schönste, das Ihr unterwegs gesehen habt?", "Eine Nachfrage, damit das Gespräch weiterläuft.")

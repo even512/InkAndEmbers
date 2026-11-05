@@ -3,6 +3,10 @@
 -- session = { mapID, zone, startT, level, people = { { guid, name, class, race, sex, level, sure, past } } } (from
 -- collectors/Campfire.lua, all optional); pick(session, index, state, opts) -> note | nil, text without "|", at most
 -- 255 bytes.
+-- Selection (1.0.2): tiers are mixed by weight (CampfireTalk.TIER_W), shared inside a category; with a sure guest at the fire
+-- the last free slot is a guest note (opts.slots, notes with skip = true do not count as shown); opts.person = only notes
+-- about that guest. Locks (session and saved state) use note.lock = template id, or template id + "@" + guest key for guest
+-- templates. factSaid(session, note) drops the note's fact to tier 1 for the rest of the round.
 local _, ns = ...
 
 local Journal = ns.Journal or {}
@@ -21,13 +25,21 @@ CampfireTalk.TEXT_MAX = 60          -- bytes per foreign text (zone, enemy, ques
 CampfireTalk.PEOPLE_MAX = 10        -- people per round
 CampfireTalk.SENT_LOCK = 86400      -- seconds a sent template stays locked
 CampfireTalk.REJECT_LOCK = 7200     -- seconds a rejected template stays locked
-CampfireTalk.RECENT_MAX = 60        -- ids in the ring buffer of sent templates
+CampfireTalk.RECENT_MAX = 200       -- lock keys in the ring buffer of sent templates (guest templates lock per guest)
+CampfireTalk.LOCK_KEY_MAX = 96      -- bytes per lock key ("<id>" or "<id>@<person key>")
 CampfireTalk.FRESH = 7200           -- seconds a fact counts as fresh
 CampfireTalk.FAREWELL_AFTER = 600   -- session seconds after which farewell sentences become possible
 CampfireTalk.DEFAULTS = { address = "du" }
 CampfireTalk.ADDRESSES = { du = true, ihr = true, mix = true }
 -- max age of a fact in seconds (after that "vorhin" is wrong)
-CampfireTalk.MAX_AGE = { death = 4 * 3600, rare = 8 * 3600, quest = 8 * 3600, newzone = 12 * 3600, level = 12 * 3600, medal = 12 * 3600 }
+CampfireTalk.MAX_AGE = { death = 4 * 3600, rare = 8 * 3600, quest = 8 * 3600, newzone = 12 * 3600, level = 12 * 3600, medal = 12 * 3600,
+  elite = 8 * 3600, bag = 12 * 3600, profession = 12 * 3600, rep = 8 * 3600, subzone = 3 * 3600 }
+-- selection: weight per tier (1 = filler or fact already talked about, 2 = guest or older fact, 3 = fresh fact or earlier fire);
+-- inside a category the weight is shared by its candidates, so many templates (or many guests) do not crowd out the rest
+CampfireTalk.TIER_W = { 1, 2, 3 }
+CampfireTalk.SLOTS = 3              -- notes shown at once (guest guarantee: one of them is about a guest if one is sure)
+CampfireTalk.STREAK_WINDOW = 1800   -- kill streak: kills in the last N seconds ...
+CampfireTalk.STREAK_MIN = 12        -- ... at least this many
 
 local ELLIPSIS = "\226\128\166"
 local BAD = "[|%%{}<>\\]"
@@ -111,7 +123,7 @@ local function cleanMap(m)
   local out = {}
   if type(m) == "table" and not isSecret(m) then
     for k, v in pairs(m) do
-      if type(k) == "string" and not isSecret(k) and #k <= 40 and finite(v) then out[k] = v end
+      if type(k) == "string" and not isSecret(k) and #k <= CampfireTalk.LOCK_KEY_MAX and finite(v) then out[k] = v end
     end
   end
   return out
@@ -144,9 +156,10 @@ end
 
 local function mark(state, field, lock, max, note, now)
   if type(state) ~= "table" or type(note) ~= "table" or type(note.id) ~= "string" then return false end
+  local key = type(note.lock) == "string" and #note.lock <= CampfireTalk.LOCK_KEY_MAX and note.lock or note.id
   now = finite(now) and now or time()
   if type(state[field]) ~= "table" then state[field] = {} end
-  state[field][note.id] = floor(now)
+  state[field][key] = floor(now)
   prune(state[field], lock, now, max)
   return true
 end
@@ -221,7 +234,7 @@ function CampfireTalk.facts(index, now)
     return type(r) ~= "table" or not finite(r.t) or now - r.t > MAX_AGE[kind]
   end
   local function put(kind, r, f)
-    f.t, f.key, f.fresh = r.t, kind .. ":" .. format("%.0f", r.t), (now - r.t) <= FRESH
+    f.t, f.key, f.kind, f.fresh = r.t, kind .. ":" .. format("%.0f", r.t), kind, (now - r.t) <= FRESH
     out[kind] = f
   end
 
@@ -241,17 +254,16 @@ function CampfireTalk.facts(index, now)
     put("death", r, f)
   end
 
+  -- KI in the index holds only rare, elite and boss kills
   local ki = Index.list(index, "KI")
   for i = #ki, 1, -1 do
     local k = ki[i]
-    if tooOld(k, "rare") then break end
+    if tooOld(k, "rare") or (out.rare and out.elite) then break end
     local cls = Index.str(k, "KI", "cls")
-    if (cls == "rare" or cls == "rareelite") and inAge(k, "rare") then
+    local kind = (cls == "rare" or cls == "rareelite") and "rare" or (cls == "elite" and "elite") or nil
+    if kind and not out[kind] and inAge(k, kind) then
       local name = npcName(index, Index.num(k, "KI", "npcID")) or safeText(Index.str(k, "KI", "name"))
-      if name then
-        put("rare", k, { name = name })
-        break
-      end
+      if name then put(kind, k, { name = name }) end
     end
   end
 
@@ -289,6 +301,50 @@ function CampfireTalk.facts(index, now)
     if finite(n) and n >= 1 and n <= 999 then put("level", l, { level = format("%.0f", floor(n)) }) end
   end
 
+  -- moments (MO): first elite kill (marks the elite fact), first bag, profession, reputation tier
+  local mo = Index.list(index, "MO")
+  local MO_KIND = { first_elite = "elite", first_bag = "bag", profession = "profession", reputation = "rep" }
+  local char0 = charOf(index)
+  local snaps0 = char0 and type(char0.snapshots) == "table" and char0.snapshots or nil
+  for i = #mo, 1, -1 do
+    local m = mo[i]
+    if type(m) ~= "table" or not finite(m.t) or now - m.t > 12 * 3600 then break end
+    local kind = MO_KIND[Index.str(m, "MO", "kind") or ""]
+    if kind == "elite" then
+      if out.elite and math.abs(out.elite.t - m.t) <= 5 then out.elite.first = true end
+    elseif kind and not out[kind] and inAge(m, kind) then
+      if kind == "bag" then
+        put("bag", m, {})
+      elseif kind == "profession" then
+        local name = Index.str(m, "MO", "value")
+        name = name and not tonumber(name) and safeText(name) or nil
+        if name then put("profession", m, { name = name }) end
+      else
+        local v = Index.str(m, "MO", "value")
+        local id = v and tonumber(v)
+        local facs = snaps0 and type(snaps0.factions) == "table" and snaps0.factions or nil
+        local e = id and facs and (facs[id] or facs[tostring(id)]) or nil
+        local name = type(e) == "table" and safeText(e.name) or (v and not id and safeText(v)) or nil
+        if name then put("rep", m, { name = name }) end
+      end
+    end
+  end
+
+  local sz = Index.list(index, "SZ")
+  local z = sz[#sz]
+  if inAge(z, "subzone") then
+    local name = safeText(Index.str(z, "SZ", "name"))
+    if name then put("subzone", z, { name = name }) end
+  end
+
+  if type(Index.killsBetween) == "function" then
+    local okk, n = pcall(Index.killsBetween, index, now - CampfireTalk.STREAK_WINDOW, now)
+    if okk and finite(n) and n >= CampfireTalk.STREAK_MIN and n <= 999 then
+      put("streak", { t = now }, { kills = format("%.0f", floor(n)) })
+      out.streak.key = "streak"
+    end
+  end
+
   local char = charOf(index)
   local medals = char and type(char.snapshots) == "table" and type(char.snapshots.medals) == "table" and char.snapshots.medals or nil
   if medals then
@@ -312,8 +368,23 @@ local function personName(raw)
   local first = match(raw, "^([^%-]+)")
   if not first then return nil end
   local n = safeText(first, CampfireTalk.NAME_MAX)
-  if not n or find(n, "%s") then return nil end
+  -- player names are letters only: whitespace, digits or ASCII punctuation (left over from codes) -> not a name
+  if not n or find(n, "[%s%p%d]") then return nil end
   return n
+end
+
+-- key of a session person as used in notes (note.person) and lock keys: guid, else "n:<first name>"
+function CampfireTalk.personKey(p)
+  if type(p) ~= "table" or isSecret(p) then return nil end
+  local guid = p.guid
+  if type(guid) == "string" and not isSecret(guid) and #guid <= 64 and not find(guid, "%c") then return guid end
+  local name = personName(p.name)
+  return name and ("n:" .. name) or nil
+end
+
+local function token(v)
+  if isSecret(v) or type(v) ~= "string" or #v > 32 or not find(v, "^%a+$") then return nil end
+  return v
 end
 
 local function sexOf(v)
@@ -330,7 +401,8 @@ local function normPerson(p, index)
   local out = { sure = p.sure == true, name = personName(p.name) }
   local guid = p.guid
   if type(guid) == "string" and not isSecret(guid) and #guid <= 64 and not find(guid, "%c") then out.guid = guid end
-  out.key = out.guid or (out.name and ("n:" .. out.name)) or nil
+  out.key = CampfireTalk.personKey(p)
+  out.raceToken, out.classToken = token(p.race), token(p.class)
   if finite(p.level) and p.level >= 1 and p.level <= 999 then out.level = floor(p.level) end
   -- class and race names in the active language (CampfireTexts.className/raceName, article "einen"/"a"/"an")
   local sex = sexOf(p.sex)
@@ -346,10 +418,31 @@ local function normPerson(p, index)
   return out
 end
 
-local usedBySession = setmetatable({}, { __mode = "k" })
+local usedBySession = setmetatable({}, { __mode = "k" })   -- session -> { lock key -> true } (shown this round)
+local saidBySession = setmetatable({}, { __mode = "k" })   -- session -> { fact kind -> true } (sent this round)
 
 function CampfireTalk.resetSession(session)
-  if type(session) == "table" then usedBySession[session] = nil end
+  if type(session) == "table" then
+    usedBySession[session] = nil
+    saidBySession[session] = nil
+  end
+end
+
+-- a note was said in this round: its fact (kind) drops to the lowest tier for the rest of the round
+function CampfireTalk.factSaid(session, note)
+  if type(session) ~= "table" or isSecret(session) or type(note) ~= "table" or type(note.fact) ~= "string" then return false end
+  local kind = match(note.fact, "^(%a+)")
+  if not kind then return false end
+  local said = saidBySession[session] or {}
+  said[kind] = true
+  saidBySession[session] = said
+  return true
+end
+
+-- lock key: the template id; for guest templates template id plus guest
+local function lockKey(def, person)
+  if not (def.person and person and person.key) then return def.id end
+  return sub(def.id .. "@" .. person.key, 1, CampfireTalk.LOCK_KEY_MAX)
 end
 
 local function dayPart(hour)
@@ -368,6 +461,18 @@ local function ownLevel(session, opts)
     if ok then v = lv end
   end
   if finite(v) and v >= 1 and v <= 999 then return floor(v) end
+  return nil
+end
+
+-- own race/class token (opts.race / opts.class, else UnitRace / UnitClass second return)
+local function ownToken(opts, field, fn)
+  local v = token(opts[field])
+  if v then return v end
+  local f = rawget(_G, fn)
+  if type(f) == "function" then
+    local ok, _, tok = pcall(f, "player")
+    if ok then return token(tok) end
+  end
   return nil
 end
 
@@ -445,9 +550,10 @@ function CampfireTalk.pick(session, index, state, opts)
   local sinceStart = startT and (now - startT) or nil
   local ctx = {
     part = dayPart(gameHour(opts)), sinceStart = sinceStart, others = others, nearby = nearby,
-    myLevel = ownLevel(sess, opts),
+    myLevel = ownLevel(sess, opts), myRace = ownToken(opts, "race", "UnitRace"), myClass = ownToken(opts, "class", "UnitClass"),
     topic = opts.follow and type(opts.topic) == "string" and opts.topic or nil,
     farewell = opts.farewell == true or (sinceStart ~= nil and sinceStart >= CampfireTalk.FAREWELL_AFTER),
+    facts = facts,
   }
 
   -- shared placeholders (foreign texts already checked)
@@ -459,21 +565,36 @@ function CampfireTalk.pick(session, index, state, opts)
   if facts.newzone then base.neuzone = facts.newzone.name end
   if facts.level then base.stufe = facts.level.level end
   if facts.medal then base.medaille = facts.medal.title end
+  if facts.elite then base.elite = facts.elite.name end
+  if facts.profession then base.beruf = facts.profession.name end
+  if facts.rep then base.fraktion = facts.rep.name end
+  if facts.subzone then base.unterzone = facts.subzone.name end
+  if facts.streak then base.kills = facts.streak.kills end
+  if others >= 1 then base.anzahl = T.countWord(others + 1) end
 
   -- locks
   local visIds, visCats, visFacts, visPeople = {}, {}, {}, {}
+  local shown, guestShown = 0, false
   if type(opts.visible) == "table" then
     for _, n in ipairs(opts.visible) do
       if type(n) == "table" then
         if n.id then visIds[n.id] = true end
         if n.cat then visCats[n.cat] = true end
         if n.fact then visFacts[n.fact] = true end
-        if n.person then visPeople[n.person] = true end
+        -- notes marked skip were drawn but not shown (did not fit): they block their template, but neither the guest nor
+        -- the slot counts as shown
+        if not n.skip then
+          if n.person then visPeople[n.person] = true end
+          shown = shown + 1
+          if n.person then guestShown = true end
+        end
       end
     end
   end
   local used = sess and usedBySession[sess] or nil
+  local said = sess and saidBySession[sess] or nil
   local recent, rejected = type(state) == "table" and state.recent or nil, type(state) == "table" and state.rejected or nil
+  local follow = opts.follow == true
 
   local cands = {}
   local function consider(def, person)
@@ -484,6 +605,7 @@ function CampfireTalk.pick(session, index, state, opts)
       if person.past then
         pv.altzone = person.past.zone
         pv.mal = T.ordinal(person.past.count + 1)
+        pv.altstufe = person.past.level and format("%.0f", person.past.level) or nil
       end
     end
     local factDef = def.fact and facts[def.fact] or nil
@@ -499,47 +621,84 @@ function CampfireTalk.pick(session, index, state, opts)
     local clean = CampfireTalk.clean(text)
     if not clean or #clean > CampfireTalk.SOFT_MAX then return end
     local tier = 1
-    if factDef then tier = factDef.fresh and 3 or 2
-    elseif person then tier = def.cat == "past" and 3 or 2 end
-    cands[#cands + 1] = { def = def, pv = pv, person = person, fact = factDef, tier = tier, w = def.w }
+    if factDef then
+      tier = factDef.fresh and 3 or 2
+      -- the fact was already talked about this round: lowest tier (topic follow-ups stay, they continue the topic)
+      if not follow and said and said[factDef.kind or ""] then tier = 1 end
+    elseif person then
+      tier = def.cat == "past" and 3 or 2
+    end
+    cands[#cands + 1] = { def = def, pv = pv, person = person, fact = factDef, tier = tier, w = def.w,
+      lock = lockKey(def, person) }
   end
 
-  local follow = opts.follow == true
   local avoid = type(opts.avoid) == "table" and opts.avoid or {}
+  -- opts.person: only notes about this guest (a guest who just sat down)
+  local wantPerson = not follow and type(opts.person) == "string" and opts.person or nil
+  local function free(lock)
+    return not (used and used[lock]) and not blocked(recent, lock, CampfireTalk.SENT_LOCK, now)
+      and not blocked(rejected, lock, CampfireTalk.REJECT_LOCK, now)
+  end
   for _, def in ipairs(T.list) do
     local ok
     if follow then
       ok = def.cat == "follow" and not visIds[def.id] and not avoid[def.id]
-        and not blocked(rejected, def.id, CampfireTalk.REJECT_LOCK, now)
     else
-      ok = def.cat ~= "follow" and not (used and used[def.id]) and not visIds[def.id] and not visCats[def.cat]
-        and not blocked(recent, def.id, CampfireTalk.SENT_LOCK, now)
-        and not blocked(rejected, def.id, CampfireTalk.REJECT_LOCK, now)
+      -- for a late guest the guest categories stay open even if another guest's note shows one (second late guest)
+      ok = def.cat ~= "follow" and not visIds[def.id] and (not visCats[def.cat] or (wantPerson ~= nil and def.person))
     end
     if ok then
       if def.person then
         for _, p in ipairs(people) do
-          if not visPeople[p.key] then consider(def, p) end
+          if not visPeople[p.key] then
+            local lock = lockKey(def, p)
+            if follow and not blocked(rejected, lock, CampfireTalk.REJECT_LOCK, now) then consider(def, p)
+            elseif not follow and free(lock) then consider(def, p) end
+          end
         end
-      else
+      elseif follow then
+        if not blocked(rejected, def.id, CampfireTalk.REJECT_LOCK, now) then consider(def, nil) end
+      elseif free(def.id) then
         consider(def, nil)
       end
     end
   end
 
+  -- guest guarantee: sure guests at the fire and no guest note among the shown ones yet -> the last free slot is a guest note
+  local slots = finite(opts.slots) and opts.slots or CampfireTalk.SLOTS
+  local needGuest = not follow and #people > 0 and not guestShown and shown >= slots - 1
+  if wantPerson or needGuest then
+    local only = {}
+    for _, c in ipairs(cands) do
+      if c.person and (not wantPerson or c.person.key == wantPerson) then only[#only + 1] = c end
+    end
+    if wantPerson or #only > 0 then cands = only end
+  end
+
+  if not follow then
+    -- mix the tiers: weight = template weight x tier weight, shared inside the category
+    local perCat = {}
+    for _, c in ipairs(cands) do perCat[c.def.cat] = (perCat[c.def.cat] or 0) + 1 end
+    for _, c in ipairs(cands) do c.w = c.w * CampfireTalk.TIER_W[c.tier] / perCat[c.def.cat] end
+  end
+
   while #cands > 0 do
-    local best = 0
-    for _, c in ipairs(cands) do if c.tier > best then best = c.tier end end
-    local top, map = {}, {}
-    for i, c in ipairs(cands) do
-      if c.tier == best then
-        top[#top + 1] = c
-        map[#top] = i
+    local pool, map = cands, nil
+    if follow then
+      -- follow-ups: the highest tier wins (a topic follow-up continues what was just said)
+      local best = 0
+      for _, c in ipairs(cands) do if c.tier > best then best = c.tier end end
+      pool, map = {}, {}
+      for i, c in ipairs(cands) do
+        if c.tier == best then
+          pool[#pool + 1] = c
+          map[#pool] = i
+        end
       end
     end
-    local pickIdx = weightedPick(top, rnd) or 1
-    local c = top[pickIdx]
-    table.remove(cands, map[pickIdx])
+    local pickIdx = weightedPick(pool, rnd) or 1
+    local c = pool[pickIdx]
+    table.remove(cands, map and map[pickIdx] or pickIdx)
 
     local form = chooseForm(address, rnd)
     local text = CampfireTalk.clean(CampfireTalk.fill(T.text(c.def, form == "ihr" and "ihr" or "du"), c.pv, base))
@@ -548,11 +707,11 @@ function CampfireTalk.pick(session, index, state, opts)
     if text and #text <= CampfireTalk.SOFT_MAX and why and not find(why, "{") then
       if sess then
         used = used or {}
-        used[c.def.id] = true
+        used[c.lock] = true
         usedBySession[sess] = used
       end
       return { id = c.def.id, cat = c.def.cat, text = text, why = why, fact = c.fact and c.fact.key or nil,
-        person = c.person and c.person.key or nil, form = form, tier = c.tier }
+        person = c.person and c.person.key or nil, form = form, tier = c.tier, lock = c.lock }
     end
   end
   return nil

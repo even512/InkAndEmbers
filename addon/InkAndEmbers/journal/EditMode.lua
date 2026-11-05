@@ -678,6 +678,11 @@ function EditMode.available(id)
     local B = BG()
     return B ~= nil and type(B.restOn) == "function" and B.restOn() == true
   end
+  -- the to-do note docked to the quest tracker follows the tracker: no own position, no edit-mode entry
+  if id == "todo" then
+    local Tr = TT()
+    return not (Tr and type(Tr.docked) == "function" and Tr.docked())
+  end
   return true
 end
 
@@ -875,6 +880,7 @@ local function showElement(id)
   if not h then return end
   if not (EditMode.shownInEdit(id) and EditMode.available(id)) then
     if h.preview then h.preview:Hide() end
+    if id == "todo" or id == "quick" then stopPreview(id) end
     h:Hide()
     return
   end

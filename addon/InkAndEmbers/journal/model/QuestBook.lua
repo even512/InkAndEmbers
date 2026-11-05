@@ -678,6 +678,93 @@ local function killsUnknown(index, t1)
   return not finite(last) or t1 >= (last + 1) * (tonumber(ks.size) or 60)
 end
 
+QuestBook.INFER_WINDOW = 60 -- seconds around the turn-in in which a received item (LT line) counts as the choice
+
+-- item IDs of an archived reward list ({ { id = n }, ... } or plain numbers) into the set; returns the number added
+local function idSet(list, ids)
+  list = tbl(list)
+  if not list or isSecret(list) then return 0 end
+  local n = 0
+  for i = 1, QuestBook.REWARD_MAX do
+    local v = list[i]
+    if v == nil then break end
+    local id = int(type(v) == "table" and not isSecret(v) and v.id or v)
+    if id and id > 0 and not ids[id] then
+      ids[id] = true
+      n = n + 1
+    end
+  end
+  return n
+end
+
+-- itemID -> number of turned-in quests of the character that offer it (choice or fixed); cached per index and QT count
+local offerCache = setmetatable({}, { __mode = "k" })
+local function offers(index)
+  local I = Journal.Index
+  local qts = I.list(index, "QT")
+  local c = offerCache[index]
+  if c and c.n == #qts then return c.map end
+  local char = tbl(index and index.char) or {}
+  local map, done = {}, {}
+  for _, rec in ipairs(qts) do
+    local qid = int(I.num(rec, "QT", "questID"))
+    if qid and not done[qid] then
+      done[qid] = true
+      local e = tbl(entry(char.quests, qid))
+      if e then
+        local ids = {}
+        idSet(e.rewardChoices, ids)
+        idSet(e.rewardItems, ids)
+        for id in pairs(ids) do map[id] = (map[id] or 0) + 1 end
+      end
+    end
+  end
+  offerCache[index] = { n = #qts, map = map }
+  return map
+end
+
+-- itemID of the chosen reward from what was received, or nil. Exactly one choice item has to fit (no guessing):
+-- first an LT line from the quest context close to the turn-in (green and better), else the counter of
+-- received quest items (char.counters.quest_items, grey/white, without time). The counter knows no quest, so it
+-- only counts if no other turned-in quest of the character offers that item as well.
+function QuestBook.inferChoice(index, choices, t)
+  local ids = {}
+  if idSet(choices, ids) == 0 then return nil end
+  local I = Journal.Index
+  local function only(test)
+    local hit
+    for id in pairs(ids) do
+      if test(id) then
+        if hit then return nil end -- two fit: unclear
+        hit = id
+      end
+    end
+    return hit
+  end
+  if finite(t) then
+    local near = {}
+    for _, rec in ipairs(I.list(index, "LT")) do
+      if finite(rec.t) and math.abs(rec.t - t) <= QuestBook.INFER_WINDOW then
+        local kind = I.str(rec, "LT", "source")
+        local id = int(tonumber(match(I.str(rec, "LT", "item") or "", "^(%d+)")))
+        if id and (kind == "quest" or kind == "other") then near[id] = true end
+      end
+    end
+    local hit = only(function(id) return near[id] end)
+    if hit then return hit end
+  end
+  local char = tbl(index and index.char)
+  local counters = char and tbl(char.counters)
+  local got = counters and tbl(counters.quest_items)
+  if not got then return nil end
+  local hit = only(function(id)
+    local c = entry(got, id)
+    return finite(c) and c > 0
+  end)
+  if hit and (offers(index)[hit] or 0) > 1 then return nil end -- also offered by another quest: unclear
+  return hit
+end
+
 function QuestBook.detail(index, q, now)
   local I = Journal.Index
   local char = tbl(index and index.char) or {}
@@ -785,6 +872,11 @@ function QuestBook.detail(index, q, now)
     local item = lastQT and I.num(lastQT, "QT", "itemID") or nil
     if not item then item = src.qr end
     item = int(item)
+    if (not item or item <= 0) and lastQT and r.choices then
+      -- choice not recorded (quest UI without the GetQuestReward hook, before 1.0.2): derive it from received items
+      item = QuestBook.inferChoice(index, e.rewardChoices, lastQT.t)
+      if item then r.inferred = true end
+    end
     if item and item > 0 then
       r.itemID = item
       local snaps = tbl(char.snapshots)
@@ -836,6 +928,8 @@ function QuestBook.detail(index, q, now)
     each(e.rewardItems, "fixed")
     r.items = items
     r.partial = (r.choices and r.choices > 1 and listed < r.choices) and true or nil
+    -- turned in, choice items known, but which one was taken is not: say so instead of "not chosen"
+    if lastQT and listed > 0 and not r.itemID then r.choiceNotRecorded = true end
     d.reward = r
   end
   local line = int(e.questLine)

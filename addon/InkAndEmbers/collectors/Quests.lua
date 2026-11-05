@@ -184,9 +184,10 @@ local Quests = {
   requires = { "UnitLevel" },
   events = {
     "QUEST_ACCEPTED", "QUEST_TURNED_IN", "QUEST_REMOVED", "QUEST_DETAIL", "QUEST_PROGRESS", "QUEST_COMPLETE",
-    "PLAYER_LOGOUT", "QUEST_LOG_UPDATE", "QUEST_WATCH_UPDATE",
+    "PLAYER_LOGOUT", "QUEST_LOG_UPDATE", "QUEST_WATCH_UPDATE", "QUEST_FINISHED",
   },
   unitEvents = { UNIT_QUEST_LOG_CHANGED = { "player" } },
+  signals = { "FC_LOOT" },
 }
 local handlers = {}
 
@@ -205,12 +206,27 @@ local function abandonId()
   return nil
 end
 
+-- chosen item known: straight into a fresh turn-in without item (own QR line), else kept for the coming QUEST_TURNED_IN
+local function assignChoice(self, questID, itemID)
+  local rec = self.turned[questID]
+  if rec and GetTime() - rec.at < TURNED_TTL then
+    if rec.item ~= nil then return end -- already assigned (hook and loot message for the same turn-in)
+    rec.item = itemID
+    Store.append("QR", questID, itemID) -- QUEST_TURNED_IN was faster than the hook
+    self.completing, self.choiceItems = nil, {}
+    self.awaiting[questID] = nil
+  else
+    self.choice = { questID = questID, itemID = itemID, at = GetTime() }
+  end
+end
+
 function Quests:init()
   self.givers = {}      -- questID -> { id, name, at } from QUEST_DETAIL
   self.turnNpc = {}     -- questID -> { id, name, at } from QUEST_PROGRESS/QUEST_COMPLETE
   self.choiceItems = {} -- index -> itemID of the choice items of the open turn-in window
   self.turned = {}
   self.removed = {}     -- questID -> time of QUEST_REMOVED while the decision is pending
+  self.awaiting = {}    -- questID -> { items = { [itemID] = true }, at, turnedAt, closedAt }: turn-ins with a choice, until the item is known
   self.completing = nil -- { questID, at } from QUEST_COMPLETE, kept until the choice item is assigned (or CHOICE_TTL)
   self.choice = nil
   self.abandonSel, self.abandonReq = nil, nil
@@ -229,6 +245,8 @@ function Quests:init()
     Core.hook(self, C_QuestLog, "AbandonQuest", onAbandon)
   end
   Core.hook(self, "AbandonQuest", onAbandon) -- older global API, if present
+  -- Only catches callers of the global: quest UI replacements (DialogueUI) keep their own local copy of GetQuestReward
+  -- from before our hook, then the chosen item arrives via FC_LOOT (see there).
   Core.hook(self, "GetQuestReward", function(s, idx)
     idx = num(idx)
     if not idx or idx < 1 then return end -- no choice
@@ -239,14 +257,7 @@ function Quests:init()
     local comp = s.completing
     local questID = comp and GetTime() - comp.at < CHOICE_TTL and comp.questID or questIdFromFrame()
     if not questID then return end
-    local rec = s.turned[questID]
-    if rec and rec.item == nil and GetTime() - rec.at < TURNED_TTL then
-      rec.item = itemID
-      Store.append("QR", questID, itemID) -- QUEST_TURNED_IN was faster than the hook
-      s.completing, s.choiceItems = nil, {}
-    else
-      s.choice = { questID = questID, itemID = itemID, at = GetTime() }
-    end
+    assignChoice(s, questID, itemID)
   end)
 end
 
@@ -318,9 +329,13 @@ handlers.QUEST_COMPLETE = function(self)
   -- remember choice items: the hook on GetQuestReward runs after the original, when the links may be gone
   self.choiceItems = {}
   local n = num(call(GetNumQuestChoices)) or 0
+  local set, any = {}, false
   for i = 1, floor(n) do
     self.choiceItems[i] = itemIdOf(call(GetQuestItemLink, "choice", i))
+    if self.choiceItems[i] then set[self.choiceItems[i]], any = true, true end
   end
+  self.awaiting[questID] = any and { items = set, at = GetTime() } or nil
+  trimCache(self.awaiting)
   Store.putText("quests", questID, {
     title = str(call(GetTitleText)),
     reward = str(call(GetRewardText)),
@@ -642,6 +657,10 @@ handlers.QUEST_TURNED_IN = function(self, questID, xp, money)
     self.choice = nil
   end
   if item then self.completing, self.choiceItems = nil, {} end -- assigned; otherwise it stays for a late hook
+  local aw = self.awaiting[questID]
+  if aw then
+    if item then self.awaiting[questID] = nil else aw.turnedAt = t end -- else waits for the loot message
+  end
   self.turned[questID] = { at = t, item = item }
   trimCache(self.turned)
   closeObjectives(self, questID)
@@ -682,6 +701,56 @@ end
 -- dropped at logout: a still undecided removal is not necessarily an abandon
 handlers.PLAYER_LOGOUT = function(self)
   self.removed = {}
+end
+
+-- the turn-in window closes: a turn-in that did not happen no longer waits for its choice
+-- (short grace, the order of QUEST_FINISHED and QUEST_TURNED_IN is not guaranteed)
+handlers.QUEST_FINISHED = function(self)
+  local t = GetTime()
+  local comp = self.completing
+  if comp and not self.turned[comp.questID] then self.completing, self.choiceItems = nil, {} end
+  for _, aw in pairs(self.awaiting) do
+    if not aw.turnedAt and not aw.closedAt then aw.closedAt = t end
+  end
+end
+
+-- received item (signal of the Loot collector): the chosen reward, if it is one of the choice items of a pending
+-- turn-in. Independent of the quest UI (DialogueUI & co. bypass the GetQuestReward hook). Only items from the quest
+-- context (or without a known source, when the message comes after the window closed) count.
+-- Bound to the questID: turn-ins already done get their item first (oldest first, loot follows the turn-ins in order),
+-- only then the window still open; a late item of quest A never lands on the next quest B.
+local REWARD_SOURCE = { quest = true, other = true }
+handlers.FC_LOOT = function(self, itemID, _, _, kind)
+  itemID = num(itemID)
+  if not itemID or not REWARD_SOURCE[kind] then return end
+  local t = GetTime()
+  local turned, open
+  for questID, aw in pairs(self.awaiting) do
+    if t - aw.at >= CHOICE_TTL or (aw.turnedAt and t - aw.turnedAt >= TURNED_TTL)
+      or (aw.closedAt and not aw.turnedAt and t - aw.closedAt >= REMOVE_WINDOW) then
+      self.awaiting[questID] = nil -- expired, or closed without a turn-in
+    elseif aw.items[itemID] then
+      if aw.turnedAt then
+        if not turned or aw.turnedAt < self.awaiting[turned].turnedAt then turned = questID end
+      elseif not open or aw.at > self.awaiting[open].at then
+        open = questID
+      end
+    end
+  end
+  if turned then
+    self.awaiting[turned] = nil
+    local rec = self.turned[turned]
+    if rec and rec.item == nil then
+      rec.item = itemID
+      Store.append("QR", turned, itemID)
+      local comp = self.completing
+      if comp and comp.questID == turned then self.completing, self.choiceItems = nil, {} end
+    end
+  elseif open then
+    local ch = self.choice
+    if ch and ch.questID == open and t - ch.at < CHOICE_TTL then return end -- the hook was first
+    self.choice = { questID = open, itemID = itemID, at = t }
+  end
 end
 
 function Quests:onEvent(event, ...)

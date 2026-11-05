@@ -123,6 +123,7 @@ journal\Toast.lua
 journal\Begleiter.lua
 journal\Tutorial.lua
 journal\TodoTracker.lua
+journal\TodoDock.lua
 journal\TodoMarks.lua
 journal\QuickNote.lua
 journal\FireNoteAreas.lua

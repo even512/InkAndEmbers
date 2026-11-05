@@ -142,7 +142,7 @@ function Toast.setSound(on)
   return P and P.setSetting("toastSound", on and true or false) or false
 end
 
-local KIND_SETTING = { medal = "toastMedal", zone = "toastZone" }
+local KIND_SETTING = { medal = "toastMedal", zone = "toastZone", todo = "todoToast" }
 
 function Toast.kindOn(kind)
   local key = KIND_SETTING[kind]

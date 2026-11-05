@@ -6,10 +6,14 @@
 -- the text is cleaned again with CampfireTalk.clean. On failure the note stays, a hint goes to the own chat and the line is
 -- put into the edit box if possible.
 -- Looks: five shapes (Media/FireNote1..5.tga), random shape and mirroring per note, each with a fixed text area
--- (journal/FireNoteAreas.lua, generated, mirrored with it). Text that does not fit shrinks down to FireNotes.FONT.min,
--- else another suggestion is drawn. The reduceMotion setting turns off floating and fading.
--- Flow: after your first sent line all notes vanish and a small spark stays; clicking it brings 1-2 follow-up notes. After
--- FireNotes.SILENCE s of silence one follow-up appears by itself (at most FireNotes.AUTO_MAX per session).
+-- (journal/FireNoteAreas.lua, generated, mirrored with it). Text that does not fit shrinks down to FireNotes.FONT.min; if it
+-- fits in no size, the other shapes are tried, and only then another suggestion is drawn. Text never leaves the area.
+-- The reduceMotion setting turns off floating and fading.
+-- Guests: a sure guest who sits down while all notes are full replaces the weakest note (lowest tier, not under the mouse).
+-- Embers (B16): a visible, clickable bed of embers below the notes ("New note"), shown whenever the notes are out. Click
+-- (FireNotes.ember, alias FireNotes.spark): before the first line it draws one new note (free slot first, else the weakest note
+-- gives way); after the first sent line all notes vanish and the embers bring 1-2 follow-up notes (a normal note if none is left).
+-- After FireNotes.SILENCE s of silence one follow-up appears by itself (at most FireNotes.AUTO_MAX per session).
 -- Position: edit mode element "fire" (journal/EditMode.lua) via FireNotes.hud.place, else FireNotes.DEFAULT_POS.
 -- Settings (EveNChronicleDB.campfire): notes, show = "cardFirst" | "both" | "notesOnly".
 local _, ns = ...
@@ -42,10 +46,11 @@ FireNotes.AUTO_MAX = 2
 FireNotes.SPARK_N = 2
 FireNotes.SPARK_THROTTLE = 3
 FireNotes.SPARK_SIZE = 34
-FireNotes.FOLLOW_AVOID = 4
-FireNotes.TOPICS = { death = true, rare = true, quest = true, newzone = true, level = true }
+FireNotes.EMBER_W, FireNotes.EMBER_H = 160, 30
+FireNotes.FOLLOW_AVOID = 10   -- ring of recent follow-ups (kept across rounds of this login), softened if nothing else is left
+FireNotes.TOPICS = { death = true, rare = true, quest = true, newzone = true, level = true, elite = true, profession = true }
 FireNotes.W = FireNotes.COUNT * FireNotes.NOTE_W + (FireNotes.COUNT - 1) * FireNotes.GAP
-FireNotes.H = FireNotes.NOTE_H + 2 * FireNotes.FLOAT + 16
+FireNotes.H = FireNotes.NOTE_H + 2 * FireNotes.FLOAT + 16 + FireNotes.EMBER_H
 FireNotes.DEFAULT_POS = { point = "CENTER", x = 0, y = 60 }
 FireNotes.DEFAULTS = { notes = true, show = "cardFirst" }
 FireNotes.SHOW_MODES = { cardFirst = true, both = true, notesOnly = true }
@@ -66,6 +71,10 @@ FireNotes.TEXT = ns.Locale.ns("FireNotes", {
   sparkTitle = "Funke",
   sparkHow = "Klick: eine Nachfrage holen",
   sparkEmpty = "Lagerfeuer: Gerade fällt mir keine Nachfrage ein.",
+  emberLabel = "Neuer Zettel",
+  emberTitle = "Glut",
+  emberHow = "Klick: neuen Gesprächszettel aus der Glut holen",
+  emberEmpty = "Lagerfeuer: Gerade liegt kein neuer Zettel in der Glut.",
   samples = {
     "Ein Feuer in Durotar – besser hätte der Tag nicht enden können.",
     "Woher kommst du gerade, Kuno?",
@@ -183,7 +192,7 @@ end
 
 local st = { active = false, test = false, waiting = false, session = nil, talk = nil, notes = {}, buttons = {}, gen = 0,
   slotGen = {}, lastSend = -math.huge, frame = nil, phase = nil, autoN = 0, lastTalk = nil, speaker = nil, topic = nil,
-  recentFollow = {}, lastSpark = -math.huge, spark = nil, silenceGen = nil }
+  recentFollow = {}, lastSpark = -math.huge, spark = nil, silenceGen = nil, guests = {} }
 FireNotes.state = st
 
 local function reduceMotion()
@@ -316,8 +325,8 @@ local function newNote(parent, slot, interactive)
     if b.RegisterForClicks then b:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
     -- Left click sends here, in the same call (hardware event): no timer or queue in between.
     b:SetScript("OnClick", function(self, button) FireNotes.click(self.slot, button) end)
-    b:SetScript("OnEnter", function(self) showTip(self) end)
-    b:SetScript("OnLeave", function(self) hideTip(self) end)
+    b:SetScript("OnEnter", function(self) self.hover = true showTip(self) end)
+    b:SetScript("OnLeave", function(self) self.hover = false hideTip(self) end)
     makeAnims(b, slot)
   else
     b:EnableMouse(false)
@@ -334,6 +343,17 @@ local function dress(b, text, shape, flip)
   return fitText(b, text, b.area)
 end
 FireNotes.dress = dress
+
+-- dress with the first shape (from a random start) whose text area holds the text; false if none does
+local function dressAny(b, text, start, flip)
+  local n = FireNotes.SHAPES
+  start = start or math.random(1, n)
+  for i = 0, n - 1 do
+    if dress(b, text, (start - 1 + i) % n + 1, flip) then return true end
+  end
+  return false
+end
+FireNotes.dressAny = dressAny
 
 function FireNotes.place()
   local f = st.frame
@@ -352,32 +372,58 @@ local function build()
   f:SetFrameStrata("MEDIUM")
   f:EnableMouse(false)
   for slot = 1, FireNotes.COUNT do st.buttons[slot] = newNote(f, slot, true) end
+  -- embers: a wide, glowing click area below the notes (B16), above the notes in level so nothing covers it
   local sp = CreateFrame("Button", nil, f)
-  sp:SetSize(FireNotes.SPARK_SIZE, FireNotes.SPARK_SIZE)
-  sp:SetPoint("BOTTOM", f, "TOP", 0, 2)
+  sp:SetSize(FireNotes.EMBER_W, FireNotes.EMBER_H)
+  sp:SetPoint("BOTTOM", f, "BOTTOM", 0, 0)
+  if sp.SetFrameLevel and f.GetFrameLevel then sp:SetFrameLevel((num(f:GetFrameLevel()) or 0) + 5) end
+  sp:EnableMouse(true)
+  local Th = Theme()
+  local glowTex = Th and Th.TEX and Th.TEX.glow or "Interface\\AddOns\\InkAndEmbers\\Media\\Glow"
   sp.tex = sp:CreateTexture(nil, "ARTWORK")
   sp.tex:SetAllPoints(sp)
-  local Th = Theme()
-  sp.tex:SetTexture(Th and Th.TEX and Th.TEX.glow or "Interface\\AddOns\\InkAndEmbers\\Media\\Glow")
-  sp.tex:SetVertexColor(1, 0.55, 0.15, 1)
+  sp.tex:SetTexture(glowTex)
+  if sp.tex.SetBlendMode then sp.tex:SetBlendMode("ADD") end
+  sp.tex:SetVertexColor(1, 0.45, 0.1, 0.9)
+  sp.hl = sp:CreateTexture(nil, "HIGHLIGHT")
+  sp.hl:SetPoint("CENTER", sp, "CENTER", 0, 0)
+  sp.hl:SetSize(FireNotes.EMBER_W + 24, FireNotes.EMBER_H + 14)
+  sp.hl:SetTexture(glowTex)
+  if sp.hl.SetBlendMode then sp.hl:SetBlendMode("ADD") end
+  sp.hl:SetVertexColor(1, 0.8, 0.35, 1)
+  sp.hl:Hide()
+  sp.label = sp:CreateFontString(nil, "OVERLAY")
+  sp.label:SetPoint("CENTER", sp, "CENTER", 0, 0)
+  if Th and Th.font then
+    Th.font(sp.label, "title", 14, nil, "OUTLINE")
+  else
+    pcall(sp.label.SetFont, sp.label, "Fonts\\MORPHEUS.TTF", 14, "OUTLINE")
+  end
+  if sp.label.SetTextColor then sp.label:SetTextColor(1, 0.86, 0.55) end
+  if sp.label.SetShadowOffset then sp.label:SetShadowOffset(1, -1) end
+  sp.label:SetText(T.emberLabel)
   if sp.RegisterForClicks then sp:RegisterForClicks("LeftButtonUp") end
-  sp:SetScript("OnClick", function() FireNotes.spark() end)
+  sp:SetScript("OnClick", function() FireNotes.ember() end)
   sp:SetScript("OnEnter", function(self)
+    if self.hl then self.hl:Show() end
     if not GameTooltip then return end
     pcall(function()
       GameTooltip:SetOwner(self, "ANCHOR_TOP")
-      GameTooltip:SetText(T.sparkTitle, 1, 0.82, 0)
-      GameTooltip:AddLine(T.sparkHow, 1, 1, 1)
+      GameTooltip:SetText(T.emberTitle, 1, 0.82, 0)
+      GameTooltip:AddLine(T.emberHow, 1, 1, 1)
       GameTooltip:Show()
     end)
   end)
-  sp:SetScript("OnLeave", function(self) hideTip(self) end)
+  sp:SetScript("OnLeave", function(self)
+    if self.hl then self.hl:Hide() end
+    hideTip(self)
+  end)
   if type(sp.CreateAnimationGroup) == "function" then
     local g = sp:CreateAnimationGroup()
     if type(g) == "table" and type(g.CreateAnimation) == "function" then
       local a = g:CreateAnimation("Alpha")
       a:SetFromAlpha(1)
-      a:SetToAlpha(0.45)
+      a:SetToAlpha(0.6)
       a:SetDuration(1.2)
       if a.SetSmoothing then a:SetSmoothing("IN_OUT") end
       if g.SetLooping then g:SetLooping("BOUNCE") end
@@ -385,7 +431,7 @@ local function build()
     end
   end
   sp:Hide()
-  st.spark = sp
+  st.spark, st.ember = sp, sp
   st.frame = f
   FireNotes.place()
   f:Hide()
@@ -422,24 +468,33 @@ local function hideSlot(slot)
   b:Hide()
 end
 
-local function fill(slot, follow)
+-- forPerson: only a note about this guest (person key), used when a guest sits down late; avoid: a note just set aside
+-- (marked skip) whose template must not come straight back
+local function fill(slot, follow, forPerson, avoid)
   local CT = Talk()
   if not (st.active and CT and st.buttons[slot]) or st.notes[slot] then return false end
   if st.session and not st.test then st.talk = FireNotes.adapt(st.session, st.talk) end
   local state = st.test and { recent = {}, rejected = {} } or CT.state()
   local idx = index()
-  local failed = {}
+  local failed = { avoid }
+  local avoidN = #st.recentFollow
   for _ = 1, FireNotes.PICK_TRIES do
-    local o = { visible = visibleNotes(failed) }
+    local o = { visible = visibleNotes(failed), slots = FireNotes.COUNT, person = forPerson }
     if follow then
       o.follow, o.speaker, o.topic, o.avoid = true, st.speaker, st.topic, {}
-      for _, id in ipairs(st.recentFollow) do o.avoid[id] = true end
+      for i = #st.recentFollow - avoidN + 1, #st.recentFollow do o.avoid[st.recentFollow[i]] = true end
     end
     local ok, note = pcall(CT.pick, st.talk, idx, state, o)
+    while follow and ok and note == nil and avoidN > 0 do
+      -- every follow-up is in the ring: release the oldest one rather than show nothing
+      avoidN = avoidN - 1
+      o.avoid = {}
+      for i = #st.recentFollow - avoidN + 1, #st.recentFollow do o.avoid[st.recentFollow[i]] = true end
+      ok, note = pcall(CT.pick, st.talk, idx, state, o)
+    end
     if not ok or type(note) ~= "table" or type(note.text) ~= "string" then return false end
     local b = st.buttons[slot]
-    local shape = math.random(1, FireNotes.SHAPES)
-    if dress(b, note.text, shape, rnd() < 0.5) then
+    if dressAny(b, note.text, math.random(1, FireNotes.SHAPES), rnd() < 0.5) then
       if follow then
         note.auto = follow == "auto" or nil
         table.insert(st.recentFollow, note.id)
@@ -459,11 +514,72 @@ local function fill(slot, follow)
       end
       return true
     end
+    note.skip = true -- fits in no shape: blocks this suggestion, does not count as shown
     failed[#failed + 1] = note
   end
   return false
 end
 FireNotes.fill = fill
+
+-- sure guests of the current round (person keys as in CampfireTalk notes)
+local function guestKeys()
+  local out = {}
+  local CT = Talk()
+  local t = st.talk
+  if not (CT and type(CT.personKey) == "function" and type(t) == "table" and type(t.people) == "table") then return out end
+  for _, p in ipairs(t.people) do
+    if type(p) == "table" and p.sure == true then
+      local k = CT.personKey(p)
+      if k then out[#out + 1] = k end
+    end
+  end
+  return out
+end
+
+local function markGuests()
+  for _, k in ipairs(guestKeys()) do st.guests[k] = true end
+end
+
+-- a sure guest sat down while every note is full: the weakest note (lowest tier, preferably not about a guest, not under
+-- the mouse, not waiting for a refill) gives way to a note about the new guest. At most one swap per update.
+local function swapForGuest(fresh)
+  if not st.active or st.test or st.waiting or st.phase == "talk" or #fresh == 0 then return false end
+  for slot = 1, FireNotes.COUNT do
+    if not st.notes[slot] then return false end -- a free slot was just filled or stays free: no swap needed
+  end
+  for _, key in ipairs(fresh) do
+    local covered = false
+    for slot = 1, FireNotes.COUNT do
+      if st.notes[slot].person == key then covered = true end
+    end
+    if not covered then
+      local best, bestScore
+      for slot = 1, FireNotes.COUNT do
+        local n, b = st.notes[slot], st.buttons[slot]
+        if not (b and b.hover) and not st.slotGen[slot] then
+          local score = (tonumber(n.tier) or 1) * 10 + (n.person and 5 or 0) + slot * 0.1
+          if not bestScore or score < bestScore then best, bestScore = slot, score end
+        end
+      end
+      if not best then return false end
+      local old = st.notes[best]
+      hideSlot(best)
+      if fill(best, nil, key) then return true end
+      -- no note for this guest after all: put the old note back
+      local b = st.buttons[best]
+      if b and dressAny(b, old.text, b.shape, b.flip) then
+        st.notes[best], b.note = old, old
+        b:SetAlpha(1)
+        b:Show()
+      else
+        fill(best)
+      end
+      return false
+    end
+  end
+  return false
+end
+FireNotes.swapForGuest = swapForGuest
 
 local function fillAll()
   if not st.active or (st.phase == "talk" and not st.test) then return 0 end
@@ -474,6 +590,8 @@ local function fillAll()
   for slot = 1, FireNotes.COUNT do
     if not st.notes[slot] and not st.slotGen[slot] and fill(slot) then n = n + 1 end
   end
+  if not st.test then markGuests() end
+  FireNotes.showEmber(true)
   return n
 end
 
@@ -490,17 +608,20 @@ local function refill(slot)
 end
 
 local function showSpark(on)
-  local sp = st.spark
+  local sp = st.ember
   if not sp then return end
   if on then
     sp:Show()
     if sp.pulse and not reduceMotion() then sp.pulse:Play() end
   else
     if sp.pulse then sp.pulse:Stop() end
+    if sp.hl then sp.hl:Hide() end
     hideTip(sp)
     sp:Hide()
   end
 end
+
+FireNotes.showEmber = showSpark
 
 function FireNotes.stop(why)
   st.gen = st.gen + 1
@@ -543,7 +664,9 @@ local function begin(session)
   st.session = session
   st.talk = FireNotes.adapt(session, nil)
   st.active = true
-  st.phase, st.autoN, st.lastTalk, st.speaker, st.topic, st.recentFollow = "start", 0, nil, nil, nil, {}
+  -- recentFollow stays across rounds (ring of FireNotes.FOLLOW_AVOID), so follow-ups do not repeat at the next fire
+  st.phase, st.autoN, st.lastTalk, st.speaker, st.topic = "start", 0, nil, nil, nil
+  st.guests = {}
   local mode = FireNotes.settings().show
   if mode == "cardFirst" then
     st.waiting = true
@@ -569,7 +692,14 @@ function FireNotes.onCampfire(what, session)
   end
   if what == "update" and st.active and not st.test and not st.waiting and not inCombat() then
     st.session = session or st.session
+    st.talk = FireNotes.adapt(st.session, st.talk)
+    local fresh = {}
+    for _, k in ipairs(guestKeys()) do
+      if not st.guests[k] then fresh[#fresh + 1] = k end
+    end
     fillAll()
+    swapForGuest(fresh)
+    markGuests()
   end
   if what == "talk" then
     local t = type(session) == "table" and not isSecret(session) and session.talk or nil
@@ -647,8 +777,42 @@ function FireNotes.heard(who, guid)
   return true
 end
 
-function FireNotes.spark()
-  if not st.active or st.phase ~= "talk" then return false end
+-- one new ordinary note: a free slot first (a pending refill is taken over), else the weakest note (lowest tier, not under the
+-- mouse) gives way; it is only set aside, not rejected. If nothing new fits, the old note comes back. -> 1 or 0
+local function drawFresh()
+  for slot = 1, FireNotes.COUNT do
+    if not st.notes[slot] then
+      st.slotGen[slot] = nil
+      if fill(slot) then return 1 end
+    end
+  end
+  local best, bestScore
+  for slot = 1, FireNotes.COUNT do
+    local n, b = st.notes[slot], st.buttons[slot]
+    if n and not (b and b.hover) then
+      local score = (tonumber(n.tier) or 1) * 10 + slot * 0.1
+      if not bestScore or score < bestScore then best, bestScore = slot, score end
+    end
+  end
+  if not best then return 0 end
+  local old = st.notes[best]
+  old.skip = true -- blocks its template for this draw, does not count as shown
+  hideSlot(best)
+  if fill(best, nil, nil, old) then return 1 end
+  old.skip = nil
+  local b = st.buttons[best]
+  if b and dressAny(b, old.text, b.shape, b.flip) then
+    st.notes[best], b.note = old, old
+    b:SetAlpha(1)
+    b:Show()
+  end
+  return 0
+end
+FireNotes.drawFresh = drawFresh
+
+-- click on the embers (B16): before the first line one new note, after it 1-2 follow-ups (else one ordinary note)
+function FireNotes.ember()
+  if not st.active or st.waiting then return false end
   if inCombat() then
     say(T.combat)
     return false
@@ -657,12 +821,19 @@ function FireNotes.spark()
   if t - st.lastSpark < FireNotes.SPARK_THROTTLE then return false end
   st.lastSpark = t
   local C = Campfire()
-  if C and type(C.touch) == "function" then pcall(C.touch) end
-  hideAll(false)
-  local n = showFollow(FireNotes.SPARK_N, "spark")
-  if n == 0 then say(T.sparkEmpty) end
+  if not st.test and C and type(C.touch) == "function" then pcall(C.touch) end
+  local n
+  if st.phase == "talk" and not st.test then
+    hideAll(false)
+    n = showFollow(FireNotes.SPARK_N, "spark")
+    if n == 0 then n = drawFresh() end
+  else
+    n = drawFresh()
+  end
+  if n == 0 then say(T.emberEmpty) end
   return n > 0
 end
+FireNotes.spark = FireNotes.ember
 
 local function sendSay(text)
   -- Retail simulation (E5): without "loud" only a local line instead of /say
@@ -726,6 +897,7 @@ function FireNotes.click(slot, button)
   st.lastSend = t
   if not st.test then
     pcall(CT.sent, note)
+    if type(CT.factSaid) == "function" then pcall(CT.factSaid, st.talk, note) end
     local kind = type(note.fact) == "string" and string.match(note.fact, "^(%a+):") or nil
     if kind and FireNotes.TOPICS[kind] then st.topic = kind end
     local C = Campfire()

@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.2
+
+### New
+- **To-dos at the quest tracker:** new option "Dock to-dos to the quest tracker" (off by default; the mini note stays the default): your to-dos then sit right at the quest tracker as a section in its look (same width and fonts, header with collapse button, progress "3/10" like quest objectives), below the quests or above them ("Position at the quest tracker"), moving to the other side when the screen edge leaves no room. It also docks to Questie's and Kaliel's tracker, collapses with the tracker, stays in place when the tracker is empty, and while docked the mini note's edit mode entry rests. Blizzard's tracker itself is never touched.
+
+### Changed
+- **Level-up note speaks in flowing text:** instead of a list, the narrator now talks to you: he congratulates you by name, tells you where new spells are waiting (with up to three spell names, the cost or what you are short of, and a reminder about free talent points). Each case has six wordings, picked at random and never the same one twice in a row. If the text does not fit the parchment it shortens itself (spell names first, then the trainer's place) and never runs over the edge. A click on the note opens the book at Quests, Training, and the note leaves; the small x in the corner only closes it; a small line says so. In combat the book stays shut (a chat hint tells you) and the note stays. The welcome greeting is unchanged.
+- **To-do note opens by itself:** the mini to-do note now opens on its own while to-dos are open (at login and whenever a new one arrives); close it with the x and it stays shut until a new to-do shows up (option "Show the note automatically while to-dos are open", on by default). When the addon adds a to-do itself (e.g. "To the trainer" after a level-up) a small pop-up announces it, after the narrator note and never in combat (option "Announce automatic to-dos", on by default, WoW Forever); to-dos you add yourself stay quiet.
+- **Campfire notes, more variety:** about three times as many conversation suggestions (169 instead of 55, German and English), new topics from your journey (first elite kill, first bag, a new profession, a reputation tier, a newly found subzone, a long kill streak) and guest sentences that compare race, class and level with your own character; if someone sure is at the fire, one of the three notes is always about a guest, a guest who sits down late replaces the weakest note, guest sentences are locked per guest, a topic you already talked about steps back for the rest of the round and follow-ups do not repeat within the last ten.
+
+### Fixes
+- **World map markers:** the markers on the world map appear right away again instead of one every few seconds.
+- **Chosen quest reward:** the reward you pick is now recorded even with a quest UI replacement such as DialogueUI (read from the loot message); for older turn-ins the quest book works out the choice from the items you received, and if that is not possible it says "Choice not recorded" instead of marking every item "not chosen".
+- **Campfire embers:** a glowing "New note" ember bed now sits below the campfire notes as soon as they appear; hover lights it up with a tooltip, a click draws a fresh conversation note (before your first line it replaces the weakest note, afterwards it brings follow-ups or, if none are left, an ordinary note).
+- **Bestiary pictures:** enemy cards no longer keep a "?" for creatures the game had not cached yet; the card asks for the model again a few times, so it shows up just like in the enlarged view.
+
 ## 1.0.1
 
 ### New

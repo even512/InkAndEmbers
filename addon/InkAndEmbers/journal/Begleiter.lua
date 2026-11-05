@@ -492,7 +492,7 @@ end
 -- texture is 512 px with its circle (r 176) at (256 | 250), so the texture is drawn portrait * 512 / 352 wide.
 -- textX/textW/textTop/textBottom = the parchment area (right of the bookmark, inside the paper edge), the text block is centred there.
 Begleiter.SLIP = { w = 420, h = 232, circleX = 104, circleY = 107, circleR = 61, portrait = 128,
-  textX = 214, textW = 182, textTop = 44, textBottom = 196, titleSize = 14, bodySize = 11,
+  textX = 214, textW = 182, textTop = 44, textBottom = 196, titleSize = 14, bodySize = 11, hintSize = 9, hintH = 14, closeSize = 16,
   glow = { x = 26, y = 172, w = 34, h = 54, u1 = 0.0635, u2 = 0.1436, v1 = 0.74, v2 = 0.97, min = 0.08, max = 0.3, period = 3.2 },
   anim = 0.4, hold = 12, delay = 3, y = -40, maxLines = 3, maxLinesFirst = 3, tries = 3, retry = 10, glideEdge = 210 }
 -- Pop-out figure per race (Media/NarratorFigIn_<id>.tga + NarratorFigOut_<id>.tga, scripts/render-media.mjs NARRATOR_CUTOUTS, measures from
@@ -644,7 +644,37 @@ local function slipFrame()
     fs:SetJustifyV("TOP")
   end
   f.body:SetSpacing(3)
-  f:SetScript("OnMouseUp", function() Begleiter.closeSlip() end)
+  if f.body.SetWordWrap then f.body:SetWordWrap(true) end
+  -- hint line (small, bottom of the text area) and the small x (top right): only for notes that ask for them (level-up note)
+  if fontString then
+    f.hint = fontString(f, "OVERLAY")
+    setFont(f.hint, "text", S.hintSize)
+  else
+    f.hint = f:CreateFontString(nil, "OVERLAY")
+  end
+  f.hint:SetTextColor(0.42, 0.30, 0.18)
+  f.hint:SetWidth(S.textW)
+  f.hint:SetJustifyH("LEFT")
+  f.hint:SetJustifyV("TOP")
+  if f.hint.SetWordWrap then f.hint:SetWordWrap(false) end -- one line, never wraps below the parchment
+  f.hint:SetPoint("TOPLEFT", f, "TOPLEFT", S.textX, -(S.textBottom - S.hintH + 2))
+  f.hint:Hide()
+  local cb = CreateFrame("Button", nil, f)
+  cb:SetSize(S.closeSize, S.closeSize)
+  cb:SetPoint("TOPLEFT", f, "TOPLEFT", S.textX + S.textW - S.closeSize, -(S.textTop - 4))
+  if cb.SetFrameLevel and f.GetFrameLevel then cb:SetFrameLevel((f:GetFrameLevel() or 0) + 5) end
+  cb.label = fontString and fontString(cb, "OVERLAY") or cb:CreateFontString(nil, "OVERLAY")
+  if setFont then setFont(cb.label, "text", 16) end
+  cb.label:SetText("×")
+  cb.label:SetPoint("CENTER", cb, "CENTER", 0, 1)
+  cb.label:SetTextColor(0.36, 0.12, 0.07)
+  cb:SetScript("OnEnter", function(self) self.label:SetTextColor(0.75, 0.15, 0.08) end)
+  cb:SetScript("OnLeave", function(self) self.label:SetTextColor(0.36, 0.12, 0.07) end)
+  -- a child button takes its own click: the parent's OnMouseUp (open the book) does not fire
+  cb:SetScript("OnClick", function() Begleiter.closeSlip() end)
+  cb:Hide()
+  f.closeBtn = cb
+  f:SetScript("OnMouseUp", function() Begleiter.clickSlip() end)
   f:SetScript("OnHide", function(self)
     slip.phase = nil
     self:SetScript("OnUpdate", nil)
@@ -692,6 +722,20 @@ function Begleiter.closeSlip()
   return true
 end
 
+-- click on the note: a note with its own click action (level-up: open the Lehrplan) runs it and then leaves, unless the action
+-- answers false (e.g. in combat: the book stays shut, the note stays); a note without one (welcome) just leaves
+function Begleiter.clickSlip()
+  local f = slip.frame
+  if not f or not f:IsShown() or slip.phase == "close" then return false end
+  local fn = slip.onClick
+  if type(fn) == "function" then
+    local ok, keep = pcall(fn)
+    if not ok and ns.Core and ns.Core.coreError then ns.Core.coreError(keep) end
+    if ok and keep == false then return false end
+  end
+  return Begleiter.closeSlip()
+end
+
 function Begleiter.slipShown()
   return slip.frame ~= nil and slip.frame:IsShown() and true or false
 end
@@ -713,8 +757,10 @@ local function inCombat()
 end
 
 -- Draws the note with prepared content (the welcome greeting and the level-up note share frame, narrator, glide and sound):
--- content = { kind = "welcome" | "level", title = text (may hold "\n"), variants = { { line, ... }, ... } }. The variants run from
--- the fullest to the leanest set of body lines: the first one that fits the parchment is shown (the last one always is).
+-- content = { kind = "welcome" | "level", title = text (may hold "\n"), variants = { { line, ... }, ... },
+--   hint = small line at the bottom, closable = true (small x top right: only closes), onClick = function (click on the note, see
+--   clickSlip) }. The variants run from the fullest to the leanest set of body lines: the first one that fits the parchment is
+-- shown (the last one always is). A line may be a whole paragraph: the text field wraps it.
 function Begleiter.showNote(content)
   local S = Begleiter.SLIP
   if type(content) ~= "table" then return false end
@@ -722,17 +768,27 @@ function Begleiter.showNote(content)
   -- the title may be two lines (welcome: "Willkommen zurück," / name) so even long names stay on the parchment; if it is still
   -- wider than the text area, the font shrinks step by step (TITLE_SIZES)
   f.title:SetText(content.title or "")
+  local closable = content.closable == true
+  local hint = type(content.hint) == "string" and content.hint ~= "" and content.hint or nil
+  -- the small x takes the top right corner: the title keeps clear of it
+  local titleW = S.textW - (closable and S.closeSize + 2 or 0)
   if f.setFont and f.title.SetWidth and f.title.GetStringWidth then
     f.title:SetWidth(1000)
     for _, size in ipairs({ S.titleSize, 13, 12, 11, 10 }) do
       if size <= S.titleSize then
         f.setFont(f.title, "text", size)
         local w = num(f.title:GetStringWidth())
-        if not w or w <= S.textW then break end
+        if not w or w <= titleW then break end
       end
     end
-    f.title:SetWidth(S.textW)
   end
+  f.title:SetWidth(titleW)
+  -- hint line and x belong to this note only
+  slip.onClick = type(content.onClick) == "function" and content.onClick or nil
+  f.hint:SetText(hint or "")
+  f.hint:SetShown(hint ~= nil)
+  f.closeBtn:SetShown(closable)
+  local bottom = S.textBottom - (hint and S.hintH or 0)
   local variants = type(content.variants) == "table" and #content.variants > 0 and content.variants or { {} }
   f.body:ClearAllPoints()
   f.title:ClearAllPoints()
@@ -748,12 +804,12 @@ function Begleiter.showNote(content)
     end
     bh = num(f.body.GetStringHeight and f.body:GetStringHeight()) or (14 * #lines)
     if bh < 8 then bh = 14 * math.max(1, #lines) end
-    if th + 4 + bh <= S.textBottom - S.textTop or #lines <= 1 or vi == #variants then break end
+    if th + 4 + bh <= bottom - S.textTop or vi == #variants then break end
   end
   slip.kind = content.kind or "welcome"
   -- text block centred on the parchment (not above the bookmark: textX is right of it)
   local block = th + gap + bh
-  local top = S.textTop + ((S.textBottom - S.textTop) - block) / 2
+  local top = S.textTop + ((bottom - S.textTop) - block) / 2
   if top < S.textTop then top = S.textTop end
   top = floor(top + 0.5)
   f.title:SetPoint("TOPLEFT", f, "TOPLEFT", S.textX, -top)

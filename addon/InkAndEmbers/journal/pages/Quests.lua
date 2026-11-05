@@ -29,7 +29,7 @@ local T = ns.Locale.ns("p.Quests", {
   countOf = "%s von %s Quests", count_one = "%s Quest", count_other = "%s Quests", questLevel = "Questlevel %s",
   goalsMore_one = "+ %s weiteres Ziel", goalsMore_other = "+ %s weitere Ziele", walked = "%s gelaufen", day = "Tag %s",
   after = "nach %s", afterApprox = "nach ca. %s", vanished = "aus dem Questlog verschwunden", itemNo = "Gegenstand Nr. %s",
-  chosenOf = "%s (1 von %s)", countX = "%s × · %s", moreItems = "+ %s weitere Gegenstände", choiceUnknown = "Wahl nicht erkannt",
+  chosenOf = "%s (1 von %s)", countX = "%s × · %s", moreItems = "+ %s weitere Gegenstände", choiceItemsUnknown = "Welche Gegenstände zur Wahl standen, ist nicht erfasst.",
   abandonedN = "%s abgebrochen",
   book = "QUESTBUCH", title = "INK & EMBERS", quests = "QUESTS",
   colName = "Name", colArea = "Gebiet", colLevel = "Stufe", colDate = "Abgegeben am",
@@ -48,7 +48,7 @@ local T = ns.Locale.ns("p.Quests", {
   done = "abgeschlossen",
   stateWord = { done = "abgeschlossen", open = "offen", abandoned = "abgebrochen", seen = "nur gelesen" },
   xpUnit = "EP",
-  chosen = "gewählt", notChosen = "nicht gewählt", fixed = "Belohnung", choice = "zur Wahl",
+  chosen = "gewählt", notChosen = "nicht gewählt", received = "erhalten", choiceNotRecorded = "Wahl nicht aufgezeichnet", fixed = "Belohnung", choice = "zur Wahl",
   noItems = "keine Gegenstandsbelohnung", noRewardData = "keine Belohnung erfasst",
   partial = "Die anderen Wahlbelohnungen sind nicht bekannt.",
   speakPlay = "Vorlesen (Spoken)", speakStop = "Anhalten", speakNone = "Keine Aufnahme in Spoken",
@@ -1277,7 +1277,8 @@ local function renderReward(self, d)
       s:Show()
       local icon = Journal.Live and Journal.Live.itemIcon(it.itemID)
       s.icon:SetTexture(icon or ITEM_FALLBACK_ICON)
-      local off = it.kind == "choice" and not it.chosen
+      -- choice not recorded: no item is greyed out as "not chosen"
+      local off = it.kind == "choice" and not it.chosen and not r.choiceNotRecorded
       if s.icon.SetDesaturated then s.icon:SetDesaturated(off) end
       s.icon:SetAlpha(off and 0.45 or 1)
       s.edge:SetAlpha(off and 0.4 or 1)
@@ -1296,7 +1297,10 @@ local function renderReward(self, d)
       if it.kind == "fixed" then
         sub = T.fixed
       elseif it.chosen then
-        sub = (r.choices and r.choices > 1) and T("chosenOf", T.chosen, int(r.choices)) or T.chosen
+        local word = r.inferred and T.received or T.chosen -- derived afterwards from the received items
+        sub = (r.choices and r.choices > 1) and T("chosenOf", word, int(r.choices)) or word
+      elseif r.choiceNotRecorded then
+        sub = T.choiceNotRecorded
       else
         sub = T.notChosen
       end
@@ -1316,7 +1320,7 @@ local function renderReward(self, d)
     note = T.partial
   elseif #items == 0 then
     if r and r.choices and r.choices > 0 then
-      note = T.choiceUnknown
+      note = T.choiceItemsUnknown
     elseif r and d.state == "done" then
       note = T.noItems
     else
