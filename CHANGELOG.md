@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.1
+
+### New
+- **Level-up note (WoW Forever):** when you level up, your narrator glides in from the left like the welcome greeting and tells you what the trainer can teach you now: up to three spells (the rest as "... and n more"), the total cost (and what you are short of), the nearest known trainer and any free talent points (then there is no separate talent pop-up). With nothing to learn it still congratulates you and names the next level with new spells. In combat it waits until the fight is over, after an open welcome note it comes next. New option "Level-up: narrator tells what you can learn" (on by default; off keeps the old talent pop-up) and the preview command `/chronik level` (`/chronik stufe`).
+
+### Fixes
+- **Crafted gear is recognised:** items you made yourself (e.g. a Rough Copper Vest) carry the crafter in their link, which the addon could not read, so the slot was noted as empty. Those links are read now, an unreadable link no longer counts as an empty slot, and after login the worn gear is compared with the last noted state so missed changes are filled in (without repeating first-blue/epic/bag moments).
+- **World map route:** the journey route on the world map is now drawn the first time you open the map (no need to open the book or save first) and keeps up while the map is open: new trail points extend the line and a thin live tail runs to your position.
+
 ## 1.0.0
 
 First stable version. It collects everything from the 0.9 line; the details are in the entries below.

@@ -675,7 +675,12 @@ function Begleiter.slipStep(dt)
   elseif slip.phase == "close" then
     local p = math.min(1, slip.t / S.anim)
     slipProgress(f, 1 - ease(p))
-    if p >= 1 then f:Hide() end
+    if p >= 1 then
+      f:Hide()
+      local w = slip.waiting
+      slip.waiting = nil
+      if w then w() end
+    end
   end
 end
 
@@ -707,29 +712,16 @@ local function inCombat()
   return ok and not isSecret(v) and v == true
 end
 
--- show the note now (force: also for the preview /chronik willkommen zettel). Waits in combat and tries again a few times.
-function Begleiter.showSlip(s, tries, force)
+-- Draws the note with prepared content (the welcome greeting and the level-up note share frame, narrator, glide and sound):
+-- content = { kind = "welcome" | "level", title = text (may hold "\n"), variants = { { line, ... }, ... } }. The variants run from
+-- the fullest to the leanest set of body lines: the first one that fits the parchment is shown (the last one always is).
+function Begleiter.showNote(content)
   local S = Begleiter.SLIP
-  if type(s) ~= "table" then return false end
-  if not force and not setting("welcome") then return false end
-  if inCombat() then
-    if (tries or 1) < S.tries and type(C_Timer) == "table" then
-      C_Timer.After(S.retry, function() Begleiter.showSlip(s, (tries or 1) + 1, force) end)
-    end
-    return false
-  end
-  local item = Begleiter.welcomeItem(s)
-  if not item then return false end
+  if type(content) ~= "table" then return false end
   local f = slipFrame()
-  -- title on two lines ("Willkommen zurück," / name) so even long names stay on the parchment; if the name is still wider than
-  -- the text area, the font shrinks step by step (TITLE_SIZES)
-  local title = item.title or ""
-  local nm = shown(s.name, Begleiter.NAME_MAX)
-  if nm then
-    local pre = s.first and Begleiter.TEXT.firstPre or Begleiter.TEXT.welcomePre
-    title = (pre:gsub("%s+$", "")) .. "\n" .. nm .. Begleiter.TEXT.namePost
-  end
-  f.title:SetText(title)
+  -- the title may be two lines (welcome: "Willkommen zurück," / name) so even long names stay on the parchment; if it is still
+  -- wider than the text area, the font shrinks step by step (TITLE_SIZES)
+  f.title:SetText(content.title or "")
   if f.setFont and f.title.SetWidth and f.title.GetStringWidth then
     f.title:SetWidth(1000)
     for _, size in ipairs({ S.titleSize, 13, 12, 11, 10 }) do
@@ -741,27 +733,24 @@ function Begleiter.showSlip(s, tries, force)
     end
     f.title:SetWidth(S.textW)
   end
-  -- up to three lines (the first visit: the three first-time lines, the last one says how to open the book; the return: the info
-  -- lines the player picked); if they do not fit the parchment, the first visit drops the second line first, the return its last
-  local lines = {}
-  for i = 1, math.min(s.first and S.maxLinesFirst or S.maxLines, #item.lines) do lines[#lines + 1] = item.lines[i] end
+  local variants = type(content.variants) == "table" and #content.variants > 0 and content.variants or { {} }
   f.body:ClearAllPoints()
   f.title:ClearAllPoints()
   local th, bh
   local gap = 4
-  while true do
+  for vi, lines in ipairs(variants) do
     f.body:SetText(table.concat(lines, "\n"))
     th = num(f.title.GetStringHeight and f.title:GetStringHeight()) or 18
     if th < 8 then th = 18 end
     if #lines == 0 then
-      bh, gap = 0, 0 -- all info lines deselected: the greeting stands alone
+      bh, gap = 0, 0 -- no body lines: the title stands alone
       break
     end
     bh = num(f.body.GetStringHeight and f.body:GetStringHeight()) or (14 * #lines)
     if bh < 8 then bh = 14 * math.max(1, #lines) end
-    if th + 4 + bh <= S.textBottom - S.textTop or #lines <= 1 then break end
-    table.remove(lines, (s.first and #lines >= 3) and 2 or #lines)
+    if th + 4 + bh <= S.textBottom - S.textTop or #lines <= 1 or vi == #variants then break end
   end
+  slip.kind = content.kind or "welcome"
   -- text block centred on the parchment (not above the bookmark: textX is right of it)
   local block = th + gap + bh
   local top = S.textTop + ((S.textBottom - S.textTop) - block) / 2
@@ -813,6 +802,55 @@ function Begleiter.showSlip(s, tries, force)
   local T, Snd = Toast(), Journal.Sound
   if T and T.soundOn() and Snd and type(Snd.play) == "function" then pcall(Snd.play, "feather") end
   return true
+end
+
+-- which note is on screen: "welcome" | "level" | nil (none; a note that is just leaving still counts)
+function Begleiter.slipKind()
+  if slip.frame ~= nil and slip.frame:IsShown() then return slip.kind or "welcome" end
+  return nil
+end
+
+-- Runs fn once, as soon as the note on screen has left again. false (fn not stored) if no note is on screen. A newer call replaces
+-- the older one (only the latest state matters).
+function Begleiter.afterSlip(fn)
+  if type(fn) ~= "function" or not Begleiter.slipKind() then return false end
+  slip.waiting = fn
+  return true
+end
+
+-- show the note now (force: also for the preview /chronik willkommen zettel). Waits in combat and tries again a few times.
+function Begleiter.showSlip(s, tries, force)
+  local S = Begleiter.SLIP
+  if type(s) ~= "table" then return false end
+  if not force and not setting("welcome") then return false end
+  if inCombat() then
+    if (tries or 1) < S.tries and type(C_Timer) == "table" then
+      C_Timer.After(S.retry, function() Begleiter.showSlip(s, (tries or 1) + 1, force) end)
+    end
+    return false
+  end
+  local item = Begleiter.welcomeItem(s)
+  if not item then return false end
+  -- title on two lines ("Willkommen zurück," / name)
+  local title = item.title or ""
+  local nm = shown(s.name, Begleiter.NAME_MAX)
+  if nm then
+    local pre = s.first and Begleiter.TEXT.firstPre or Begleiter.TEXT.welcomePre
+    title = (pre:gsub("%s+$", "")) .. "\n" .. nm .. Begleiter.TEXT.namePost
+  end
+  -- up to three lines (the first visit: the three first-time lines, the last one says how to open the book; the return: the info
+  -- lines the player picked); if they do not fit the parchment, the first visit drops the second line first, the return its last
+  local lines = {}
+  for i = 1, math.min(s.first and S.maxLinesFirst or S.maxLines, #item.lines) do lines[#lines + 1] = item.lines[i] end
+  local variants = {}
+  while true do
+    local copy = {}
+    for i, l in ipairs(lines) do copy[i] = l end
+    variants[#variants + 1] = copy
+    if #lines <= 1 then break end
+    table.remove(lines, (s.first and #lines >= 3) and 2 or #lines)
+  end
+  return Begleiter.showNote({ kind = "welcome", title = title, variants = variants })
 end
 
 -- First login of the account: only the introduction (journal/Tutorial.lua); no card, no area pop-up while it is open.

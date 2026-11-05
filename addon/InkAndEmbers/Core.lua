@@ -56,6 +56,7 @@ local T = ns.Locale.ns("Core", {
   helpNote = "/chronik notiz - Schnellnotiz-Feld ein-/ausblenden (Enter legt eine Notiz an)",
   helpOpen = "/chronik offene - offene Quests (Rubrik \"Offen\" unter Quests)",
   helpOpenTest = "/chronik offene test - schaltet den Retail-Testmodus ein (\"test aus\" beendet ihn)",
+  helpLevelSlip = "/chronik stufe - Meldung des Erzählers zum Stufenaufstieg als Vorschau zeigen: was Ihr beim Lehrer lernen könnt (nur WoW Forever)",
   helpTrain = "/chronik lehrplan - Lehrplan Eurer Klasse (Rubrik \"Lehrplan\" unter Quests, nur WoW Forever); \"lehrplan status\" zeigt den Stand",
   helpLanguage = "/chronik sprache - Sprache wählen: \"sprache auto\", \"sprache de\" oder \"sprache en\" (wirkt nach /reload)",
   helpReset = "/chronik reset - Größe und Position des Reisejournals zurücksetzen",
@@ -112,7 +113,8 @@ local COMMAND_ALIASES = {
   welcome = "willkommen", rest = "rast", sound = "ton", meter = "messer", note = "notiz",
   language = "sprache", lang = "sprache", save = "sichern", backup = "sicherung", campfire = "feuer", lagerfeuer = "feuer",
   open = "offene", quests = "offene", auras = "auren", buffs = "auren", coins = "muenzen", ["münzen"] = "muenzen",
-  training = "lehrplan", trainer = "lehrplan", lehrer = "lehrplan",
+  training = "lehrplan", trainer = "lehrplan", lehrer = "lehrplan", level = "stufe",
+  -- ("stufe" shows the level-up note as a preview)
   anleitung = "tutorial", einfuehrung = "tutorial", ["einführung"] = "tutorial", intro = "tutorial",
 }
 
@@ -798,7 +800,7 @@ end
 -- help lines in display order (empty texts are skipped)
 local HELP = {
   "helpTitle", "helpToggle", "helpShort", "helpStatus", "helpOptions", "helpMinimap", "helpToast", "helpSound", "helpWelcome", "helpTutorial", "helpRest",
-  "helpMeter", "helpTodo", "helpNote", "helpOpen", "helpOpenTest", "helpTrain", "helpLanguage", "helpReset", "helpSave", "helpBackup", "helpHelp", "helpAliases", "helpDebug", "helpDiag",
+  "helpMeter", "helpTodo", "helpNote", "helpOpen", "helpOpenTest", "helpTrain", "helpLevelSlip", "helpLanguage", "helpReset", "helpSave", "helpBackup", "helpHelp", "helpAliases", "helpDebug", "helpDiag",
   "helpDiagQuests", "helpCampfire", "helpSim", "helpAuras", "helpCoins",
 }
 
@@ -817,7 +819,7 @@ local function helpHiddenInRetail(key)
   if key == "helpCampfire" then
     local ms = J and J.MapSpace
     return ms ~= nil and type(ms.fireTalkHidden) == "function" and ms.fireTalkHidden() == true
-  elseif key == "helpTrain" then
+  elseif key == "helpTrain" or key == "helpLevelSlip" then
     local lp = J and J.Lehrplan
     return lp ~= nil and type(lp.active) == "function" and lp.active() == false
   end
@@ -1262,6 +1264,8 @@ function Core.slash(msg)
     ns.Journal.OpenQuests.slash(string.match(type(msg) == "string" and msg or "", "^%s*%S+%s+(.-)%s*$") or "")
   elseif cmd == "lehrplan" and ns.Trainer then
     ns.Trainer.slash(rest)
+  elseif cmd == "stufe" and ns.Trainer then
+    ns.Trainer.slashLevel()
   elseif cmd == "notiz" and ns.Journal and ns.Journal.QuickNote then
     ns.Journal.QuickNote.slash(rest)
   elseif cmd == "messer" and type(ns.meterSlash) == "function" then

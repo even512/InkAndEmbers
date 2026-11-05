@@ -269,6 +269,8 @@ L.add("enUS", "Options", {
   toastSoundTip = "A sound with every notification (like /chronik sound). Which sound is set under Sounds.",
   welcomeLabel = "Welcome greeting",
   welcomeTip = "A small note at the left screen edge when you log in: on a character's first visit and, when you come back after a break, with the state of your journey.",
+  levelSlipLabel = "Level-up: narrator tells what you can learn",
+  levelSlipTip = "At a level-up the narrator glides in as a note: which spells you can learn at the trainer, what they cost, where the nearest trainer is and whether talent points are free. In combat it waits until the fight is over. With this off, only the small talent point pop-up remains (WoW Forever only).",
   welcomeAfterLabel = "Show after an absence of",
   welcomeAfterTip = "How long you must have been away before the note shows at login. \"At once\" shows it at every login (not on /reload). A character's first visit is always greeted.",
   afterNow = "At once",

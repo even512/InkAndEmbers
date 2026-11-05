@@ -7,6 +7,10 @@
 --    or completed (Plans.finishAuto) as soon as nothing learnable is left (spell learned, trainer closed). Setting trainerTodo.
 -- 3. Talent points: free points (Journal.Lehrplan.unspentTalents) -> one toast per level and session, never in combat (the
 --    toast queue waits). Setting talentHint.
+-- 4. Level-up note: after PLAYER_LEVEL_UP the narrator note (journal/Begleiter.lua, showNote) glides in from the left: "Level X
+--    reached", up to 3 learnable spells, total cost, nearest trainer, free talent points (then no talent toast at the level-up).
+--    Nothing learnable: the note still comes ("New spells from level N"). In combat it waits for PLAYER_REGEN_ENABLED, an open
+--    welcome note first. Setting levelSlip (default on); /chronik stufe shows it as a preview.
 -- Only reading APIs, each in pcall with secret-value guards; nothing is bought or clicked.
 local _, ns = ...
 local Core, Store = ns.Core, ns.Store
@@ -26,6 +30,8 @@ Trainer.MAX_TRAINERS = 200    -- snapshots.trainers (soft cap)
 Trainer.MAX_SPELLS = 800      -- snapshots.trainerSpells (soft cap)
 Trainer.MAX_NAMES = 120       -- names in snapshots.state.trainerVisit
 Trainer.TAG = "trainer"       -- Plans.upsertAuto tag
+Trainer.SLIP_SPELLS = 3       -- spell names on the level-up note (the rest: "… and n more")
+Trainer.SLIP_NAME_MAX = 40    -- characters per spell / zone name on the note
 Trainer.SERVICE_TYPES = { available = true, unavailable = true, used = true, header = true }
 
 local T = ns.Locale.ns("col.Trainer", {
@@ -46,6 +52,20 @@ local T = ns.Locale.ns("col.Trainer", {
   unknown = "?",
   unknownArg = "Unbekannter Zusatz \"%s\". /chronik lehrplan öffnet die Seite, /chronik lehrplan status zeigt den Stand.",
   retailOnly = "Den Lehrplan gibt es nur in WoW Forever (in Retail kommen Klassenzauber von selbst).",
+  slipTitle = "Stufe %d erreicht",
+  slipLearn_one = "%d neuer Zauber lernbar",
+  slipLearn_other = "%d neue Zauber lernbar",
+  slipSpell = "%s (%s)",
+  slipMore = "… und %d weitere",
+  slipCost = "Kosten: %s",
+  slipCostShort = "Kosten: %s (es fehlen %s)",
+  slipTrainer = "Lehrer: %s",
+  slipTrainerAny = "Lehrer: in jeder Hauptstadt",
+  slipNext = "Neue Zauber ab Stufe %d",
+  slipNothing = "Diesmal gibt es nichts Neues zu lernen.",
+  slipTalent_one = "%d Talentpunkt wartet auf Euch",
+  slipTalent_other = "%d Talentpunkte warten auf Euch",
+  slipNoData = "Der Stufenzettel ist gerade nicht verfügbar (Lehrplan: /chronik lehrplan status).",
 })
 Trainer.TEXT = T
 
@@ -204,7 +224,7 @@ function Collector:init()
   self.open, self.readPending, self.checkPending = false, false, false
   self.visits, self.shape = 0, nil
   self.toldLevel, self.toldLogin = nil, false
-  self.pendingTalent = nil
+  self.pendingTalent, self.pendingSlip = nil, nil
   if not Trainer.active() then return end
   Core.after(self, Trainer.LOGIN_DELAY, function(s)
     Trainer.checkTodo()
@@ -342,6 +362,145 @@ function Trainer.talentNotice(self, level, why)
   return ok and true or false
 end
 
+-- 4. Level-up note
+
+local function shownText(v)
+  if type(v) ~= "string" or isSecret(v) then return nil end
+  return ns.Sanitize.display(v, Trainer.SLIP_NAME_MAX)
+end
+
+local function plural(n, base)
+  local LC = ns.Locale
+  local key = LC and LC.plural and LC.plural(n, base .. "_one", base .. "_other") or (n == 1 and base .. "_one" or base .. "_other")
+  return T(key, n)
+end
+
+local function copyList(list, n)
+  local out = {}
+  for i = 1, n or #list do out[i] = list[i] end
+  return out
+end
+
+-- Content of the level-up note for a level: nil (not Forever / no plan data) or
+-- { kind = "level", level, title, variants = { { line, ... }, ... }, learnable = n, cost, short, talents = n|nil, trainer = zone|nil }.
+-- variants run from the fullest set of lines to the leanest (Begleiter.showNote takes the first that fits the parchment): first
+-- single spell names fall away (into "... and n more"), then the trainer line; title, cost and talent line stay.
+-- Spell and zone names are foreign text: Sanitize.display; numbers go through format("%d").
+function Trainer.levelSlipContent(level)
+  if not Trainer.active() then return nil end
+  local LP = L()
+  local view = LP.evaluate({ level = num(level) and floor(level) or nil, names = true })
+  if not view.available then return nil end
+  local lv = floor(num(view.level) or num(level) or 1)
+  local out = { kind = "level", level = lv, title = T("slipTitle", lv), learnable = view.todo.n }
+  local talents = setting("talentHint") and LP.unspentTalents() or nil
+  local talentLine
+  if talents and talents >= 1 then
+    out.talents = talents
+    talentLine = plural(talents, "slipTalent")
+  end
+  if view.todo.n < 1 then
+    local nx = view.next[1]
+    local lines = { nx and T("slipNext", floor(nx.level)) or T.slipNothing }
+    if talentLine then lines[#lines + 1] = talentLine end
+    out.variants = { lines }
+    return out
+  end
+  -- learnable now and offered by the trainer (sorted by level)
+  local names = {}
+  for _, r in ipairs(LP.rows(view, "now")) do
+    if r.state == "now" and r.offered then
+      local nm = shownText(r.name) or shownText(LP.TEXT("spellFallback", floor(r.id)))
+      local rk = shownText(r.rank)
+      if nm then names[#names + 1] = rk and T("slipSpell", nm, rk) or nm end
+    end
+  end
+  local n = view.todo.n
+  local cost = view.todo.cost
+  out.cost = cost
+  local costLine
+  if view.money and cost > view.money then
+    out.short = cost - view.money
+    costLine = T("slipCostShort", moneyText(cost), moneyText(out.short))
+  else
+    costLine = T("slipCost", moneyText(cost))
+  end
+  local near = LP.nearestTrainer(LP.player())
+  local zone = near and (shownText(near.zone) or shownText(near.name)) or nil
+  out.trainer = zone
+  local trainerLine = zone and T("slipTrainer", zone) or T.slipTrainerAny
+  out.variants = {}
+  for _, withTrainer in ipairs({ true, false }) do
+    for k = math.min(Trainer.SLIP_SPELLS, #names, n), 0, -1 do
+      local lines = copyList(names, k)
+      if k == 0 then
+        lines[1] = plural(n, "slipLearn")
+      elseif n > k then
+        lines[#lines + 1] = T("slipMore", n - k)
+      end
+      lines[#lines + 1] = costLine
+      if withTrainer then lines[#lines + 1] = trainerLine end
+      if talentLine then lines[#lines + 1] = talentLine end
+      out.variants[#out.variants + 1] = lines
+    end
+  end
+  return out
+end
+
+-- Shows the pending level-up note now, or waits: in combat (until PLAYER_REGEN_ENABLED, then evaluated afresh), behind an open
+-- welcome note (until it has left). Returns true if a note is shown or still waiting, false if nothing will come (the caller then
+-- shows the old talent toast).
+function Trainer.flushSlip(self)
+  self = self or Collector
+  local level = self.pendingSlip
+  if not level then return false end
+  local B = ns.Journal and ns.Journal.Begleiter
+  if not (B and type(B.showNote) == "function") then
+    self.pendingSlip = nil
+    return false
+  end
+  if inCombat() then return true end
+  local kind = type(B.slipKind) == "function" and B.slipKind() or nil
+  if kind and kind ~= "level" and type(B.afterSlip) == "function" and B.afterSlip(function() Trainer.flushSlip(self) end) then
+    return true
+  end
+  self.pendingSlip = nil
+  local content = Trainer.levelSlipContent(level)
+  if content and B.showNote(content) then
+    if content.talents then self.toldLevel = level end
+    return true
+  end
+  return false
+end
+
+-- PLAYER_LEVEL_UP: true if the note takes over (then no talent toast for this level)
+function Trainer.levelSlip(self, level)
+  self = self or Collector
+  if not (Trainer.active() and setting("levelSlip")) then return false end
+  local B = ns.Journal and ns.Journal.Begleiter
+  if not (B and type(B.showNote) == "function") then return false end
+  level = level or playerLevel()
+  if not level or not L().evaluate({ level = level, names = false }).available then return false end
+  self.pendingSlip = level -- several level-ups in a row: the newest state wins
+  return Trainer.flushSlip(self)
+end
+
+-- /chronik stufe: preview for the current level (also when the option is off)
+function Trainer.slashLevel()
+  local print_ = Core.print
+  if not Trainer.active() then
+    print_(T.retailOnly)
+    return false
+  end
+  local B = ns.Journal and ns.Journal.Begleiter
+  local content = Trainer.levelSlipContent(playerLevel())
+  if not (B and type(B.showNote) == "function" and content) then
+    print_(T.slipNoData)
+    return false
+  end
+  return B.showNote(content)
+end
+
 -- Events
 
 handlers.TRAINER_SHOW = function(self)
@@ -367,7 +526,7 @@ handlers.PLAYER_LEVEL_UP = function(self, level)
   lv = lv and floor(lv) or nil
   Core.after(self, Trainer.LEVEL_DELAY, function(s)
     Trainer.levelUp(lv)
-    Trainer.talentNotice(s, lv or playerLevel(), "level")
+    if not Trainer.levelSlip(s, lv or playerLevel()) then Trainer.talentNotice(s, lv or playerLevel(), "level") end
   end)
 end
 
@@ -377,6 +536,9 @@ end
 handlers.SPELLS_CHANGED = handlers.LEARNED_SPELL_IN_SKILL_LINE
 
 handlers.PLAYER_REGEN_ENABLED = function(self)
+  if self.pendingSlip and not Trainer.flushSlip(self) then
+    Trainer.talentNotice(self, playerLevel(), "level")
+  end
   local p = self.pendingTalent
   if not p then return end
   self.pendingTalent = nil

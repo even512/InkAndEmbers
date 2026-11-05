@@ -47,6 +47,7 @@ L.add("enUS", "Core", {
   helpNote = "/chronik note - show/hide the quick note field (Enter adds a note)",
   helpOpen = "/chronik open - open quests (\"Open\" tab under Quests)",
   helpOpenTest = "/chronik open test - turns on Retail test mode (\"test off\" ends it)",
+  helpLevelSlip = "/chronik level - preview the level-up note: what you can learn at the trainer (WoW Forever only)",
   helpTrain = "/chronik training - your class training plan (\"Training\" tab under Quests, WoW Forever only); \"training status\" shows the state",
   helpLanguage = "/chronik language - choose language: \"language auto\", \"language de\" or \"language en\" (takes effect after /reload)",
   helpReset = "/chronik reset - reset the size and position of the travel journal",
@@ -188,6 +189,20 @@ L.add("enUS", "col.Trainer", {
   unknown = "?",
   unknownArg = "Unknown option \"%s\". /chronik lehrplan opens the page, /chronik lehrplan status shows the state.",
   retailOnly = "The training plan exists in WoW Forever only (on Retail class spells come by themselves).",
+  slipTitle = "Level %d reached",
+  slipLearn_one = "%d new spell to learn",
+  slipLearn_other = "%d new spells to learn",
+  slipSpell = "%s (%s)",
+  slipMore = "… and %d more",
+  slipCost = "Cost: %s",
+  slipCostShort = "Cost: %s (%s short)",
+  slipTrainer = "Trainer: %s",
+  slipTrainerAny = "Trainer: in any capital city",
+  slipNext = "New spells from level %d",
+  slipNothing = "Nothing new to learn this time.",
+  slipTalent_one = "%d talent point is waiting for you",
+  slipTalent_other = "%d talent points are waiting for you",
+  slipNoData = "The level-up note is not available right now (training plan: /chronik training status).",
 })
 
 L.add("enUS", "col.Campfire", {

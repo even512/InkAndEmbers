@@ -107,6 +107,8 @@ local CHECK = {
   -- Lehrplan (WoW Forever): automatic to-do "Zum Lehrer" after a level-up, notice about free talent points, list filter
   trainerTodo = function(v) return type(v) == "boolean" end,
   talentHint = function(v) return type(v) == "boolean" end,
+  -- narrator note at a level-up (what can be learned; collectors/Trainer.lua levelSlip); missing = on
+  levelSlip = function(v) return type(v) == "boolean" end,
   trainFilter = function(v) return v == "now" or v == "next" or v == "learned" or v == "all" end,
   kampfHunted = function(v)
     return v == nil or v == "all" or (type(v) == "number" and v == v and v > 0 and v < 2147483648 and v == math.floor(v))
@@ -115,7 +117,7 @@ local CHECK = {
 local DEFAULT = { toast = true, toastSound = true, toastMedal = true, toastZone = true, welcome = true, narrator = "own", restReview = false, autoShots = true, welcomeAfter = 3600, welcomeSeen = true,
   welcomeQuests = true, welcomeRested = true, welcomePlan = true, bookSounds = true, worldMap = true,
   albumFilter = "all", openLocked = false, openGroup = false, openRepeat = false, openClass = true,
-  openCategory = false, trainerTodo = true, talentHint = true, trainFilter = "now" }
+  openCategory = false, trainerTodo = true, talentHint = true, levelSlip = true, trainFilter = "now" }
 
 -- Old saved games had two switches: "welcome" (greeting) and "welcomeSlip" (welcome-back note). Now there is one: on only if both
 -- were on (nil = default on). The old key is removed, so this runs once per saved game.

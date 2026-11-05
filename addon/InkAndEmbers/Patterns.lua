@@ -171,7 +171,9 @@ end
 --   <itemID>[.s<suffix>][.b<bonusID>...]  (suffix = suffixID ~= 0, at most 8 bonus IDs)
 -- returns itemID, bonus ('s-37.b1486' or nil), quality (0-7 from the link color, nil if unknown), name;
 -- nil if text has no item link. Format: item:itemID:enchant:gem1:gem2:gem3:gem4:suffixID:uniqueID:
--- linkLevel:specID:modifiersMask:itemContext:numBonusIDs:bonusID1:...
+-- linkLevel:specID:modifiersMask:itemContext:numBonusIDs:bonusID1:...:numModifiers:modType:modValue...:relics...:crafterGUID:extraEnchantID
+-- Everything after the bonus IDs (modifiers, crafter GUID 'Player-1234-0ABCDEF0') is ignored. The reader takes all data up to '|h' and
+-- reads only the numeric fields it needs (1 = itemID, 7 = suffix, 13/14+ = bonus IDs); text fields are skipped. The key never holds a GUID.
 local QUALITY_BY_COLOR = {
   ["9d9d9d"] = 0, ["ffffff"] = 1, ["1eff00"] = 2, ["0070dd"] = 3, ["a335ee"] = 4, ["ff8000"] = 5, ["e6cc80"] = 6, ["00ccff"] = 7,
 }
@@ -182,19 +184,25 @@ end
 
 function Patterns.itemLink(text)
   if isSecret(text) or type(text) ~= "string" then return nil end
-  local s, e, data = find(text, "|Hitem:([%-%d:]*)|h")
+  local s, e, data = find(text, "|Hitem:([^|]*)|h")
   if not s then return nil end
   local fields = {}
   for part in string.gmatch(data .. ":", "([^:]*):") do fields[#fields + 1] = part end
-  local id = tonumber(fields[1])
+  -- numeric field n, nil for empty or text fields (crafter GUID etc.)
+  local function numField(n)
+    local f = fields[n]
+    if f and match(f, "^%-?%d+$") and #f <= 11 then return tonumber(f) end
+    return nil
+  end
+  local id = numField(1)
   if not id or id <= 0 or id ~= id or id > 2147483647 then return nil end
   local parts = {}
-  local suffix = tonumber(fields[7])
+  local suffix = numField(7)
   if suffix and suffix ~= 0 and suffix > -2147483648 and suffix < 2147483648 then parts[#parts + 1] = "s" .. whole(suffix) end
-  local nb = tonumber(fields[13])
+  local nb = numField(13)
   if nb and nb > 0 then
     for i = 1, math.min(nb, 8) do
-      local b = tonumber(fields[13 + i])
+      local b = numField(13 + i)
       if b and b > 0 and b < 2147483648 then parts[#parts + 1] = "b" .. whole(b) end
     end
   end
