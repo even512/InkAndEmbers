@@ -96,6 +96,11 @@ L.add("enUS", "Core", {
   rqError = "Quest interfaces: error while reading (%s).",
   rqDetails = "Details in EveNChronicleDB.diag.retailQuests[%d] (in the file after /reload).",
   unknownCommand = "Unknown command \"%s\". /chronik help lists all commands.",
+  actionLine = "Blocked actions: %s (monitoring: %s)",
+  actionNone = "none",
+  actionSome = "%d (latest: %s, %s)",
+  actionWatchOn = "active",
+  actionWatchOff = "not registered",
 })
 
 L.add("enUS", "Guard", {

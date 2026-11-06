@@ -3,8 +3,10 @@
 --    type, level, cost) into snapshots.trainerSpells["<name> #<rank>"] and the trainer's place (player position at the visit) into
 --    snapshots.trainers[npcID] (read by Journal.Lehrplan: nearest trainer). The service names offered as "available" go to
 --    snapshots.state.trainerVisit (level, names): the Lehrplan then knows which entries this trainer really offered.
--- 2. To-do "Zum Lehrer": after a level-up with spells learnable now, one free to-do (Plans.upsertAuto "trainer"); it is updated
---    or completed (Plans.finishAuto) as soon as nothing learnable is left (spell learned, trainer closed). Setting trainerTodo.
+-- 2. To-do "Zum Lehrer": after a level-up (and at login, once per level: marker snapshots.state.trainerTodo) with spells learnable
+--    now, one free to-do (Plans.upsertAuto "trainer"); it is updated or completed (Plans.finishAuto) as soon as nothing learnable
+--    is left (spell learned, trainer closed). Login never adds a second one while an automatic or a Lehrplan place to-do is open.
+--    Setting trainerTodo.
 -- 3. Talent points: free points (Journal.Lehrplan.unspentTalents) -> one toast per level and session, never in combat (the
 --    toast queue waits). Setting talentHint.
 -- 3b. Announcement of the automatic to-do: a newly created "Zum Lehrer" to-do (not an update) queues one toast "Neues To Do /
@@ -318,7 +320,9 @@ function Collector:init()
   if not Trainer.active() then return end
   Core.after(self, Trainer.LOGIN_DELAY, function(s)
     Trainer.checkTodo()
+    Trainer.loginTodo()
     Trainer.talentNotice(s, playerLevel(), "login")
+    Trainer.flushTodoToast(s)
   end)
 end
 
@@ -373,6 +377,61 @@ function Trainer.todoText(n, cost)
   return T(key, n, moneyText(cost))
 end
 
+-- Marker snapshots.state.<key> (additive, no schema change): trainerTodo = { level } (level for which the to-do was created or found
+-- open: a to-do ticked off or deleted does not come back at the next login), trainerPlace = { id } (to-do made via "Als To Do" in the
+-- Lehrplan, see Trainer.markPlace)
+local function stateEntry(key)
+  local c = Store.char()
+  local st = c and type(c.snapshots) == "table" and type(c.snapshots.state) == "table" and c.snapshots.state[key] or nil
+  return type(st) == "table" and st or nil
+end
+
+local function todoMarkLevel()
+  local m = stateEntry("trainerTodo")
+  return m and num(m.level) or nil
+end
+
+local function markTodoLevel(level)
+  level = num(level)
+  if not level then return false end
+  return Store.putSnapshot("state", "trainerTodo", { level = floor(level) }, true)
+end
+
+-- Called by the Lehrplan page after "Als To Do": remembers the place to-do (id) so that a login does not add a second one
+function Trainer.markPlace(id)
+  id = num(id)
+  if not (id and Store.ready()) then return false end
+  return Store.putSnapshot("state", "trainerPlace", { id = floor(id) }, true)
+end
+
+-- Is a place to-do made via "Als To Do" in the Lehrplan still open? New entries: by the remembered id (state.trainerPlace). Older
+-- entries (made before the marker existed): an open place to-do with the exact spot (map, x, y) AND the name of a trainer known for
+-- this class. A free to-do typed by hand is never guessed.
+function Trainer.lehrplanTodoOpen()
+  local P = ns.Plans
+  if not (P and type(P.get) == "function" and type(P.list) == "function" and type(P.cleanText) == "function") then return false end
+  local m = stateEntry("trainerPlace")
+  local mid = m and num(m.id)
+  if mid then
+    local p = P.get(mid)
+    if p and p.kind == "place" and not p.done then return true end
+  end
+  local LP = L()
+  local trainers = LP and type(LP.trainers) == "function" and LP.trainers() or {}
+  if #trainers == 0 then return false end
+  for _, p in ipairs(P.list("open")) do
+    if p.kind == "place" and num(p.mapID) and num(p.x) and num(p.y) and type(p.text) == "string" then
+      for _, t in ipairs(trainers) do
+        if t.mapID == p.mapID and math.abs(t.x - p.x) < 0.0001 and math.abs(t.y - p.y) < 0.0001
+          and P.cleanText(t.name) == p.text then
+          return true
+        end
+      end
+    end
+  end
+  return false
+end
+
 -- level-up: create/update the to-do if something is learnable now; returns the to-do id or nil
 function Trainer.levelUp(level)
   if not (Trainer.active() and setting("trainerTodo") and ns.Plans) then return nil end
@@ -381,7 +440,33 @@ function Trainer.levelUp(level)
   if not view.available or view.todo.n < 1 then return nil end
   local id, how = ns.Plans.upsertAuto(Trainer.TAG, Trainer.todoText(view.todo.n, view.todo.cost))
   if id and how == "new" then Collector.pendingTodoToast = view.todo.n end -- announced by Trainer.flushTodoToast
+  if id then markTodoLevel(level or playerLevel()) end
   return id
+end
+
+-- login: creates the to-do "Zum Lehrer" once per level if spells are learnable now. Never a second one: an open automatic to-do
+-- (any level, only its text follows the count; checkTodo has done that) or an open Lehrplan place to-do counts as "there is one".
+-- Returns "new" | "open" | nil (nothing done)
+function Trainer.loginTodo()
+  local P = ns.Plans
+  if not (Trainer.active() and setting("trainerTodo") and P and Store.ready()) then return nil end
+  local level = playerLevel()
+  if not level then return nil end
+  local view = L().evaluate({ names = true })
+  if not view.available or view.todo.n < 1 then return nil end
+  if P.findAuto(Trainer.TAG) or Trainer.lehrplanTodoOpen() then
+    markTodoLevel(level)
+    return "open"
+  end
+  if todoMarkLevel() == level then return nil end
+  local id, how = P.upsertAuto(Trainer.TAG, Trainer.todoText(view.todo.n, view.todo.cost))
+  if not id then return nil end -- no marker: the next login tries again
+  markTodoLevel(level)
+  if how == "new" then
+    Collector.pendingTodoToast = view.todo.n
+    return "new"
+  end
+  return "open"
 end
 
 -- open to-do: completed when nothing learnable is left, else the text follows the count. Returns "done" | "open" | nil

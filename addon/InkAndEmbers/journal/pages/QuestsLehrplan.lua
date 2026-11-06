@@ -320,6 +320,8 @@ function View:AddTodo()
     self.todoText = T.todoFail
   else
     local id = P.add({ kind = "place", mapID = t.mapID, x = t.x, y = t.y, text = t.name })
+    -- remember it: the login to-do "Zum Lehrer" (collectors/Trainer.lua) must not add a second one while this is open
+    if id and ns.Trainer and type(ns.Trainer.markPlace) == "function" then ns.Trainer.markPlace(id) end
     self.todoText = id and T.todoDone or T.todoFail
   end
   W.setText(self.ui.todoMsg, self.todoText)

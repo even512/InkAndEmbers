@@ -430,10 +430,16 @@ local function validMap(v)
   return v
 end
 
+-- Stored trainer places come from Zone.here() as tenths of a permille (integers 0..9999, collectors/Trainer.lua); Plans and
+-- Plans.distance expect map fractions 0..1. Reads both: 0..1 is taken as is, 1 < v <= 10000 is divided by 10000, the scale of
+-- Zone.coord (value 1 stays a fraction). Anything else (secret, negative, too large) is dropped.
+local COORD_SCALE = 10000
+
 local function coord(v)
   v = num(v)
-  if not v or v < 0 or v > 1 then return nil end
-  return v
+  if not v or v < 0 or v > COORD_SCALE then return nil end
+  if v <= 1 then return v end
+  return v / COORD_SCALE
 end
 
 function Lehrplan.trainers(p)

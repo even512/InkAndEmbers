@@ -105,6 +105,11 @@ local T = ns.Locale.ns("Core", {
   rqError = "Quest-Schnittstellen: Fehler bei der Auswertung (%s).",
   rqDetails = "Details in EveNChronicleDB.diag.retailQuests[%d] (in der Datei nach /reload).",
   unknownCommand = "Unbekannter Befehl \"%s\". /chronik hilfe zeigt alle Befehle.",
+  actionLine = "Gesperrte Aktionen: %s (Überwachung: %s)",
+  actionNone = "keine",
+  actionSome = "%d (letzte: %s, %s)",
+  actionWatchOn = "aktiv",
+  actionWatchOff = "nicht registriert",
 })
 
 -- English command names -> the German ones the modules know (the German ones stay valid)
@@ -232,6 +237,28 @@ local function errText(err)
   return ns.Sanitize and ns.Sanitize.field(s) or s
 end
 
+-- Blocked-action log (ADDON_ACTION_BLOCKED/FORBIDDEN caused by InkAndEmbers*): pure measurement, memory only until
+-- syncDiag/runDiag copy it to diag.actionBlocked (language-neutral). Entries: { event, addon, func, stack, count, first, last },
+-- de-duplicated by event|addon|func, at most ACTION_MAX entries (the oldest falls out). Foreign add-ons only raise `others`.
+Core.ACTION_MAX = 20
+Core.ACTION_PREFIX = "InkAndEmbers"
+local actionLog = { entries = {}, byKey = {}, total = 0, others = 0, registered = false, dirty = false }
+Core.actionLog = actionLog
+
+local function writeActionDiag(d)
+  local out = {}
+  for i, en in ipairs(actionLog.entries) do
+    out[i] = { event = en.event, addon = en.addon, func = en.func, stack = en.stack, count = en.count, first = en.first, last = en.last }
+  end
+  d.actionBlocked = { registered = actionLog.registered, total = actionLog.total, others = actionLog.others, entries = out }
+  actionLog.dirty = false
+end
+
+-- total count, newest entry (or nil), count of foreign add-on messages, registration ok
+function Core.actionSummary()
+  return actionLog.total, actionLog.entries[#actionLog.entries], actionLog.others, actionLog.registered
+end
+
 -- Output and errors
 
 -- switch word (German or English) -> true (on), false (off) or nil (not a switch word); case-insensitive
@@ -315,6 +342,7 @@ function Core.syncDiag()
     d.core = { lastError = Core.lastCoreError, lastErrorAt = Core.lastCoreErrorAt, errors = Core.coreErrors }
   end
   if ns.Store and ns.Store.dropped and ns.Store.dropped > 0 then d.droppedLines = ns.Store.dropped end
+  if actionLog.dirty then writeActionDiag(d) end
 end
 
 -- Events
@@ -771,6 +799,74 @@ registerFrameEvent("PLAYER_LOGIN")
 registerFrameEvent("PLAYER_ENTERING_WORLD")
 registerFrameEvent("PLAYER_LOGOUT")
 
+-- Measurement of blocked actions (taint source). Registered here, early, so nothing is missed before Store.init; the data
+-- stays in memory (Core.actionLog) until syncDiag copies it. Observes only: no popup, no intervention, errors count as core errors.
+local function isSecret(v)
+  if type(issecretvalue) ~= "function" then return false end
+  local ok, r = pcall(issecretvalue, v)
+  return not ok or r == true
+end
+
+-- foreign text -> plain, one line, at most max bytes; secret or unusable -> "-"
+local function plainField(s, max)
+  if type(s) ~= "string" or isSecret(s) then return "-" end
+  local San = ns.Sanitize
+  if San then s = San.cut(San.field(s), max) else s = string.sub(string.gsub(s, "[%c|~]", " "), 1, max) end
+  if s == "" then return "-" end
+  return s
+end
+
+-- debugstack(2, 8, 0), line by line through Sanitize.field (it flattens line breaks and cuts at 250 bytes), joined, at most 600 bytes
+local function captureStack()
+  if type(debugstack) ~= "function" then return "-" end
+  local ok, raw = pcall(debugstack, 2, 8, 0)
+  if not ok then return "-" end
+  if isSecret(raw) then return "secret" end
+  if type(raw) ~= "string" then return "-" end
+  local parts = {}
+  for line in string.gmatch(raw, "[^\r\n]+") do
+    local p = plainField(line, 250)
+    if p ~= "-" then parts[#parts + 1] = p end
+  end
+  if #parts == 0 then return "-" end
+  local s = concat(parts, " > ")
+  local San = ns.Sanitize
+  return San and San.cut(s, 600) or string.sub(s, 1, 600)
+end
+
+local function onActionBlocked(event, addonName, addonFunc)
+  local plen = #Core.ACTION_PREFIX
+  if type(addonName) ~= "string" or isSecret(addonName) or string.sub(addonName, 1, plen) ~= Core.ACTION_PREFIX then
+    actionLog.others = actionLog.others + 1
+    actionLog.dirty = true
+    return
+  end
+  local addon = plainField(addonName, 60)
+  local func = plainField(addonFunc, 120)
+  local key = event .. "|" .. addon .. "|" .. func
+  local en = actionLog.byKey[key]
+  actionLog.total = actionLog.total + 1
+  actionLog.dirty = true
+  if en then
+    en.count = en.count + 1
+    en.last = time()
+    return
+  end
+  local at = time()
+  en = { event = event, addon = addon, func = func, stack = captureStack(), count = 1, first = at, last = at, key = key }
+  local list = actionLog.entries
+  if #list >= Core.ACTION_MAX then
+    local old = table.remove(list, 1)
+    actionLog.byKey[old.key] = nil
+  end
+  list[#list + 1] = en
+  actionLog.byKey[key] = en
+end
+
+local actionOk1 = Core.on("ADDON_ACTION_BLOCKED", onActionBlocked)
+local actionOk2 = Core.on("ADDON_ACTION_FORBIDDEN", onActionBlocked)
+actionLog.registered = actionOk1 and actionOk2 and true or false
+
 -- Slash /chronik
 
 local function shortList(list, max)
@@ -909,6 +1005,12 @@ function Core.runDiag()
   if #inactive > 0 then line = line .. T("inactive", shortList(inactive, 4)) end
   Core.print(line)
   printHandlerStates()
+  do -- blocked actions caused by this add-on (measurement), fresh copy to diag.actionBlocked
+    local total, last, _, watching = Core.actionSummary()
+    local state = total > 0 and last and T("actionSome", total, last.func, last.addon) or T.actionNone
+    Core.print(T("actionLine", state, watching and T.actionWatchOn or T.actionWatchOff))
+    if db and type(db.diag) == "table" then writeActionDiag(db.diag) end
+  end
   -- handwriting: fresh probe on the toolkit's invisible FontString, with a reason on fallback
   local diary = ns.Journal and ns.Journal.Widgets and ns.Journal.Widgets.Diary
   if diary and type(diary.handStatus) == "function" then

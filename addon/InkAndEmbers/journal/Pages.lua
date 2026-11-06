@@ -95,6 +95,7 @@ local CHECK = {
   autoShots = function(v) return type(v) == "boolean" end, -- automatic screenshots at special moments (collectors/Moments.lua)
   bookSounds = function(v) return type(v) == "boolean" end,
   worldMap = function(v) return type(v) == "boolean" end,
+  worldPins = function(v) return type(v) == "boolean" end, -- note and place to-do pins on the world map (own filter entry); missing = on
   albumFilter = function(v) return type(v) == "string" and Pages.ALBUM_FILTERS[v] == true end,
   openZone = function(v)
     return v == "all" or (type(v) == "number" and v == v and v > 0 and v < 2147483648 and v == math.floor(v))
@@ -117,7 +118,7 @@ local CHECK = {
   end,
 }
 local DEFAULT = { toast = true, toastSound = true, toastMedal = true, toastZone = true, welcome = true, narrator = "own", restReview = false, autoShots = true, welcomeAfter = 3600, welcomeSeen = true,
-  welcomeQuests = true, welcomeRested = true, welcomePlan = true, bookSounds = true, worldMap = true,
+  welcomeQuests = true, welcomeRested = true, welcomePlan = true, bookSounds = true, worldMap = true, worldPins = true,
   albumFilter = "all", openLocked = false, openGroup = false, openRepeat = false, openClass = true,
   openCategory = false, trainerTodo = true, talentHint = true, todoToast = true, levelSlip = true, trainFilter = "now" }
 

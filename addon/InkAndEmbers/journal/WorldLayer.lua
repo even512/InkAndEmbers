@@ -1,5 +1,6 @@
 -- World map layer: shows the journey on the Blizzard world map (WorldMapFrame): route (Line textures on ONE pin covering the
--- canvas), map markers, level-ups, note pins and, on zone maps, kill marks. Own data provider
+-- canvas), map markers, level-ups, note pins and, on zone maps, kill marks. Two switches (two entries in the map filter, two
+-- settings): "journey" (ui.worldMap: route, markers, level-ups, kill marks) and "places" (ui.worldPins: note and place to-do pins). Own data provider
 -- (MapCanvasDataProviderMixin) with pins from virtual XML templates (journal/WorldLayer.xml).
 -- Works with OpenMap, which switches the map via SetMapID: the provider recomputes on every OnMapChanged into the
 -- coordinates of the displayed map. No OpenMap internals are used.
@@ -40,11 +41,15 @@ WL.JUMP_MIN_YD, WL.JUMP_SPEED = 15, 110
 WL.MENU_TAG = "MENU_WORLD_MAP_TRACKING"
 
 WL.TEXT = ns.Locale.ns("WorldLayer", {
-  menu = "Reise (EveN Chronicle)",
+  menu = "Reise (Ink & Embers)",
+  menuPlaces = "Orte (Ink & Embers)",
   setting = "Reise auf der Weltkarte zeigen",
   buttonOn = "Reise auf der Weltkarte: an",
   buttonOff = "Reise auf der Weltkarte: aus",
   buttonHint = "Klick: Route und Marken des Reisejournals ein- oder ausblenden",
+  buttonPlacesOn = "Orte auf der Weltkarte: an",
+  buttonPlacesOff = "Orte auf der Weltkarte: aus",
+  buttonPlacesHint = "Klick: Notiz- und To-Do-Orte ein- oder ausblenden",
   combat = "Die Weltkarte öffnet die Chronik nicht im Kampf.",
   noMap = "Die Weltkarte ist gerade nicht verfügbar.",
   tipSource = "Reisejournal",
@@ -101,6 +106,26 @@ function WL.setEnabled(on)
   return ok
 end
 
+-- places: note pins and place to-do pins; own setting (missing in old saved games = on, whatever the journey switch says)
+function WL.placesEnabled()
+  local P = Journal.Pages
+  if not P or type(P.setting) ~= "function" then return true end
+  return P.setting("worldPins") ~= false
+end
+
+function WL.setPlacesEnabled(on)
+  local P = Journal.Pages
+  local ok = P and type(P.setSetting) == "function" and P.setSetting("worldPins", on and true or false) or false
+  WL.refresh()
+  if WL.buttonPlaces then pcall(WL.paintButton) end
+  return ok
+end
+
+-- anything to draw at all (journey or places)
+function WL.anyEnabled()
+  return WL.enabled() or WL.placesEnabled()
+end
+
 local function bookPlaying()
   local F = Journal.Frame
   local J = F and F.state
@@ -131,20 +156,30 @@ local function markerSize(kind)
   return (Theme and Theme.MARKER_SIZE and Theme.MARKER_SIZE[kind]) or 22
 end
 
+-- Frame.notePins also returns the open place to-dos as { id = "todo:<n>", hint, color } (ids of real notes are numbers)
+function WL.isTodoPin(n)
+  return type(n) == "table" and type(n.id) == "string" and n.id:sub(1, 5) == "todo:"
+end
+
 function WL.build(model, mapID, opts)
   opts = opts or {}
   local View = Journal.View
   if not View or type(View.worldScene) ~= "function" then return nil end
-  local scene = View.worldScene(model, mapID, { kills = opts.kills, routeOnly = opts.routeOnly, maxSegments = WL.SEG_MAX })
+  -- opts.journey / opts.places (default on; opts.notes = false also turns places off). Playback in the book (routeOnly) only
+  -- reduces the journey part to the route; without the journey switch it does not matter.
+  local journey = opts.journey ~= false
+  local places = opts.places ~= false and opts.notes ~= false
+  local routeOnly = journey and opts.routeOnly and true or false
+  local scene = View.worldScene(model, mapID, { kills = opts.kills, routeOnly = routeOnly or not journey, maxSegments = WL.SEG_MAX })
   if not scene then return nil end
-  local out = { kind = scene.kind, mapID = scene.mapID, segs = {}, pins = {}, tail = scene.route and scene.route.tail,
-    partial = scene.route and scene.route.partial and true or false }
+  local out = { kind = scene.kind, mapID = scene.mapID, segs = {}, pins = {}, tail = journey and scene.route and scene.route.tail or nil,
+    partial = journey and scene.route and scene.route.partial and true or false }
   if type(scene.project) == "function" then
     out.project = scene.project
     out.yards = View.sceneYards and View.sceneYards(scene.mapID) or nil
   end
   local segs = out.segs
-  for _, s in ipairs(scene.route and scene.route.segments or {}) do
+  for _, s in ipairs(journey and scene.route and scene.route.segments or {}) do
     if #segs >= WL.SEG_MAX then break end
     local x1, y1, x2, y2 = num(s.x1), num(s.y1), num(s.x2), num(s.y2)
     if x1 and y1 and x2 and y2 then
@@ -152,7 +187,7 @@ function WL.build(model, mapID, opts)
       if a then segs[#segs + 1] = { a, b, c, d, flight = s.kind == "flight" } end
     end
   end
-  if opts.routeOnly then return out end
+  if routeOnly then return out end
 
   local pins = out.pins
   local function add(p)
@@ -160,13 +195,13 @@ function WL.build(model, mapID, opts)
     pins[#pins + 1] = p
     return true
   end
-  for _, e in ipairs(scene.markers or {}) do
+  for _, e in ipairs(journey and scene.markers or {}) do
     local mk, x, y = e.marker, num(e.vx), num(e.vy)
     if type(mk) == "table" and x and y and inBox(x, y) then
       add({ kind = mk.kind, x = x, y = y, size = markerSize(mk.kind), tip = mk.tip, big = mk.big })
     end
   end
-  if opts.notes ~= false then
+  if places then
     local F = Journal.Frame
     local okN, notes = false, nil
     if F and type(F.notePins) == "function" then okN, notes = pcall(F.notePins, scene) end
@@ -175,17 +210,22 @@ function WL.build(model, mapID, opts)
       for _, n in ipairs(notes) do
         local x, y = num(n.vx), num(n.vy)
         if x and y and inBox(x, y) and type(n.title) == "string" then
-          add({ kind = "note", id = n.id, x = x, y = y, size = P.size, tip = { title = n.title, detail = WL.TEXT.noteTip } })
+          if WL.isTodoPin(n) then
+            -- place to-do (Vorhaben.mapPins): same pin art, tinted, hover only (no click target, nothing opens)
+            add({ kind = "todo", x = x, y = y, size = P.size, color = n.color, tip = { title = n.title, detail = n.hint } })
+          else
+            add({ kind = "note", id = n.id, x = x, y = y, size = P.size, tip = { title = n.title, detail = WL.TEXT.noteTip } })
+          end
         end
       end
     end
   end
-  for _, l in ipairs(scene.levelUps or {}) do
+  for _, l in ipairs(journey and scene.levelUps or {}) do
     local x, y = num(l.vx), num(l.vy)
     if x and y and inBox(x, y) then add({ kind = "levelup", x = x, y = y, size = WL.MINI_SIZE, tip = l.tip }) end
   end
   local Map = Journal.Map
-  local kills = scene.kills
+  local kills = journey and scene.kills or nil
   if kills and num(kills.n) and kills.n > 0 and Map and type(Map.bundleKills) == "function" then
     local ok, list = pcall(Map.bundleKills, kills, WL.KILL_CELL, WL.KILL_CELL, 1)
     if ok and type(list) == "table" then
@@ -249,12 +289,13 @@ function WL.paintPin(pin, p)
   icon:SetSize(size, size)
   shadow:SetSize(size, size)
   icon:ClearAllPoints()
-  if p.kind == "note" and Theme.TEX and Theme.TEX.notePin then
+  if (p.kind == "note" or p.kind == "todo") and Theme.TEX and Theme.TEX.notePin then
     local P = Theme.NOTE_PIN or { tipX = 0.1, tipY = 0.9 }
     icon:SetPoint("CENTER", pin, "CENTER", (0.5 - (P.tipX or 0.1)) * size, ((P.tipY or 0.9) - 0.5) * size)
     icon:SetTexture(Theme.TEX.notePin)
     icon:SetTexCoord(0, 1, 0, 1)
-    icon:SetVertexColor(1, 1, 1, 1)
+    local c = p.kind == "todo" and type(p.color) == "table" and p.color or nil
+    if c and num(c[1]) and num(c[2]) and num(c[3]) then icon:SetVertexColor(c[1], c[2], c[3], 1) else icon:SetVertexColor(1, 1, 1, 1) end
     shadow:Hide()
     return
   end
@@ -526,7 +567,7 @@ local function draw(provider, rebuild)
   removeAll(provider)
   WL.stats = { pins = 0, segs = 0 }
   WL.routePin = nil
-  if not map or not WL.enabled() then return end
+  if not map or not WL.anyEnabled() then return end
   if inCombat() then
     pending = true
     return
@@ -547,7 +588,7 @@ local function draw(provider, rebuild)
     local okK, v = pcall(View.peek, "showKills")
     if okK and v == false then kills = false end
   end
-  local ok, data = pcall(WL.build, model, mapID, { routeOnly = playing, kills = kills })
+  local ok, data = pcall(WL.build, model, mapID, { routeOnly = playing, kills = kills, journey = WL.enabled(), places = WL.placesEnabled() })
   if not ok then
     report(data)
     return
@@ -566,7 +607,7 @@ end
 -- Live tick: one ticker, only while the world map is open (see header)
 function WL.liveTick()
   local wmf, provider = worldMap(), WL.provider
-  if not (wmf and provider and wmf.IsShown and wmf:IsShown() and WL.enabled()) then
+  if not (wmf and provider and wmf.IsShown and wmf:IsShown() and WL.anyEnabled()) then
     WL.stopLive()
     return false
   end
@@ -622,11 +663,11 @@ local function newProvider()
     local ok, err = pcall(draw, self, fromOnShow and true or false)
     if not ok then report(err) end
     local wmf = worldMap()
-    if wmf and wmf.IsShown and wmf:IsShown() and WL.enabled() then WL.startLive() end
+    if wmf and wmf.IsShown and wmf:IsShown() and WL.anyEnabled() then WL.startLive() end
   end
   function P:OnShow()
     WL.nextKick = 0
-    if WL.enabled() then WL.startLive() end
+    if WL.anyEnabled() then WL.startLive() end
   end
   function P:OnHide()
     WL.stopLive()
@@ -677,12 +718,17 @@ end
 if Journal.Notes and type(Journal.Notes.onChange) == "function" then
   Journal.Notes.onChange(function() WL.refresh() end)
 end
+-- To-dos created, completed or deleted while the map is open: Plans.onChange is batched (Plans.CHANGE_DELAY), WL.refresh only
+-- redraws while the map is shown
+if ns.Plans and type(ns.Plans.onChange) == "function" then
+  ns.Plans.onChange(function() WL.refresh() end)
+end
 
 local readyQueued = false
 local function onModelReady()
   if readyQueued or not WL.provider then return end
   local wmf = worldMap()
-  if not (wmf and wmf:IsShown() and WL.enabled()) then return end
+  if not (wmf and wmf:IsShown() and WL.anyEnabled()) then return end
   readyQueued = true
   local function run()
     readyQueued = false
@@ -699,9 +745,38 @@ end
 
 function WL.paintButton()
   local b = WL.button
-  if not b then return end
-  b.icon:SetDesaturated(not WL.enabled())
-  b.icon:SetAlpha(WL.enabled() and 1 or 0.55)
+  if b then
+    b.icon:SetDesaturated(not WL.enabled())
+    b.icon:SetAlpha(WL.enabled() and 1 or 0.55)
+  end
+  local c = WL.buttonPlaces
+  if c then
+    c.icon:SetDesaturated(not WL.placesEnabled())
+    c.icon:SetAlpha(WL.placesEnabled() and 1 or 0.55)
+  end
+end
+
+-- Fallback without the Menu API: one small button per switch at the lower left edge of the map canvas (own child frames)
+local function makeButton(parent, x, texture, isOn, toggle, tipOn, tipOff, hint)
+  local ok, b = pcall(CreateFrame, "Button", nil, parent)
+  if not ok or not b then return nil end
+  b:SetSize(28, 28)
+  b:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", x, 8)
+  if b.SetFrameLevel and parent.GetFrameLevel then b:SetFrameLevel((parent:GetFrameLevel() or 0) + 20) end
+  local icon = b:CreateTexture(nil, "ARTWORK")
+  icon:SetAllPoints(b)
+  icon:SetTexture(texture)
+  b.icon = icon
+  b:SetScript("OnClick", function() toggle(not isOn()) end)
+  b:SetScript("OnEnter", function(self)
+    local W = Journal.Widgets
+    if W and W.tip then W.tip(self, { isOn() and tipOn or tipOff, hint }) end
+  end)
+  b:SetScript("OnLeave", function(self)
+    local W = Journal.Widgets
+    if W and W.hideTip then W.hideTip(self) end
+  end)
+  return b
 end
 
 function WL.installToggle(wmf)
@@ -712,6 +787,8 @@ function WL.installToggle(wmf)
       if type(root) ~= "table" or type(root.CreateCheckbox) ~= "function" then return end
       if type(root.CreateDivider) == "function" then root:CreateDivider() end
       root:CreateCheckbox(WL.TEXT.menu, function() return WL.enabled() end, function() WL.setEnabled(not WL.enabled()) end)
+      root:CreateCheckbox(WL.TEXT.menuPlaces, function() return WL.placesEnabled() end,
+        function() WL.setPlacesEnabled(not WL.placesEnabled()) end)
     end)
     if ok then
       WL.toggleKind = "menu"
@@ -719,27 +796,13 @@ function WL.installToggle(wmf)
     end
   end
   local parent = wmf.ScrollContainer or wmf
-  local ok, b = pcall(CreateFrame, "Button", nil, parent)
-  if not ok or not b then return nil end
-  b:SetSize(28, 28)
-  b:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", 8, 8)
-  if b.SetFrameLevel and parent.GetFrameLevel then b:SetFrameLevel((parent:GetFrameLevel() or 0) + 20) end
-  local icon = b:CreateTexture(nil, "ARTWORK")
-  icon:SetAllPoints(b)
-  icon:SetTexture("Interface\\AddOns\\InkAndEmbers\\Media\\MinimapIcon")
-  b.icon = icon
-  b:SetScript("OnClick", function()
-    WL.setEnabled(not WL.enabled())
-  end)
-  b:SetScript("OnEnter", function(self)
-    local W = Journal.Widgets
-    if W and W.tip then W.tip(self, { WL.enabled() and WL.TEXT.buttonOn or WL.TEXT.buttonOff, WL.TEXT.buttonHint }) end
-  end)
-  b:SetScript("OnLeave", function(self)
-    local W = Journal.Widgets
-    if W and W.hideTip then W.hideTip(self) end
-  end)
+  local Theme = Journal.Theme
+  local b = makeButton(parent, 8, "Interface\\AddOns\\InkAndEmbers\\Media\\MinimapIcon", WL.enabled, WL.setEnabled,
+    WL.TEXT.buttonOn, WL.TEXT.buttonOff, WL.TEXT.buttonHint)
+  if not b then return nil end
   WL.button = b
+  WL.buttonPlaces = makeButton(parent, 42, (Theme and Theme.TEX and Theme.TEX.notePin) or "Interface\\AddOns\\InkAndEmbers\\Media\\MinimapIcon",
+    WL.placesEnabled, WL.setPlacesEnabled, WL.TEXT.buttonPlacesOn, WL.TEXT.buttonPlacesOff, WL.TEXT.buttonPlacesHint)
   WL.paintButton()
   WL.toggleKind = "button"
   return "button"

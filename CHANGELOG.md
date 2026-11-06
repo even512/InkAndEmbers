@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.3
+
+### New
+- **To the trainer, at login (WoW Forever):** the automatic "To the trainer" to-do is now also created when you log in with spells waiting for you, not only when you level up. It appears once per level: if you tick it off or delete it, it stays gone until your next level-up.
+- **Diagnostics:** `/chronik diag` now lists blocked-action messages caused by Ink & Embers (what, which function, call path), to help track down interface taint. This only observes; nothing changes in how the add-on behaves.
+- **Place to-dos on the world map:** open place to-dos now show a pin on the world map, with their text as a tooltip.
+- **Own filter entry for the pins:** note and place to-do pins now have their own entry "Places (Ink & Embers)" in the world map filter, separate from "Journey (Ink & Embers)" (route, level-ups, fight marks). Each can be switched on or off on its own, also in the settings ("Show places on the world map", on by default); pins stay visible when the journey is switched off.
+
+### Changed
+- **To-do section at the quest tracker:** line heights, spacing, fonts, sizes, colors and the header now follow the tracker you use (Blizzard, Kaliel's or Questie) and keep up when you change the tracker's font options.
+
+### Fixes
+- **Trainers you have visited:** the Training tab and the level-up note now find the trainers you have visited again (the saved places were not read), and the "As to-do" button is back.
+
 ## 1.0.2
 
 ### New

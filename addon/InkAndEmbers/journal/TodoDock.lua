@@ -20,9 +20,10 @@ TT.Dock = Dock
 
 Dock.NAME = "EveNChronicleTodoDock"
 Dock.GAP = 4            -- vertical gap between tracker and section
+-- Defaults only: Dock.style(t) takes these from the tracker in use (Blizzard: header 26, line spacing 4; Questie: from its options)
 Dock.HEAD_H = 26        -- like Blizzard's module header
-Dock.INDENT = 20        -- text start of a line (the nub sits left of it)
-Dock.ROW_GAP = 3
+Dock.INDENT = 20        -- text start of a line (the nub sits left of it); measured from the dash width of the line font
+Dock.ROW_GAP = 4
 Dock.PAD_B = 4
 Dock.W = { min = 180, max = 480, fallback = 260 }
 Dock.POLL = 0.25        -- seconds between geometry checks while shown
@@ -120,6 +121,227 @@ local function trackerFont(fs, objName, size)
   end
   TT.setFont(fs, "text", size)
   return nil
+end
+
+-- Style: the look of the tracker in use, only read (foreign frames and tables are never written, all in pcall) --------------------
+
+Dock.FALLBACK_FILE = "Fonts\\FRIZQT__.TTF"
+Dock.INDENT_MIN = 17    -- room for the nub / check mark left of the text
+-- Questie's own colors live inside its line texts (QuestieLib: |cFFEEEEEE objectives, LineBuilder: |cFFC0C0C0 done)
+Dock.QUESTIE_COLOR = { Header = { 1, 0.82, 0, 1 }, Normal = { 0.933, 0.933, 0.933, 1 }, Highlight = { 1, 1, 1, 1 },
+  Complete = { 0.753, 0.753, 0.753, 1 } }
+
+local function readFont(obj)
+  if type(obj) ~= "table" or type(obj.GetFont) ~= "function" then return nil end
+  local ok, file, sz, flags = pcall(obj.GetFont, obj)
+  if not ok or isSecret(file) or type(file) ~= "string" or file == "" then return nil end
+  sz = num(sz)
+  if not sz or sz <= 0 then return nil end
+  if isSecret(flags) or type(flags) ~= "string" then flags = "" end
+  return file, sz, flags
+end
+
+local function rgbOf(c)
+  if type(c) == "table" and num(c.r) and num(c.g) and num(c.b) then return { c.r, c.g, c.b, 1 } end
+  return nil
+end
+
+local function readRegion(fs, method, n)
+  if type(fs) ~= "table" or type(fs[method]) ~= "function" then return nil end
+  local out = { pcall(fs[method], fs) }
+  if not out[1] then return nil end
+  local res = {}
+  for i = 1, n do
+    local v = num(out[i + 1])
+    if not v then return nil end
+    res[i] = v
+  end
+  return res
+end
+
+-- Color set of a tracker: the global color table of the source (same keys in Blizzard's and Kaliel's), gaps filled from Dock.COLOR
+local function palette(globalName, base)
+  local p = {}
+  local C = globalName and rawget(_G, globalName)
+  if type(C) == "table" then
+    p.Header, p.Normal, p.Complete = rgbOf(C.Header), rgbOf(C.Normal), rgbOf(C.Complete)
+    p.Highlight = rgbOf(C.NormalHighlight) or rgbOf(C.Highlight)
+  end
+  for _, k in ipairs({ "Header", "Normal", "Highlight", "Complete" }) do
+    if not p[k] then
+      local d = (base and base[k]) or Dock.COLOR[k]
+      p[k] = { d[1], d[2], d[3], d[4] or 1 }
+    end
+  end
+  return p
+end
+
+-- One font of the style: obj = Blizzard font object (the fallback), file/size/flags = the tracker's own font if it sets one per
+-- FontString (Kaliel's, Questie); size is the size read from the source (nil if unreadable)
+local function fontSpec(obj, file, size, flags, shadow)
+  return { obj = obj, file = file, size = size, flags = flags or "", shadow = shadow }
+end
+
+local function blizzardFonts()
+  local lf, ls, lfl = readFont(rawget(_G, "ObjectiveTrackerLineFont"))
+  local hf, hs, hfl = readFont(rawget(_G, "ObjectiveTrackerHeaderFont"))
+  local line = fontSpec("ObjectiveTrackerLineFont"); line.read = { lf, ls, lfl }
+  local head = fontSpec("ObjectiveTrackerHeaderFont"); head.read = { hf, hs, hfl }
+  line.size, head.size = ls, hs
+  return line, head
+end
+
+local function kalielStyle()
+  local hdr
+  for _, name in ipairs({ "KT_QuestObjectiveTracker", "KT_ObjectiveTrackerFrame" }) do
+    local f = rawget(_G, name)
+    local h = type(f) == "table" and f.Header
+    local text = type(h) == "table" and h.Text
+    if readFont(text) then hdr = text break end
+  end
+  if not hdr then return nil end
+  local file, hsize, flags = readFont(hdr)
+  local shadow
+  local sc, so = readRegion(hdr, "GetShadowColor", 4), readRegion(hdr, "GetShadowOffset", 2)
+  if sc then shadow = { sc, so } end
+  local s = { kind = "kaliel", lineGap = 4, headH = 26, band = true }
+  s.line = fontSpec("ObjectiveTrackerLineFont", file, math.max(8, hsize - 1), flags, shadow)
+  s.head = fontSpec("ObjectiveTrackerHeaderFont", file, hsize, flags, shadow)
+  s.pal = palette("KT_OBJECTIVE_TRACKER_COLOR")
+  local tc = readRegion(hdr, "GetTextColor", 3)
+  if tc then s.pal.Header = { tc[1], tc[2], tc[3], 1 } end
+  return s
+end
+
+local function questieStyle()
+  local Q = rawget(_G, "Questie")
+  local p = type(Q) == "table" and type(Q.db) == "table" and Q.db.profile
+  if type(p) ~= "table" then return nil end
+  local lsize, hsize = num(p.trackerFontSizeObjective), num(p.trackerFontSizeHeader)
+  if not lsize or lsize <= 0 or not hsize or hsize <= 0 then return nil end
+  local pad = num(p.trackerQuestPadding) or 4
+  local flags = type(p.trackerFontOutline) == "string" and not isSecret(p.trackerFontOutline) and p.trackerFontOutline or ""
+  local lsm
+  local LS = rawget(_G, "LibStub")
+  if type(LS) == "table" or type(LS) == "function" then
+    local ok, lib = pcall(LS, "LibSharedMedia-3.0", true)
+    if ok and type(lib) == "table" and type(lib.Fetch) == "function" then lsm = lib end
+  end
+  local function fetch(name)
+    if lsm and type(name) == "string" and not isSecret(name) then
+      local ok, path = pcall(lsm.Fetch, lsm, "font", name)
+      if ok and type(path) == "string" and path ~= "" and not isSecret(path) then return path end
+    end
+    return Dock.FALLBACK_FILE
+  end
+  local s = { kind = "questie", lineGap = pad + 2, headH = hsize + 5, band = false, minExtra = 1 }
+  s.line = fontSpec("ObjectiveTrackerLineFont", fetch(p.trackerFontObjective), lsize, flags)
+  s.head = fontSpec("ObjectiveTrackerHeaderFont", fetch(p.trackerFontHeader), hsize, flags)
+  s.pal = palette(nil, Dock.QUESTIE_COLOR)
+  return s
+end
+
+local function buildStyle(t)
+  local kind = t and t.kind
+  local s
+  if kind == "kaliel" then s = kalielStyle() elseif kind == "questie" then s = questieStyle() end
+  if not s then
+    -- Blizzard's font objects (also the fallback if a replacement tracker can't be read); without them the addon font
+    s = { kind = (kind == "kaliel" or kind == "questie") and "blizzard" or (kind or "none"), lineGap = 4, headH = 26, band = true }
+    s.line, s.head = blizzardFonts()
+    s.pal = palette(kind == "kaliel" and rawget(_G, "KT_OBJECTIVE_TRACKER_COLOR") and "KT_OBJECTIVE_TRACKER_COLOR" or "OBJECTIVE_TRACKER_COLOR")
+  end
+  return s
+end
+
+local function styleSig(s)
+  local parts = { s.kind, s.lineGap, s.headH }
+  for _, f in ipairs({ s.line, s.head }) do
+    local r = f.read or {}
+    parts[#parts + 1] = tostring(f.file or r[1]) .. "|" .. tostring(f.size) .. "|" .. tostring(f.flags ~= "" and f.flags or r[3])
+  end
+  local H = s.pal.Header
+  parts[#parts + 1] = string.format("%.2f,%.2f,%.2f", H[1], H[2], H[3])
+  return table.concat(parts, ";")
+end
+
+-- Look of the tracker in use: { kind, line, head (font specs), pal (colors), lineGap, headH, band, sig }. Never raises.
+function Dock.style(t)
+  local ok, s = pcall(buildStyle, t)
+  if not ok or type(s) ~= "table" then
+    s = { kind = "none", lineGap = Dock.ROW_GAP, headH = Dock.HEAD_H, band = true, line = fontSpec("ObjectiveTrackerLineFont"),
+      head = fontSpec("ObjectiveTrackerHeaderFont"), pal = palette(nil) }
+  end
+  s.sig = styleSig(s)
+  return s
+end
+
+-- Cheap check for the poll: only the raw values Dock.style would read, joined to a string (no tables kept, no LSM). The style
+-- object is rebuilt only when this string changes.
+local function rawPart(...)
+  local n = select("#", ...)
+  local parts = {}
+  for i = 1, n do
+    local v = select(i, ...)
+    parts[i] = isSecret(v) and "?" or tostring(v)
+  end
+  return table.concat(parts, "|")
+end
+
+local function buildRawSig(t)
+  local kind = t and t.kind
+  local out = { tostring(kind) }
+  for _, name in ipairs({ "ObjectiveTrackerLineFont", "ObjectiveTrackerHeaderFont" }) do
+    local o = rawget(_G, name)
+    if type(o) == "table" and type(o.GetFont) == "function" then out[#out + 1] = rawPart(select(2, pcall(o.GetFont, o))) end
+  end
+  if kind == "kaliel" then
+    for _, name in ipairs({ "KT_QuestObjectiveTracker", "KT_ObjectiveTrackerFrame" }) do
+      local f = rawget(_G, name)
+      local h = type(f) == "table" and f.Header
+      local text = type(h) == "table" and h.Text
+      if type(text) == "table" and type(text.GetFont) == "function" then
+        out[#out + 1] = rawPart(select(2, pcall(text.GetFont, text)))
+        if type(text.GetTextColor) == "function" then out[#out + 1] = rawPart(select(2, pcall(text.GetTextColor, text))) end
+        break
+      end
+    end
+  elseif kind == "questie" then
+    local Q = rawget(_G, "Questie")
+    local p = type(Q) == "table" and type(Q.db) == "table" and Q.db.profile
+    if type(p) == "table" then
+      out[#out + 1] = rawPart(p.trackerFontObjective, p.trackerFontHeader, p.trackerFontSizeObjective, p.trackerFontSizeHeader,
+        p.trackerQuestPadding, p.trackerFontOutline)
+    end
+  end
+  return table.concat(out, ";")
+end
+
+function Dock.rawSig(t)
+  local ok, s = pcall(buildRawSig, t)
+  return ok and s or "?"
+end
+
+local function pal(key)
+  local p = st.style and st.style.pal and st.style.pal[key]
+  if p then return p[1], p[2], p[3], p[4] or 1 end
+  return color(key)
+end
+
+-- Apply one font spec to a FontString: own file first, then the Blizzard font object, then the addon font. Returns what was used.
+local function applyFont(fs, f, fallbackSize)
+  if f.file and f.size then
+    local ok, res = pcall(fs.SetFont, fs, f.file, f.size, f.flags or "")
+    if ok and res ~= false then
+      if f.shadow then
+        local c, o = f.shadow[1], f.shadow[2]
+        if c and fs.SetShadowColor then pcall(fs.SetShadowColor, fs, c[1], c[2], c[3], c[4]) end
+        if o and fs.SetShadowOffset then pcall(fs.SetShadowOffset, fs, o[1], o[2]) end
+      end
+      return f.file
+    end
+  end
+  return trackerFont(fs, f.obj or "ObjectiveTrackerLineFont", fallbackSize)
 end
 
 -- Settings ------------------------------------------------------------------------------------------------------------------
@@ -274,11 +496,11 @@ end
 local function paintRow(row)
   local r = row.data
   if r and r.done then
-    row.text:SetTextColor(color("Complete"))
+    row.text:SetTextColor(pal("Complete"))
   elseif row.hover then
-    row.text:SetTextColor(color("Highlight"))
+    row.text:SetTextColor(pal("Highlight"))
   else
-    row.text:SetTextColor(color("Normal"))
+    row.text:SetTextColor(pal("Normal"))
   end
 end
 
@@ -350,7 +572,7 @@ function Dock.build()
   head.text:SetJustifyH("LEFT")
   head.text:SetWordWrap(false)
   head.text:SetPoint("LEFT", head, "LEFT", 7, 0)
-  head.font = trackerFont(head.text, "ObjectiveTrackerHeaderFont", 14)
+  head.font = applyFont(head.text, (st.style or Dock.style(st.target)).head, 14)
   head:SetScript("OnClick", function()
     if GameTooltip then GameTooltip:Hide() end
     safe(Dock.toggle)
@@ -384,6 +606,10 @@ function Dock.build()
   st.empty = TT.fontString(f)
   st.empty:SetJustifyH("LEFT")
   st.empty:SetWordWrap(true)
+  -- hidden probe: measures the dash of the line font (text indent), never drawn
+  st.probe = TT.fontString(f)
+  st.probe:SetText("-")
+  st.probe:Hide()
 
   f:SetScript("OnUpdate", function(_, dt)
     st.poll = st.poll + (num(dt) or 0)
@@ -445,57 +671,75 @@ function Dock.layout()
   local list = st.list or {}
   local open = 0
   for _, r in ipairs(list) do if not r.done then open = open + 1 end end
+  local S = st.style or Dock.style(st.target)
+  st.style = S
+  local headH, gap = S.headH or Dock.HEAD_H, S.lineGap or Dock.ROW_GAP
+  st.head:SetHeight(headH)
+  st.head.font = applyFont(st.head.text, S.head, 14)
+  st.head.bg:SetShown(S.band and st.head.atlas and true or false)
+  st.head.line:SetShown(not (S.band and st.head.atlas))
   st.head.text:SetText(closed and string.format(T.dockHeadCount, T.title, open) or T.title)
-  st.head.text:SetTextColor(color("Header"))
+  st.head.text:SetTextColor(pal("Header"))
   st.head.text:SetWidth(max(40, w - 30))
   local b = st.button
   if b.atlas then
     useAtlas(b.tex, closed and Dock.ATLAS.expand or Dock.ATLAS.collapse)
   else
     b.label:SetText(closed and "+" or "-")
-    b.label:SetTextColor(color("Header"))
+    b.label:SetTextColor(pal("Header"))
   end
-  local y = Dock.HEAD_H + 2
+  -- text indent = measured dash width of the line font (plus room for the nub), not a fixed number
+  local indent = Dock.INDENT
+  if st.probe then
+    applyFont(st.probe, S.line, 12)
+    local dw = num(st.probe:GetStringWidth())
+    if dw and dw > 0 then indent = max(Dock.INDENT_MIN, math.ceil(dw) + 12) end
+  end
+  st.indent = indent
+  local y = headH + 2
   local used, hasDist = 0, false
   local lineFont
+  local minH, lineH -- smallest row height by the source's rule; height of one line (nub centering)
   for i = 1, max(#st.rows, min(#list, TT.ROWS_MAX)) do
     local row, r = st.rows[i], list[i]
     if not row and r and i <= TT.ROWS_MAX then row = buildRow(i) end
     if row then
       if r and not closed and i <= TT.ROWS_MAX then
         row.data = r
-        lineFont = trackerFont(row.text, "ObjectiveTrackerLineFont", 12)
-        trackerFont(row.dash, "ObjectiveTrackerLineFont", 12)
-        local tw = max(40, w - Dock.INDENT - 4)
+        lineFont = applyFont(row.text, S.line, 12)
+        applyFont(row.dash, S.line, 12)
+        local tw = max(40, w - indent - 4)
         row.text:SetWidth(tw)
+        row.text:SetHeight(0)
         row.text:SetText(lineText(r))
         local _, size = row.text:GetFont()
         size = num(size) or 12
-        local lineH = math.ceil(size * 1.2)
+        minH = size + (S.kind == "questie" and 2 or 0)  -- Questie: (size + 1) + 1
+        lineH = math.ceil(size * 1.2)
         local th = num(row.text:GetStringHeight()) or lineH
-        if th <= 0 then th = lineH end
-        th = min(th, 2 * lineH)
+        if th < minH then th = minH end
+        if not row.text.SetMaxLines then th = min(th, 2 * lineH) end
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y)
-        row:SetSize(w, th + Dock.ROW_GAP)
+        row:SetSize(w, th + gap)
         row.text:ClearAllPoints()
-        row.text:SetPoint("TOPLEFT", row, "TOPLEFT", Dock.INDENT, 0)
+        row.text:SetPoint("TOPLEFT", row, "TOPLEFT", indent, 0)
         row.text:SetHeight(th)
         local doneMark = r.done and useAtlas(row.nub, Dock.ATLAS.check)
         if not r.done and row.nubAtlas then useAtlas(row.nub, Dock.ATLAS.nub) end
         local icon = doneMark or row.nubAtlas
         row.nub:ClearAllPoints()
         row.nub:SetSize(doneMark and 14 or 10, doneMark and 14 or 10)
-        row.nub:SetPoint("TOPRIGHT", row, "TOPLEFT", Dock.INDENT - 3, -floor((lineH - (doneMark and 14 or 10)) / 2))
+        row.nub:SetPoint("TOPRIGHT", row, "TOPLEFT", indent - 3, -floor((lineH - (doneMark and 14 or 10)) / 2))
         row.nub:SetShown(icon and true or false)
         row.dash:ClearAllPoints()
-        row.dash:SetPoint("TOPRIGHT", row, "TOPLEFT", Dock.INDENT - 5, 0)
+        row.dash:SetPoint("TOPRIGHT", row, "TOPLEFT", indent - 5, 0)
         row.dash:SetShown(not icon)
-        row.dash:SetTextColor(color(r.done and "Complete" or "Normal"))
+        row.dash:SetTextColor(pal(r.done and "Complete" or "Normal"))
         paintRow(row)
         row:Show()
         if r.dist and not r.done then hasDist = true end
-        y = y + th + Dock.ROW_GAP
+        y = y + th + gap
         used = i
       else
         row.data = nil
@@ -503,33 +747,40 @@ function Dock.layout()
       end
     end
   end
+  -- "more" / "empty" lines: height measured from the line font like the rows
+  local function measured(fs)
+    local _, size = fs:GetFont()
+    size = num(size) or 12
+    local mh = num(fs:GetStringHeight()) or 0
+    return max(mh, size + (S.kind == "questie" and 2 or 0))
+  end
   local rest = closed and 0 or (#list - used)
   if rest > 0 then
-    trackerFont(st.more, "ObjectiveTrackerLineFont", 12)
+    applyFont(st.more, S.line, 12)
     st.more:ClearAllPoints()
-    st.more:SetPoint("TOPLEFT", f, "TOPLEFT", Dock.INDENT, -y)
+    st.more:SetPoint("TOPLEFT", f, "TOPLEFT", indent, -y)
     st.more:SetText(string.format(T.more, rest))
-    st.more:SetTextColor(color("Complete"))
+    st.more:SetTextColor(pal("Complete"))
     st.more:Show()
-    y = y + 14
+    y = y + measured(st.more)
   else
     st.more:SetText("")
     st.more:Hide()
   end
   if #list == 0 and not closed then
-    trackerFont(st.empty, "ObjectiveTrackerLineFont", 12)
+    applyFont(st.empty, S.line, 12)
     st.empty:ClearAllPoints()
-    st.empty:SetPoint("TOPLEFT", f, "TOPLEFT", Dock.INDENT, -y)
-    st.empty:SetWidth(max(40, w - Dock.INDENT - 4))
+    st.empty:SetPoint("TOPLEFT", f, "TOPLEFT", indent, -y)
+    st.empty:SetWidth(max(40, w - indent - 4))
     st.empty:SetText(T.empty)
-    st.empty:SetTextColor(color("Complete"))
+    st.empty:SetTextColor(pal("Complete"))
     st.empty:Show()
-    y = y + 16
+    y = y + measured(st.empty)
   else
     st.empty:SetText("")
     st.empty:Hide()
   end
-  local h = closed and Dock.HEAD_H or (y + Dock.PAD_B)
+  local h = closed and headH or (y + Dock.PAD_B)
   f:SetHeight(floor(h + 0.5))
   st.used, st.rest, st.hasDist, st.lineFont, st.closed = used, rest, hasDist, lineFont, closed
 end
@@ -566,6 +817,14 @@ function Dock.update()
   local rect = Dock.trackerRect(t) or st.lastRect
   if Dock.width(rect) ~= Dock.width(st.rect) then changed = true end
   st.rect = rect
+  -- the tracker's font options changed (size, file, flags, header height, spacing): lay out again, read at the next poll
+  local raw = Dock.rawSig(t)
+  if raw ~= st.rawSig or not st.style then
+    st.rawSig = raw
+    local S = Dock.style(t)
+    if S.sig ~= (st.style and st.style.sig) then changed = true end
+    st.style = S
+  end
   if changed then Dock.layout() end
   Dock.place()
 end
@@ -581,6 +840,8 @@ function Dock.render(list)
   end
   Dock.syncCollapse(t)
   st.rect = Dock.trackerRect(t) or st.lastRect
+  st.rawSig = Dock.rawSig(t)
+  st.style = Dock.style(t)
   Dock.layout()
   st.placed = nil
   Dock.place()

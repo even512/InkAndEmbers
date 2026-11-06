@@ -10,3 +10,4 @@ art/
 
 # Von scripts/fetch-questiedb-release.mjs geladenes QuestieDB-Release (Daten-TOC, nur lokal)
 data-capture/
+tools/.feed-state.json
