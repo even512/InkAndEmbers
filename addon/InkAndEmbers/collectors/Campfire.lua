@@ -138,8 +138,10 @@ local floor, gsub, find, match, gmatch, sub, format = math.floor, string.gsub, s
 local Campfire = ns.Campfire or {}
 ns.Campfire = Campfire
 
-Campfire.SIT_SPELLS = { 1289723 }            -- sit aura on the player ('Welcoming Campfire', sitting in camp range)
-Campfire.PEOPLE_AURAS = { 1289723 }          -- on other players: only the sit aura makes someone 'at the fire' at once
+-- sit auras on the player, both named 'Welcoming Campfire': 1289723 at the fixed camp, 1229739 at a player-made campfire
+-- (the latter runs out after 30-60 s while sitting, is gone for a moment and comes back with 60 s: see AURA_GRACE)
+Campfire.SIT_SPELLS = { 1289723, 1229739 }
+Campfire.PEOPLE_AURAS = { 1289723, 1229739 } -- on other players: only a sit aura makes someone 'at the fire' at once
 Campfire.HINT_AURAS = { 1229741 }            -- 'Camp Benefits' lasts 1 h after standing up: hint only (restHint), never sure
 Campfire.NEARBY_SPELL = 1283391              -- 'Campfire Nearby': if it disappears during the session, the fire is gone
 Campfire.DWELL = 20          -- seconds in range after which someone is 'at the fire'
@@ -151,7 +153,11 @@ Campfire.GAP_UNIT = 6        -- seconds: the largest gap between two sightings t
 Campfire.MAX_TRACK = 20      -- people tracked per session
 Campfire.MAX_LF = 10         -- people per LF line (the field is also capped at Sanitize.FIELD_MAX; n counts all)
 Campfire.RANGE_INDEX = 4     -- CheckInteractDistance: 4 = follow (about 28 yd)
-Campfire.END_ON_AURA_LOSS = false
+-- seconds the sit aura may be gone while sitting before the round ends ('aura'). The refresh gap of 1229739 is short (the aura is
+-- back with 60 s right after); 60 s = one full aura cycle, so even a slow refresh never splits a round. Standing up is not
+-- waited for: sit key, /stand, jumping and movement end the round at once (hooks/events), this is only the safety net.
+Campfire.AURA_GRACE = 60
+Campfire.EDGE_QUIET = 5      -- seconds after standing up inside such a gap during which a returning aura starts no round
 Campfire.PLATES_CVAR = "nameplateShowFriends"
 Campfire.HISTORY_MAX = 2000  -- LF lines read for recognition (the newest are kept)
 Campfire.DEFAULTS = { showFriendPlates = true }
@@ -864,6 +870,10 @@ local function endSession(self, why)
   s.seconds = floor(s.endGT - s.startGT)
   s.why = why
   Campfire.diag.lastEnd = why
+  -- stood up while the sit aura was in its refresh gap: an aura edge arriving right after is not a new sit (the sit key still is)
+  if s.auraLostGT and (why == "stand" or why == "move" or why == "jump") and Collector then
+    Collector.noEdgeUntil = now() + Campfire.EDGE_QUIET
+  end
   if s.seconds >= (s.sim and Campfire.SIM_MIN_LF or Campfire.MIN_LF) then
     local list, n = lfPeople(s)
     local text = Campfire.encodePeople(list)
@@ -886,6 +896,15 @@ local function tick(self)
   if inCombat() then return endSession(self, "combat") end
   if isTrue(call(UnitOnTaxi, "player")) then return endSession(self, "taxi") end
   if now() - session.lastActGT >= Campfire.IDLE_MAX then return endSession(self, "idle") end
+  local lost = session.auraLostGT
+  if lost and now() - lost >= Campfire.AURA_GRACE then
+    -- last look before ending: the aura may be back without the throttled check having seen it yet
+    if sitAura() == true then
+      session.auraLostGT = nil
+    else
+      return endSession(self, "aura")
+    end
+  end
   scanAll()
   flushChanged()
 end
@@ -930,7 +949,7 @@ local function startSession(self, spellID, near, how)
   local t = now()
   session = { active = true, id = sessionN, startT = floor(time()), startGT = t, lastActGT = t, mapID = mapID, x = x, y = y,
     zone = zoneName(mapID), level = level and floor(level) or nil, src = spellID, said = 0, people = {},
-    nearSeen = near == true, sitSrc = how or "aura" }
+    nearSeen = near == true, sitSrc = how or "aura", auraSeen = spellID ~= nil }
   if sim.on then
     session.sim = true
     session.simFire = simFire()
@@ -983,10 +1002,18 @@ function Collector.check(self)
     local near = nearbyAura()
     if near == true then session.nearSeen = true end
     if session.nearSeen and near == false then return endSession(self, "nearby") end
-    if Campfire.END_ON_AURA_LOSS and sit == false then return endSession(self, "aura") end
+    -- sit aura gone: only a gap while the aura was seen in this round (not Retail/sim rounds) and only for AURA_GRACE seconds
+    if sit == true then
+      session.auraSeen = true
+      session.auraLostGT = nil
+    elseif sit == false and session.auraSeen and not session.sim then
+      session.auraLostGT = session.auraLostGT or now()
+      if now() - session.auraLostGT >= Campfire.AURA_GRACE then return endSession(self, "aura") end
+    end
     return
   end
-  if sit == true and (before == false or force) then startSession(self, id, nearbyAura()) end
+  local quiet = not force and self.noEdgeUntil and now() < self.noEdgeUntil
+  if sit == true and (before == false or force) and not quiet then startSession(self, id, nearbyAura()) end
 end
 
 local function schedule(self, delay)
@@ -1207,9 +1234,12 @@ function Campfire.slash(rest)
   if inCombat() then
     Core.print(T.combatNoRead)
   else
-    local sit = sitAura()
-    Core.print(T("sitAura", tostring(Campfire.SIT_SPELLS[1]),
-      yesNo(sit), Campfire.NEARBY_SPELL, yesNo(nearbyAura())))
+    local sit, foundID = sitAura()
+    local ids = {}
+    for _, id in ipairs(Campfire.SIT_SPELLS) do ids[#ids + 1] = tostring(id) end
+    local state = yesNo(sit)
+    if sit == true and foundID then state = state .. " (" .. tostring(foundID) .. ")" end
+    Core.print(T("sitAura", table.concat(ids, "/"), state, Campfire.NEARBY_SPELL, yesNo(nearbyAura())))
   end
   local cv = getCVar(Campfire.PLATES_CVAR)
   local auto = Campfire.settings().showFriendPlates

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.4
+
+### Fixes
+- **Campfire notes at player-made campfires (WoW Forever):** conversation notes now also appear at campfires built by players, not only at permanent camps. Players sitting there are recognized too, and a short gap in the campfire buff no longer ends the round.
+
 ## 1.0.3
 
 ### New
