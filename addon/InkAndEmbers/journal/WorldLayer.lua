@@ -170,7 +170,8 @@ function WL.build(model, mapID, opts)
   local journey = opts.journey ~= false
   local places = opts.places ~= false and opts.notes ~= false
   local routeOnly = journey and opts.routeOnly and true or false
-  local scene = View.worldScene(model, mapID, { kills = opts.kills, routeOnly = routeOnly or not journey, maxSegments = WL.SEG_MAX })
+  local scene = View.worldScene(model, mapID, { kills = opts.kills, routeOnly = routeOnly or not journey, maxSegments = WL.SEG_MAX,
+    allowEmpty = places })
   if not scene then return nil end
   local out = { kind = scene.kind, mapID = scene.mapID, segs = {}, pins = {}, tail = journey and scene.route and scene.route.tail or nil,
     partial = journey and scene.route and scene.route.partial and true or false }
@@ -564,14 +565,24 @@ end
 
 local function draw(provider, rebuild)
   local map = provider:GetMap()
+  if not map then return end
+  local on = WL.anyEnabled()
+  if on and inCombat() then
+    -- Combat: leave the drawn pins alone (no removing, no drawing) and catch up after PLAYER_REGEN_ENABLED. Only pins of another
+    -- map than the one now shown are taken away, they would sit in the wrong place.
+    pending = true
+    local shown = num(try(map, "GetMapID"))
+    if WL.stats and WL.stats.mapID and shown ~= WL.stats.mapID then
+      removeAll(provider)
+      WL.stats = { pins = 0, segs = 0 }
+      WL.routePin = nil
+    end
+    return
+  end
   removeAll(provider)
   WL.stats = { pins = 0, segs = 0 }
   WL.routePin = nil
-  if not map or not WL.anyEnabled() then return end
-  if inCombat() then
-    pending = true
-    return
-  end
+  if not on then return end
   pending = false
   WL.lastDraw = gt()
   -- an empty or partial result is retried by the live tick (WL.retry); a complete draw clears the flag below
@@ -581,7 +592,13 @@ local function draw(provider, rebuild)
   local View = Journal.View
   local model = View and View.worldModel and View.worldModel(rebuild)
   WL.drawnModel = model
-  if not model or model.empty then return end
+  -- no model or an empty one (new character): no journey, but places (notes, place to-dos) still show. Nothing is missing
+  -- then, so no retry every few seconds; the live tick redraws when a new model arrives (drawnModel changes).
+  if type(model) ~= "table" then
+    WL.retry = false
+    return
+  end
+  if model.empty then WL.retry = false end
   local playing = bookPlaying()
   local kills = true
   if View and type(View.peek) == "function" then
@@ -601,7 +618,7 @@ local function draw(provider, rebuild)
   WL.stats = { pins = #data.pins, segs = #data.segs, mapID = mapID, kind = data.kind }
   -- keep retrying while the route is only partial (map data missing) or the canvas was not laid out yet
   local pin = WL.routePin
-  WL.retry = data.partial or (#data.segs > 0 and not (pin and pin.laid)) or false
+  WL.retry = not model.empty and (data.partial or (#data.segs > 0 and not (pin and pin.laid))) or false
 end
 
 -- Live tick: one ticker, only while the world map is open (see header)

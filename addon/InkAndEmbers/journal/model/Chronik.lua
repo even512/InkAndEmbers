@@ -580,7 +580,7 @@ Chronik.SEALS = {
     watch = { { code = "KI", test = fieldIs("cls", "elite", "rareelite") } } },
   { id = "rare_hunter", family = "combat", steps = M.rare_hunter, art = "first_rare",
     unit = unit("rare_hunter"), watch = { { code = "KI", test = fieldIs("cls", "rare", "rareelite") } } },
-  { id = "close_win", family = "combat", steps = M.close_win, art = "close_win",
+  { id = "close_win", family = "combat", steps = M.close_win, art = "close_win", needsHealth = true,
     unit = unit("close_win"), watch = { { code = "KF", test = fieldIs("close", "1") } } },
   { id = "duel", family = "combat", steps = M.duel, art = "duel", unit = unit("duel"),
     watch = { { code = "DU", test = fieldIs("result", "win") } } },
@@ -591,7 +591,7 @@ Chronik.SEALS = {
     unit = standing, value = standing, watch = { { code = "MO", test = fieldIs("kind", "reputation"), value = fieldNum("detail") } } },
   { id = "books", family = "lore", steps = M.books, art = "first_book", unit = unit("books"),
     watch = { { code = "BK", test = function(F) return (tonumber(F("page")) or 0) >= 2 end } } },
-  { id = "profession", family = "lore", steps = M.profession, art = "profession",
+  { id = "profession", family = "lore", steps = M.profession, art = "profession", retailHidden = true,
     unit = function(n) return TEXT("u_profession", plain(n)) end, watch = { { code = "SK", value = fieldNum("rank") }, { code = "MO", test = fieldIs("kind", "profession"), value = fieldNum("detail") } } },
   -- treasure
   { id = "fortune", family = "treasure", steps = M.fortune, art = "fortune",
@@ -1429,6 +1429,31 @@ local function savedMedals(char)
   return g, n
 end
 
+-- Medals that cannot be reached on this client are hidden as long as nothing of them was earned (earned tiers stay visible):
+--  needsHealth: "Um Haaresbreite" needs the health at combat end; hidden while the client does not let the add-on read it
+--    (Combat collector: ns.closeWinReadable() == false).
+--  retailHidden: the profession medal measures the Classic curve 150/225/300; Retail's skill lines top out far lower
+--    (per expansion), so the medal would be unreachable there. Retail = MapSpace.retailClient(); Forever unchanged.
+-- The entry stays in the list (consumers index it by position) with hidden = true; it counts in neither total nor family
+-- counts nor steps.
+local function sealLocked(seal)
+  if seal.needsHealth then
+    local fn = ns.closeWinReadable
+    if type(fn) == "function" then
+      local ok, readable = pcall(fn)
+      if ok and readable == false then return true end
+    end
+  end
+  if seal.retailHidden then
+    local ms = Journal.MapSpace
+    if ms and type(ms.retailClient) == "function" then
+      local ok, retail = pcall(ms.retailClient)
+      if ok and retail == true then return true end
+    end
+  end
+  return false
+end
+
 -- full list: { broken, total, steps, stepsTotal, list, families = { { id, label, broken, total, steps, stepsTotal } }
 -- }. Same inputs -> the same table (cached).
 local function buildSeals(index)
@@ -1443,9 +1468,12 @@ local function buildSeals(index)
       sig[#sig + 1] = live[seal.id]
     end
   end
+  for _, seal in ipairs(Chronik.SEALS) do
+    if seal.needsHealth or seal.retailHidden then sig[#sig + 1] = sealLocked(seal) and "L" or "R" end
+  end
   sig = table.concat(sig, ":")
   if base.result and base.sig == sig then return base.result end
-  local out, broken, steps, stepsTotal = {}, 0, 0, 0
+  local out, broken, steps, stepsTotal, hiddenN = {}, 0, 0, 0, 0
   local fam = {}
   for _, f in ipairs(Chronik.FAMILIES) do fam[f.id] = { id = f.id, label = f.label, broken = 0, total = 0, steps = 0, stepsTotal = 0 } end
   for i, seal in ipairs(Chronik.SEALS) do
@@ -1458,17 +1486,23 @@ local function buildSeals(index)
     local e = sealEntry(seal, C, v, earned, saved)
     out[i] = e
     local f = fam[seal.family]
-    if e.broken then broken = broken + 1 end
-    steps, stepsTotal = steps + e.count, stepsTotal + e.max
-    if f then
-      f.total, f.steps, f.stepsTotal = f.total + 1, f.steps + e.count, f.stepsTotal + e.max
-      if e.broken then f.broken = f.broken + 1 end
+    if e.count == 0 and sealLocked(seal) then
+      e.hidden = true
+      hiddenN = hiddenN + 1
+    else
+      if e.broken then broken = broken + 1 end
+      steps, stepsTotal = steps + e.count, stepsTotal + e.max
+      if f then
+        f.total, f.steps, f.stepsTotal = f.total + 1, f.steps + e.count, f.stepsTotal + e.max
+        if e.broken then f.broken = f.broken + 1 end
+      end
     end
   end
+  local total = #Chronik.SEALS - hiddenN
   local families = {}
   for _, f in ipairs(Chronik.FAMILIES) do families[#families + 1] = fam[f.id] end
-  local res = { broken = broken, total = #Chronik.SEALS, steps = steps, stepsTotal = stepsTotal, list = out, families = families }
-  res.countText = TEXT("sealCount", int(broken), int(#Chronik.SEALS), int(steps), int(stepsTotal))
+  local res = { broken = broken, total = total, steps = steps, stepsTotal = stepsTotal, list = out, families = families }
+  res.countText = TEXT("sealCount", int(broken), int(total), int(steps), int(stepsTotal))
   local tip, colors = { TEXT.sealTipTitle, res.countText }, { [2] = Chronik.TIP_COLOR.label }
   for _, f in ipairs(families) do
     tip[#tip + 1] = TEXT("familyCount", f.label, int(f.broken), int(f.total), int(f.steps), int(f.stepsTotal))

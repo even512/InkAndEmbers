@@ -474,7 +474,7 @@ H.MO = function(J, t) push(J.mo, { t = t, kind = F[1], value = F[2], detail = F[
 H.SZ = function(J, t) push(J.sz, { t = t, map = nz(F[1]), name = F[2] }) end
 H.ZN = function(J, t)
   local m = nz(F[1])
-  if m and not J.zn[m] then J.zn[m] = { type = nz(F[2]), zone = nz(F[3]), cont = nz(F[4]) } end
+  if m and not J.zn[m] then J.zn[m] = { type = nz(F[2]), zone = nz(F[3]), cont = nz(F[4]), t = t } end
 end
 H.EX = function(J, t) push(J.ex, t) end
 H.TB = function(J, t) push(J.tb, t) end
@@ -985,11 +985,24 @@ local function aggregate(J, chapters)
   for _, s in ipairs(J.shots) do local a = at(s.t) a.shots = a.shots + 1 end
   for _, h in ipairs(J.hb) do push(at(h.t).hb, h) end
   for _, h in ipairs(J.hs) do local a = at(h.t) a.hs = a.hs + 1 end
+  -- Moment count = the album's count (model/Momente.lua buildAlbum): every MO line except the starting continent, plus every
+  -- zone arrival (ZN of map type 3) except the very first one (the starting zone).
+  local skipContinent = true
   for _, m in ipairs(J.mo) do
     local a = at(m.t)
-    a.moN = a.moN + 1
+    if m.kind == "continent" and skipContinent then
+      skipContinent = false
+    else
+      a.moN = a.moN + 1
+    end
     if not a.mo[m.kind] then a.mo[m.kind] = m end
   end
+  local arrivals = {}
+  for _, info in pairs(J.zn) do
+    if info.type == 3 and info.t then arrivals[#arrivals + 1] = info.t end
+  end
+  table.sort(arrivals)
+  for i = 2, #arrivals do local a = at(arrivals[i]) a.moN = a.moN + 1 end
   for _, f in ipairs(J.tf) do push(at(f.t).tf, f) end
   for _, l in ipairs(J.tl) do
     local a = at(l.t)
@@ -1613,10 +1626,6 @@ local function build(db, guid, char, snap, opts)
 
   local model = { _J = J, _routes = {}, _notes = {}, _kills = {}, _killsN = 0 }
   model.chapters = {}
-  local firstStay, seenZone = {}, {}
-  for i, c in ipairs(chapters) do
-    if c.zoneID and not seenZone[c.zoneID] then seenZone[c.zoneID], firstStay[i] = true, true end
-  end
   for i, c in ipairs(chapters) do
     -- Detours (buildChapters): { zoneID, name } in order, plus the card line "Abstecher: X, Y"
     local detours, names = {}, {}
@@ -1637,7 +1646,7 @@ local function build(db, guid, char, snap, opts)
       subtitle = c.label, zoneID = c.zoneID, zoneName = c.zoneName and disp(c.zoneName) or nil,
       continentID = c.continentID, levelFrom = c.levelFrom, levelTo = c.levelTo, t0 = c.t0, t1 = c.t1, p0 = c.p0, p1 = c.p1,
       stats = { played = c.played, playedText = Model.formatPlayed(c.played), quests = c.agg.quests, kills = c.agg.kills,
-        deaths = #c.agg.deaths, shots = c.agg.shots, moments = c.agg.moN + (firstStay[i] and 1 or 0) },
+        deaths = #c.agg.deaths, shots = c.agg.shots, moments = c.agg.moN },
       story = story(J, c, chapters[i + 1]),
     }
   end

@@ -183,14 +183,74 @@ local Progress = {
   requires = { "UnitLevel" },
   events = {
     "PLAYER_ENTERING_WORLD", "PLAYER_LEVEL_UP", "PLAYER_XP_UPDATE", "CHAT_MSG_COMBAT_XP_GAIN", "CHAT_MSG_SYSTEM",
-    "UI_INFO_MESSAGE", "TIME_PLAYED_MSG", "QUEST_TURNED_IN", "PLAYER_LOGOUT", "GAME_RULES_CHANGED",
+    "UI_INFO_MESSAGE", "TIME_PLAYED_MSG", "QUEST_TURNED_IN", "PLAYER_LOGOUT", "GAME_RULES_CHANGED", "PLAYER_UPDATE_RESTING",
   },
 }
 local handlers = {}
 
 local settle
 
+-- Rested XP from the pool (GetXPExhaustion). WoW Forever delivers the XP messages without a usable rested part (467 of 467 XP
+-- lines had none), but the pool shrinks by the bonus with every gain. So the bonus of a gain = pool before - pool after.
+-- GetXPExhaustion returns nil for an empty pool (= 0); a secret or missing value is "unknown" (nil here): no bonus is derived.
+local REST_TTL = 2.0 -- seconds: a drop seen at PLAYER_XP_UPDATE waits this long for the booking of its gain
+
+local function readRest()
+  if type(GetXPExhaustion) ~= "function" then return nil end
+  local ok, v = pcall(GetXPExhaustion)
+  if not ok or isSecret(v) then return nil end
+  if v == nil then return 0 end
+  return num(v)
+end
+
+-- baseline of the pool together with the level/maximum it was read at: the pool is rescaled at a level change, so a drop is only
+-- derived within one level.
+local function setRest(self, ex)
+  self.rest = ex
+  self.restLevel, self.restMax = playerLevel(), num(call(UnitXPMax, "player"))
+end
+
+local function levelChanged(self)
+  if (self.levelsPending or 0) > 0 then return true end
+  local lvl, max = playerLevel(), num(call(UnitXPMax, "player"))
+  return (self.restLevel ~= nil and lvl ~= nil and lvl ~= self.restLevel) or (self.restMax ~= nil and max ~= nil and max ~= self.restMax)
+end
+
+-- bonus (whole XP) of the gain that is being booked now; nil if there is no reliable drop. First choice: the drop that a not yet
+-- consumed difference of this amount already carries (PLAYER_XP_UPDATE came first); else the live pool against the baseline
+-- (the pool already sank, the event follows later). Consumes what it returns.
+local function takeRestDrop(self, amt)
+  local drop
+  for _, d in ipairs(self.diffs) do
+    if d.drop and d.left == amt then
+      drop, d.drop = d.drop, nil
+      break
+    end
+  end
+  if not drop then
+    local ex = readRest()
+    local base = self.rest
+    if ex and base and ex < base and not levelChanged(self) then drop = base - ex end
+    setRest(self, ex)
+  end
+  drop = drop and floor(drop) or nil
+  if not drop or drop <= 0 or (amt and drop > amt) then return nil end
+  return drop
+end
+
+-- Should a message without a rested part wait for PLAYER_XP_UPDATE (at most WINDOW)? Only if a drop can still come: the pool is
+-- readable and not empty, has not sunk yet, and no difference of this amount carries a drop already.
+local function shouldWait(self, m)
+  for _, d in ipairs(self.diffs) do
+    if d.left == m.amt then return false end -- the difference is already here: writeXp takes its drop (or none)
+  end
+  local ex, base = readRest(), self.rest
+  return ex ~= nil and base ~= nil and base > 0 and ex >= base and not levelChanged(self)
+end
+
 local function writeXp(self, m)
+  m.written = true
+  if m.rested == nil then m.rested = takeRestDrop(self, m.amt) end
   local mapID = Zone.here()
   Store.append("XP", m.src, m.amt, m.rested, m.group, m.target, m.questID, playerLevel(), mapID, m.via)
   Core.emit("FC_XP", m.src, m.amt, m.target, m.via) -- Combat assigns kill XP to the kill
@@ -266,6 +326,8 @@ local function pair(self)
       end
     end
     if hit then
+      local m = msgs[hit].m
+      if d.drop and m and not m.written and m.rested == nil then m.rested = d.drop end
       table.remove(msgs, hit)
       table.remove(diffs, i)
     else
@@ -274,6 +336,8 @@ local function pair(self)
   end
   while msgs[1] and diffs[1] do
     local m, d = msgs[1], diffs[1]
+    if d.drop and m.m and not m.m.written and m.m.rested == nil then m.m.rested = d.drop end
+    d.drop = nil
     local c = min(m.left, d.left)
     m.left, d.left = m.left - c, d.left - c
     if m.left <= 0 then table.remove(msgs, 1) end
@@ -284,9 +348,10 @@ end
 local function schedule(self)
   if self.timerOn then return end
   local first
-  local p, d = self.pending[1], self.diffs[1]
+  local p, d, w = self.pending[1], self.diffs[1], self.restWait[1]
   if p then first = p.at end
   if d and (not first or d.at < first) then first = d.at end
+  if w and (not first or w.at < first) then first = w.at end
   if not first then return end
   self.timerOn = true
   local delay = max(0.05, first + WINDOW - GetTime() + 0.05)
@@ -302,6 +367,11 @@ end
 settle = function(self, force)
   pair(self)
   local t = GetTime()
+  -- messages that waited for PLAYER_XP_UPDATE (rested part): due or logout/reload = booked now, in arrival order
+  local w = self.restWait
+  while w[1] and (force or t - w[1].at >= WINDOW) do
+    writeXp(self, table.remove(w, 1).m)
+  end
   local p = self.pending
   local i = 1
   while i <= #p do
@@ -316,7 +386,7 @@ settle = function(self, force)
   local d = self.diffs
   while d[1] and (force or t - d[1].at >= WINDOW) do
     local x = table.remove(d, 1)
-    writeAmbiguous(self, { amt = x.left, via = "diff" })
+    writeAmbiguous(self, { amt = x.left, via = "diff", rested = x.drop })
     self.booked[#self.booked + 1] = { amt = x.left, at = t } -- booked as difference only: a late message does not count again
   end
   local booked = self.booked
@@ -365,13 +435,19 @@ local function addMessage(self, m)
       local _, questID = takeQuestHint(self, m.amt, m.rested)
       m.questID = questID
     end
-    writeXp(self, m)
+    if m.rested == nil and shouldWait(self, m) then
+      -- Forever: the message carries no rested part and the pool has not sunk yet. PLAYER_XP_UPDATE may still follow: wait for
+      -- it (at most WINDOW, flushed by settle), then book at once. Line order stays the arrival order.
+      self.restWait[#self.restWait + 1] = { m = m, at = t }
+    else
+      writeXp(self, m)
+    end
   end
   settle(self, false)
 end
 
-local function addDiff(self, amt)
-  self.diffs[#self.diffs + 1] = { amt = amt, left = amt, at = GetTime() }
+local function addDiff(self, amt, drop)
+  self.diffs[#self.diffs + 1] = { amt = amt, left = amt, at = GetTime(), drop = drop }
   settle(self, false)
 end
 
@@ -471,15 +547,18 @@ end
 
 function Progress:init()
   self.msgs, self.diffs, self.pending, self.recent, self.hints, self.booked = {}, {}, {}, {}, {}, {}
+  self.restWait = {} -- messages waiting for PLAYER_XP_UPDATE to learn their rested part { m, at }
   self.playedQueue = {}
   self.levelsPending = 0
   self.xp, self.xpMax, self.xpLevel = readXp()
+  setRest(self, readRest())
   self.rules = refreshInfo() -- baseline for GG (and info.* also after a reload, which writes no L line)
 end
 
 handlers.PLAYER_ENTERING_WORLD = function(self, _, isReloadingUi)
   if self.entered then return end
   self.entered = true
+  setRest(self, readRest())
   local reason = isReloadingUi == true and "reload" or "login"
   logRested(self, reason)
   requestPlayed(self, reason)
@@ -500,9 +579,17 @@ handlers.PLAYER_LEVEL_UP = function(self, level)
   Core.after(self, 2, function(s) requestPlayed(s, "levelup") end)
 end
 
+-- resting at an inn / in a city grows the pool without any XP event: keep the baseline current
+handlers.PLAYER_UPDATE_RESTING = function(self)
+  setRest(self, readRest())
+end
+
 handlers.PLAYER_XP_UPDATE = function(self, unit)
   if type(unit) == "string" and unit ~= "player" then return end
+  local ex = readRest()
+  local prevRest = self.rest
   local xp, xpMax, level = readXp()
+  setRest(self, ex)
   if not xp or not xpMax then return end
   local oldXp, oldMax, oldLevel = self.xp, self.xpMax, self.xpLevel
   local pending = self.levelsPending
@@ -523,7 +610,28 @@ handlers.PLAYER_XP_UPDATE = function(self, unit)
   else
     diff = xp - oldXp
   end
-  if diff > 0 then addDiff(self, floor(diff)) end
+  if diff > 0 then
+    diff = floor(diff)
+    -- pool drop of this gain (not across a level change: the pool is rescaled there)
+    local drop
+    if ex and prevRest and ex < prevRest and not (xpMax ~= oldMax or jump >= 1) then
+      drop = floor(prevRest - ex)
+      if drop <= 0 or drop > diff then drop = nil end
+    end
+    -- a message already waiting for exactly this gain gets the drop now and is booked at once (earlier waiting ones before it)
+    local w = self.restWait
+    for k = 1, #w do
+      if w[k].m.amt == diff then
+        for _ = 1, k - 1 do writeXp(self, table.remove(w, 1).m) end
+        local x = table.remove(w, 1)
+        x.m.rested = drop
+        writeXp(self, x.m)
+        drop = nil
+        break
+      end
+    end
+    addDiff(self, diff, drop) -- otherwise the difference carries the drop for its message (or booking as difference)
+  end
 end
 
 handlers.CHAT_MSG_COMBAT_XP_GAIN = function(self, text)

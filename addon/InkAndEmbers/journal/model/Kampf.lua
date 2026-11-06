@@ -16,7 +16,6 @@ local floor, huge, min, max, sqrt, ceil = math.floor, math.huge, math.min, math.
 local format, find = string.format, string.find
 
 Kampf.TALLY_MAX = 100      -- max strokes in the tally (one line object per stroke in game)
-Kampf.HUNTED_MAX = 24      -- bestiary entries (paged)
 Kampf.ZONE_MAX = 64        -- zones in the area dropdown
 Kampf.HEAT_MAX = 256       -- blobs per map
 Kampf.POINT_MAX = 400      -- exact kill points per map (as Index.POINT_MAX)
@@ -351,48 +350,58 @@ local function topMap(map)
   return best
 end
 
--- mapID = nil: all zones (count = all kills of the kind); otherwise only kinds with kills in this zone (count = kills there)
+-- one bestiary card, built on demand (a page shows a handful; keeping a card table per species would cost memory)
+local function huntedItem(st, mapID, here, id, e, n)
+  local name = npcName(st, id) or (TEXT.unknownFoe .. " #" .. format("%.0f", id))
+  local m = topMap(e.map)
+  local zone = m and zoneName(st, m) or nil
+  local levels = levelsText(I().npcLevels(e))
+  local stamp = STAMP_WORD[e.stamp] and e.stamp or "unknown"
+  local parts = {}
+  if mapID then
+    parts[#parts + 1] = STAMP_WORD[stamp]
+  elseif zone then
+    parts[#parts + 1] = zone
+  end
+  if levels then parts[#parts + 1] = levels end
+  local tip = { name, here and TEXT("huntedTipIn", STAMP_WORD[stamp], int(n), here) or TEXT("huntedTip", STAMP_WORD[stamp], int(n)) }
+  if mapID and n ~= e.n then tip[#tip + 1] = TEXT("huntedTotal", int(e.n)) end
+  if zone and not mapID then tip[#tip + 1] = TEXT("huntedMostly", zone) end
+  if levels then tip[#tip + 1] = levels end
+  if (e.group or 0) > 0 then tip[#tip + 1] = TEXT("huntedGroup", int(e.group)) end
+  return { id = id, name = name, zone = zone, levels = levels, meta = table.concat(parts, " · "), count = n,
+    countText = "× " .. int(n), stamp = stamp, rune = Kampf.RUNE[stamp], tip = tip }
+end
+
+-- mapID = nil: all zones (count = all kills of the kind); otherwise only kinds with kills in this zone (count = kills there).
+-- All kinds are listed (most killed first, elite and rare ones included); the card of position i is built by hunted.item(i), the
+-- view only keeps two number arrays (ids, kills) so that thousands of kinds stay cheap.
 local function buildHunted(st, kills, mapID)
   local arr = {}
-  for id, e in pairs(type(kills.npc) == "table" and kills.npc or {}) do
+  local npcs = type(kills.npc) == "table" and kills.npc or {}
+  for id, e in pairs(npcs) do
     if type(id) == "number" and type(e) == "table" and type(e.n) == "number" then
       local n = e.n
       if mapID then n = type(e.map) == "table" and tonumber(e.map[mapID]) or 0 end
-      if finite(n) and n > 0 then arr[#arr + 1] = { id = id, e = e, n = n } end
+      if finite(n) and n > 0 then arr[#arr + 1] = { id = id, n = n } end
     end
   end
   table.sort(arr, function(a, b)
     if a.n ~= b.n then return a.n > b.n end
     return a.id < b.id
   end)
-  local list = {}
+  local ids, counts = {}, {}
+  for i = 1, #arr do ids[i], counts[i] = arr[i].id, arr[i].n end
   local here = mapID and zoneName(st, mapID) or nil
-  for i = 1, min(#arr, Kampf.HUNTED_MAX) do
-    local id, e, n = arr[i].id, arr[i].e, arr[i].n
-    local name = npcName(st, id) or (TEXT.unknownFoe .. " #" .. format("%.0f", id))
-    local m = topMap(e.map)
-    local zone = m and zoneName(st, m) or nil
-    local levels = levelsText(I().npcLevels(e))
-    local stamp = STAMP_WORD[e.stamp] and e.stamp or "unknown"
-    local parts = {}
-    if mapID then
-      parts[#parts + 1] = STAMP_WORD[stamp]
-    elseif zone then
-      parts[#parts + 1] = zone
-    end
-    if levels then parts[#parts + 1] = levels end
-    local tip = { name, here and TEXT("huntedTipIn", STAMP_WORD[stamp], int(n), here) or TEXT("huntedTip", STAMP_WORD[stamp], int(n)) }
-    if mapID and n ~= e.n then tip[#tip + 1] = TEXT("huntedTotal", int(e.n)) end
-    if zone and not mapID then tip[#tip + 1] = TEXT("huntedMostly", zone) end
-    if levels then tip[#tip + 1] = levels end
-    if (e.group or 0) > 0 then tip[#tip + 1] = TEXT("huntedGroup", int(e.group)) end
-    list[i] = { id = id, name = name, zone = zone, levels = levels, meta = table.concat(parts, " · "), count = n,
-      countText = "× " .. int(n), stamp = stamp, rune = Kampf.RUNE[stamp], tip = tip }
+  local function item(i)
+    local id = ids[i]
+    if not id then return nil end
+    return huntedItem(st, mapID, here, id, npcs[id], counts[i])
   end
-  local species = mapID and #arr or (tonumber(kills.npcCount) or 0)
+  local species = mapID and #ids or (tonumber(kills.npcCount) or 0)
   local word = plural(species, "species")
-  return { zone = mapID, zoneName = here, list = list, species = species, unknown = tonumber(kills.npcUnknown) or 0,
-    speciesText = TEXT(mapID and "speciesZone" or "speciesAll", word) }
+  return { zone = mapID, zoneName = here, count = #ids, item = item, ids = ids, counts = counts, species = species,
+    unknown = tonumber(kills.npcUnknown) or 0, speciesText = TEXT(mapID and "speciesZone" or "speciesAll", word) }
 end
 
 local function killName(st, rec)
@@ -959,7 +968,7 @@ function Kampf.evaluate(index, opts)
   local view = {
     head = headOf(index, opts.live), summary = zv and zv.summary or st.summary, tally = zv and zv.tally or st.tally,
     stamps = zv and zv.stamps or st.stamps, hunted = st.hunted, rare = st.rare, zones = st.zones,
-    graves = zv and zv.graves or st.graves, close = zv and zv.close or st.close, allTotal = st.summary.total, zoneKey = hz,
+    graves = zv and zv.graves or st.graves, close = zv and zv.close or st.close, closeTotal = st.close and st.close.total or 0, allTotal = st.summary.total, zoneKey = hz,
   }
   if zv then view.rare = zv.rare end -- no "zv and zv.rare or ...": an area without a rare enemy shows none
   -- hunting grounds: the chosen zone of the page, else opts.zone, else the zone with the most kills

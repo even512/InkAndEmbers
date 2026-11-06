@@ -818,7 +818,7 @@ end
 -- page the bestiary (CARDS per sheet)
 function Page.ShiftCards(self, delta)
   if not self.view then return end
-  local n = #self.view.hunted.list
+  local n = self.view.hunted.count
   local pages = max(1, math.ceil(n / CARDS))
   local p = (self.cardPage or 1) + (tonumber(delta) or 0)
   if p < 1 or p > pages then return end
@@ -827,12 +827,12 @@ function Page.ShiftCards(self, delta)
 end
 
 function Page.DrawCards(self)
-  local u, list = self.L, self.view.hunted.list
-  local pages = max(1, math.ceil(#list / CARDS))
+  local u, hunted = self.L, self.view.hunted
+  local pages = max(1, math.ceil(hunted.count / CARDS))
   local p = min(max(self.cardPage or 1, 1), pages)
   self.cardPage = p
   for i, c in ipairs(u.cards) do
-    local item = list[(p - 1) * CARDS + i]
+    local item = hunted.item((p - 1) * CARDS + i)
     c.item = item
     if item then
       c:Show()
@@ -847,7 +847,7 @@ function Page.DrawCards(self)
     end
   end
   local empty = ""
-  if #list == 0 then empty = self.view.hunted.zone and (Kampf.TEXT.noHuntedZone .. " " .. Page.TEXT.hintHuntedZone)
+  if hunted.count == 0 then empty = hunted.zone and (Kampf.TEXT.noHuntedZone .. " " .. Page.TEXT.hintHuntedZone)
       or (Kampf.TEXT.noHunted .. " " .. Page.TEXT.hintHunted) end
   set(u.cardsEmpty, empty)
   u.cardNav:SetEnabled(p > 1, p < pages)
@@ -1084,6 +1084,8 @@ local function buildRight(self, right)
     items = { { key = "graves", label = T.lowGraves, tip = { T.lowGraves, T.lowGravesTip } },
       { key = "close", label = T.lowClose, tip = { T.lowClose, T.lowCloseTip } } },
     onChange = guarded(function(key) Page.ShowLow(self, key) end) })
+  u.lowItemsAll = u.lowToggle.items
+  u.lowCloseShown = true
   u.lowToggle.frame:SetPoint("LEFT", right, "TOPLEFT", SR.x - 3, cy)
   u.deathBack = D.NewBack(right, T.backToGraves, guarded(function() Page.CloseDeath(self) end), { size = SZ.m })
   u.deathBack:SetPoint("LEFT", right, "TOPLEFT", SR.x - 3, cy)
@@ -1270,9 +1272,26 @@ end
 -- shows what self.low / self.detail say: list of deaths (default), close calls or the death report detail (only if
 -- there is a death;
 -- otherwise it falls back to the list, whose empty state shows "Noch nirgends gestorben.")
+-- close wins need a readable life value: where the client keeps it locked outside combat (Forever) there are none, so the tab
+-- "Haaresbreite" is hidden as long as there is no entry (existing entries stay visible). ns.closeWinReadable comes from the collector.
+local function closeTabWanted(self)
+  -- all zones together (view.closeTotal), not the zone-filtered list: the tab must not come and go with the zone choice
+  local v = self.view
+  local total = v and (v.closeTotal or (v.close and v.close.total))
+  if (tonumber(total) or 0) > 0 then return true end
+  local fn = ns.closeWinReadable
+  return not (type(fn) == "function" and fn() == false)
+end
+
 function Page.Apply(self)
   local u = self.R
   if not u then return end
+  local wanted = closeTabWanted(self)
+  if wanted ~= u.lowCloseShown then
+    u.lowCloseShown = wanted
+    u.lowToggle:SetItems(wanted and u.lowItemsAll or { u.lowItemsAll[1] })
+  end
+  if not wanted and self.low == "close" then self.low = "graves" end
   local detail = self.detail == true and self.low == "graves" and self.view ~= nil and self.view.death ~= nil
   self.detail = detail
   u.lowToggle:SetValue(self.low)

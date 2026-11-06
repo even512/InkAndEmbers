@@ -21,6 +21,7 @@ local TX = ns.Locale.ns("Options", {
   unavailable = "Das Einstellungsmenü ist in diesem Client nicht verfügbar. /chronik hilfe zeigt die Befehle.",
   failed = "Das Einstellungsmenü ließ sich nicht öffnen. Optionen -> AddOns -> Ink & Embers.",
   preview = "Probehören",
+  version = "Version %s",
   perChar = "Gilt für diesen Charakter.",
   gBook = "Buch",
   gJourney = "Reise und Karte",
@@ -153,7 +154,7 @@ local TX = ns.Locale.ns("Options", {
   firePlatesLabel = "Plaketten beim Hinsetzen einschalten",
   firePlatesTip = "Schaltet beim Hinsetzen die Namensplaketten freundlicher Spieler ein, damit die Chronik erkennt, wer mit am Feuer sitzt; beim Aufstehen kommt die alte Einstellung zurück.",
   shotsLabel = "Automatische Screenshots",
-  shotsTip = "Bei besonderen Momenten (Stufenaufstieg, seltene Gegner, Tod, neues Gebiet, Bosse) macht die Chronik selbst einen Screenshot. Abgeschaltet entstehen nur noch Eure eigenen.",
+  shotsTip = "Bei besonderen Momenten (Stufenaufstieg, Tod, neues Gebiet, Kills seltener Gegner, Elite-Kills und Bosse) macht die Chronik selbst einen Screenshot. Abgeschaltet entstehen nur noch Eure eigenen.",
   meterLabel = "Schadensanzeige automatisch einschalten",
   meterTip = "Schaltet die Schadensanzeige des Spiels ein, damit Kämpfe Schaden und Heilung festhalten (wie /chronik messer).",
   diagLabel = "Diagnose",
@@ -269,6 +270,9 @@ function Options.isHidden(entry)
 end
 
 Options.GROUPS = {
+  -- First row under the panel title: the installed version (ns.version: "v1.0.5" from a release, "1.0.5-dev+<commit>" locally).
+  -- Section header without rows, so it needs no extra widget and stays small.
+  { title = function() return TX("version", ns.version) end, items = {} },
   {
     title = "Sprache / Language",
     items = {

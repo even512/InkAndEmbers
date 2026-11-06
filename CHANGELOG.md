@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.5
+
+### Changes
+- **Version number in the add-on settings:** Options → AddOns → Ink & Embers shows the installed version as the first line.
+- **Rested XP is now recorded (WoW Forever):** the rested bonus of each XP gain is derived from the change of your rested pool, since the game's message did not carry it. Earlier entries stay as they are (they have no rested value).
+- **"By a Hair" medal and "Close calls" tab hidden when the game locks your health:** the medal and the "Close calls" tab need your health at the end of a fight. Where the game does not let the add-on read it, they are now hidden instead of showing up empty, and the medal count stays consistent.
+- **Bestiary lists all creatures:** no longer cut off at 24 species; elite kills are included.
+- **Retail:** world quests and bonus objectives no longer count as abandoned quests, the profession medal that cannot be reached in Retail is hidden, and Warband bank transfers no longer count as income or expense.
+
+### Fixes
+- **Training costs (WoW Forever):** the training plan now uses the updated costs from before the launch; spells that were added or removed are updated too.
+- **Companions:** the time you spent together is shown again (a duplicate text key hid it).
+- **Moment counts match:** the journey and the album now show the same number of moments.
+- **World map:** pins stay visible during combat and are redrawn when it ends; place pins also show for new characters without a journey yet, without constant retrying.
+- **Wording:** the diary no longer calls kills "fights", the quest history reads as a proper sentence, no more doubled full stops after durations, remaining German diagnostic texts and archived trainer to-dos are translated in English, and the screenshot option's tooltip mentions elite kills.
+
 ## 1.0.4
 
 ### Fixes

@@ -5,7 +5,9 @@
 //   (ohne Flag)  Ziel: <WOW_DIR>\_forever_\Interface\AddOns\<addon>, Interface-Zeile der kopierten TOCs wird auf 16001 gesetzt
 //   --retail     Ziel: <WOW_DIR>\_retail_\Interface\AddOns\<addon>, Interface-Zeile der kopierten TOCs wird auf 120105 gesetzt
 // In den Quell-TOCs steht fuer das Release "## Interface: 120105, 16001" und "## Version: @project-version@" (ersetzt der Packager);
-// lokal setzt dieses Skript je Spielversion einen einzelnen Interface-Wert und ersetzt @project-version@ durch <package.json-Version>-dev.
+// lokal setzt dieses Skript je Spielversion einen einzelnen Interface-Wert und ersetzt @project-version@ durch
+// <oberste Version aus CHANGELOG.md>-dev+<kurzer Git-Commit>, z. B. 1.0.5-dev+c3b29d6 (uncommittete Addon-Aenderungen: ...-dirty;
+// ohne git: 1.0.5-dev). Das Buch zeigt diesen Text unveraendert an.
 // Alte Ordner EveN_ForeverChronicle* (vor der Umbenennung) im Ziel werden mitentfernt (LEGACY_ADDONS), damit nicht zwei Kopien laufen.
 //   --dry-run    zeigt nur, was passieren wuerde; schreibt und loescht nichts
 // WOW_DIR kommt aus der Datei .env im Projektordner (siehe .env.example).
@@ -22,6 +24,7 @@
 // - Entfernt wird nur Ueberzaehliges im eigenen Addon-Ordner (Links per unlink, nie gefolgt), nie etwas ausserhalb.
 // - Das Ziel wird unmittelbar vor dem ersten Schreiben/Loeschen erneut geprueft (kein Link, echter Ordner).
 
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { lstat, mkdir, readdir, readFile, rmdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -62,7 +65,8 @@ Optionen:
   --help, -h  diese Hilfe
 
 Ohne --retail wird nach <WOW_DIR>\\_forever_ installiert (Interface ${FOREVER_INTERFACE}).
-In beiden Faellen wird @project-version@ in den TOCs durch <package.json-Version>-dev ersetzt.
+In beiden Faellen wird @project-version@ in den TOCs durch <CHANGELOG-Version>-dev+<Git-Commit> ersetzt
+(z. B. 1.0.5-dev+c3b29d6; bei uncommitteten Addon-Aenderungen mit Zusatz -dirty; ohne git: 1.0.5-dev).
 Zielordner: <WOW_DIR>\\<_forever_|_retail_>\\Interface\\AddOns\\${ADDON_NAME}
        und  <WOW_DIR>\\<_forever_|_retail_>\\Interface\\AddOns\\${DATA_ADDON_NAME} (Datenaddon, LoadOnDemand)
 
@@ -141,6 +145,42 @@ export function rewriteInterface(tocText, value = RETAIL_INTERFACE) {
 /** @project-version@ der TOC durch einen lokalen Wert ersetzen (der Packager macht das im Release selbst). */
 export function rewriteVersion(tocText, value) {
   return tocText.split(VERSION_PLACEHOLDER).join(value);
+}
+
+/** Oberste Versionsnummer aus dem CHANGELOG ("## 1.0.5 (unreleased)", "## v1.0.4"), sonst null */
+export function changelogVersion(text) {
+  const m = /^##[ \t]+v?(\d+\.\d+\.\d+)\b/m.exec(String(text ?? ""));
+  return m ? m[1] : null;
+}
+
+/**
+ * Lokaler Versionsstempel fuer die TOC: <Version>-dev[+<Commit>[-dirty]]. Version = oberste CHANGELOG-Version, sonst package.json.
+ * commit = kurzer Git-Hash oder null (ohne git); dirty = uncommittete Addon-Aenderungen. Nur Zeichen [A-Za-z0-9._+-],
+ * wie Core.readVersion sie annimmt.
+ */
+export function devVersionStamp({ changelog, packageVersion, commit, dirty } = {}) {
+  const base = changelogVersion(changelog) ?? (/^\d+\.\d+\.\d+$/.test(String(packageVersion ?? "")) ? packageVersion : "0.0.0");
+  const hash = /^[0-9a-f]{4,40}$/i.test(String(commit ?? "")) ? String(commit).toLowerCase() : null;
+  return `${base}-dev${hash ? `+${hash}${dirty ? "-dirty" : ""}` : ""}`;
+}
+
+/** Git-Stand des Projekts: { commit, dirty } oder null (kein git, kein Repo). dirty zaehlt nur spielrelevante Dateien unter addon/ (nicht .txt/.md). */
+export function gitState(root = ROOT, run = execFileSync) {
+  const git = (args) => run("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 10000 });
+  try {
+    const commit = String(git(["rev-parse", "--short=7", "HEAD"])).trim();
+    if (!/^[0-9a-f]{4,40}$/i.test(commit)) return null;
+    let dirty = false;
+    try {
+      const lines = String(git(["status", "--porcelain", "--", "addon"])).split(/\r?\n/).filter(Boolean);
+      dirty = lines.some((l) => !/\.(txt|md)$/i.test(l.trim()));
+    } catch {
+      dirty = false;
+    }
+    return { commit, dirty };
+  } catch {
+    return null;
+  }
 }
 
 /** Groessenlimit je Endung (.tga gross, .ogg klein, sonst 1 MB) */
@@ -373,7 +413,13 @@ export async function main(argv) {
     throw new Error(`Der Ordner Interface\\AddOns fehlt unter ${t.flavorDir} (oder ist ein Symlink). Stimmt WOW_DIR?`);
   }
 
-  const devVersion = `${JSON.parse(await readFile(path.join(ROOT, "package.json"), "utf8")).version}-dev`;
+  const git = gitState();
+  const devVersion = devVersionStamp({
+    changelog: await readFile(path.join(ROOT, "CHANGELOG.md"), "utf8").catch(() => ""),
+    packageVersion: JSON.parse(await readFile(path.join(ROOT, "package.json"), "utf8")).version,
+    commit: git?.commit,
+    dirty: git?.dirty,
+  });
   const iface = opts.retail ? RETAIL_INTERFACE : FOREVER_INTERFACE;
   // Quellen beider Addons vollstaendig pruefen und vorbereiten, bevor an einem Ziel irgendetwas angefasst wird.
   const jobs = [];

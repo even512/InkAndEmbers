@@ -211,7 +211,7 @@ Mates.__index = Mates
 Journal.CompanionsView = Mates
 
 Mates.TEXT = ns.Locale.ns("p.ChronikViews.Mates", {
-  levelRange = "Stufe %s bis %s", level = "Stufe %s", date = "{d}.{m}.{y}", together = "%s zusammen",
+  levelRange = "Stufe %s bis %s", level = "Stufe %s", date = "{d}.{m}.{y}", togetherFmt = "%s zusammen",
   quests_one = "%s Quest", quests_other = "%s Quests", kills_one = "%s Kill", kills_other = "%s Kills",
   firstMet = "zuerst getroffen in %s am %s", pageOf = "Seite %s von %s", persons_one = "%s Person", persons_other = "%s Personen",
   classes = {
@@ -298,7 +298,7 @@ end
 
 -- line "8 min zusammen · 2 Quests · 14 Kills"; zero values are dropped
 function Mates.statsText(p)
-  local parts = { MT("together", duration(p.seconds)) }
+  local parts = { MT("togetherFmt", duration(p.seconds)) }
   local q, k = tonumber(p.quests) or 0, tonumber(p.kills) or 0
   if q > 0 then parts[#parts + 1] = countText(MT, q, "quests") end
   if k > 0 then parts[#parts + 1] = countText(MT, k, "kills") end

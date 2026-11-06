@@ -810,7 +810,10 @@ function View.worldScene(model, mapID, opts)
   opts = opts or {}
   local M, G = Model(), Geo()
   mapID = num(mapID)
-  if type(model) ~= "table" or model.empty or not mapID or not M or not G then return nil end
+  if type(model) ~= "table" or not mapID or not M or not G then return nil end
+  -- an empty model (new character, nothing travelled yet) still has places (notes, place to-dos): only with opts.allowEmpty
+  local empty = model.empty and true or false
+  if empty and not opts.allowEmpty then return nil end
   local kind = View.worldKind(mapID)
   local project, key, affine, view
   if kind == "world" then
@@ -822,13 +825,17 @@ function View.worldScene(model, mapID, opts)
   else
     project, key, affine = G.zoneProjector(mapID)
     local z
-    if type(M.zoneOf) == "function" then
+    if type(M.zoneOf) == "function" and not empty then
       local ok, v = pcall(M.zoneOf, model, mapID)
       z = ok and num(v) or nil
     end
     view = { zone = z or mapID }
   end
   local scene = { kind = kind, mapID = mapID, view = view, key = key, project = project, markers = {}, levelUps = {} }
+  if empty then
+    scene.route = { segments = {}, count = 0 }
+    return scene
+  end
   local okR, route = pcall(M.route, model, view, View.routeOpts(project, key, opts.maxSegments or 1000, affine))
   scene.route = (okR and type(route) == "table") and route or { segments = {}, count = 0 }
   if opts.routeOnly then return scene end

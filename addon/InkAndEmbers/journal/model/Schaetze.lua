@@ -115,7 +115,8 @@ Schaetze.OUT_ROWS = {
   { key = "other", keys = { "other" }, color = "faint", rest = true },
 }
 lazyLabel(Schaetze.OUT_ROWS, "out_", "key")
-local SKIP_SOURCES = { gap = true, start = true }
+-- warband: transfers to/from the Warband bank (Retail) are neither income nor expense (new lines carry no amount; older ones are skipped here)
+local SKIP_SOURCES = { gap = true, start = true, warband = true }
 -- display name of the purpose in margin notes
 local PURPOSE = { training = "training", repair = "repair", vendor_buy = "vendor_buy", taxi = "taxi", ah = "ah" }
 

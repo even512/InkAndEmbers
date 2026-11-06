@@ -423,9 +423,10 @@ Texts.add("motto", { area = AREA, id = "motto_scourge_1", w = 3, text = "Die Tot
 Texts.add("motto", { area = AREA, id = "motto_scourge_2", w = 3, text = "Kein Grab hält mich auf.",
   when = function(c) return c.raceFile == "Scourge" end })
 
-Texts.add("margin", { area = AREA, id = "margin_fast_level", text = "Stufe {=level} ging im Flug: {=duration}.",
+-- DE: the duration (Fmt.duration) already ends in "Min."/"Std.", so no sentence period follows it
+Texts.add("margin", { area = AREA, id = "margin_fast_level", text = "Stufe {=level} ging im Flug: {=duration}",
   when = function(c) return c.kind == "fastest" end })
-Texts.add("margin", { area = AREA, id = "margin_slow_level", text = "Auf Stufe {=level} blieb ich hängen: {=duration}.",
+Texts.add("margin", { area = AREA, id = "margin_slow_level", text = "Auf Stufe {=level} blieb ich hängen: {=duration}",
   when = function(c) return c.kind == "slowest" end })
 
 Texts.add("diary", { area = AREA, id = "diary_level", text = "Stufe {=level} erreicht.", when = function(c) return c.kind == "level" end })

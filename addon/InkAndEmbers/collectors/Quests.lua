@@ -226,6 +226,7 @@ function Quests:init()
   self.choiceItems = {} -- index -> itemID of the choice items of the open turn-in window
   self.turned = {}
   self.removed = {}     -- questID -> time of QUEST_REMOVED while the decision is pending
+  self.tasks = {}       -- questID -> { at }: task quests (world quests, bonus objectives) seen at QUEST_ACCEPTED
   self.awaiting = {}    -- questID -> { items = { [itemID] = true }, at, turnedAt, closedAt }: turn-ins with a choice, until the item is known
   self.completing = nil -- { questID, at } from QUEST_COMPLETE, kept until the choice item is assigned (or CHOICE_TTL)
   self.choice = nil
@@ -603,10 +604,22 @@ end
 
 -- Life story
 
+-- Task quest (Retail: world quest, bonus objective): it leaves the log when the area is left or the timer ends, which is
+-- no abandon. Only a readable true counts; missing API or secret = no task.
+local function isTaskQuest(questID)
+  local C = C_QuestLog
+  if type(C) ~= "table" or isSecret(C) then return false end
+  return readableBool(call(C.IsQuestTask, questID)) == true or readableBool(call(C.IsWorldQuest, questID)) == true
+end
+
 handlers.QUEST_ACCEPTED = function(self, a, b)
   local questID = num(b) or num(a) -- Retail: (questID); older clients: (index, questID)
   if not questID or questID <= 0 then return end
   questID = floor(questID)
+  if isTaskQuest(questID) then
+    self.tasks[questID] = { at = GetTime() }
+    trimCache(self.tasks)
+  end
   local gid, gname
   local g = self.givers[questID]
   if g and GetTime() - g.at < NPC_TTL then
@@ -694,6 +707,10 @@ handlers.QUEST_REMOVED = function(self, questID, wasReplay)
   closeObjectives(self, questID)
   if wasReplay == true then return end -- replay of a completed quest ends, no abandon
   if self.removed[questID] ~= nil then return end
+  -- task quest: not an abandon, nothing is decided or written (the flag may be gone from the API once the quest is removed)
+  local task = self.tasks[questID] ~= nil or isTaskQuest(questID)
+  self.tasks[questID] = nil
+  if task then return end
   self.removed[questID] = GetTime()
   Core.after(self, REMOVE_WINDOW, function(s) decideRemoval(s, questID) end)
 end

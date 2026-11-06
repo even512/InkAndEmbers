@@ -18,6 +18,10 @@ L.add("enUS", "Locale", {
 
 L.add("enUS", "Core", {
   prefix = "Chronicle:",
+  noteMissing = "missing: %s",
+  noteStartFailed = "start failed",
+  noteBlocked = "blocked (never registered): %s",
+  noteUnknownEvent = "unknown event: %s",
   handlerOff = "Collector \"%s\": the recording \"%s\" failed repeatedly and stays off until the next reload. Details: /chronik diag",
   handlersPaused = "Paused recordings: %s",
   handlersOff = "Recordings off until the reload: %s",
@@ -173,6 +177,15 @@ L.add("enUS", "col.Rest", {
   dateFmt = "%m/%d/%Y %H:%M",
   idPart = " ID %s",
   fireStatus = "Campfire: known IDs %s, last detected %s.",
+})
+
+-- collectors/Plans.lua (teacher to-do shown in the current language)
+L.add("enUS", "col.Plans", {
+  trainerOne = "To the trainer: %s new spell (%s)",
+  trainerOther = "To the trainer: %s new spells (%s)",
+  unitG = "g",
+  unitS = "s",
+  unitK = "c",
 })
 
 -- collectors/Trainer.lua

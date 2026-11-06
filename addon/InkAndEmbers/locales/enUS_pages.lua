@@ -25,7 +25,7 @@ L.add("enUS", "p.ChronikViews.Diary", {
   dayPair = "Days %s and %s of %s", dayOne = "Day 1 of 1",
 })
 L.add("enUS", "p.ChronikViews.Mates", {
-  levelRange = "Level %s to %s", level = "Level %s", date = "{m}/{d}/{y}", together = "%s together",
+  levelRange = "Level %s to %s", level = "Level %s", date = "{m}/{d}/{y}", togetherFmt = "%s together",
   quests_one = "%s quest", quests_other = "%s quests", kills_one = "%s kill", kills_other = "%s kills",
   firstMet = "first met in %s on %s", pageOf = "Page %s of %s", persons_one = "%s person", persons_other = "%s people",
   classes = {

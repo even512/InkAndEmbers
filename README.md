@@ -14,7 +14,7 @@ loot, gear changes, gold, professions, reputation, talents, groups, guild events
 The journal is a book with these pages:
 
 - Journey: a map with your route for every zone, a chapter bar, and a playback that replays the trip at three speeds.
-  A To Do sub-page keeps your own goals (a zone, a place, an enemy to kill, items to collect).
+  A To Do sub-page keeps your own goals (a place, an enemy to kill, items to collect).
 - Chronicle: a diary, a list of travel companions, medals and seals.
 - Quests: what you accepted and turned in, the quest texts and quest chains. The Open tab lists quests you can still
   pick up, with the quest givers on the map. In WoW Forever the data comes from QuestieDB: read live from the QuestieDB add-on

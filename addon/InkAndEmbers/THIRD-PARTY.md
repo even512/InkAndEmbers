@@ -15,7 +15,7 @@ Alles Folgende behaelt seine eigene Lizenz; die Lizenztexte liegen bei den Datei
 | Caveat Bold | `Media\Fonts\` | SIL Open Font License 1.1, (c) 2014 The Caveat Project Authors, `OFL.txt` | https://github.com/googlefonts/caveat |
 | 6 book and writing sounds | `Media\Sounds\` | CC0 1.0 (Kenney, StarNinjas, Kawgrim, NachtmahrTV and others), details and processing in `Media\Sounds\LICENSES.txt` | see that file |
 
-| Class trainer spell data ("What's Training?", branch `forever`, `Classes/Camelot`, commit `1cea1e0`) | `data\TrainerSpells.lua` | MIT, Copyright (c) 2019 (Sveng/fusionpit), `data\LICENSE-WhatsTraining.txt`; converted to a compact text format by `scripts/build-trainer-data.mjs`, nothing added | https://github.com/fusionpit/WhatsTraining |
+| Class trainer spell data ("What's Training?", branch `master`, `Classes/Camelot`, commit `172a18a`) | `data\TrainerSpells.lua` | MIT, Copyright (c) 2019 (Sveng/fusionpit), `data\LICENSE-WhatsTraining.txt`; converted to a compact text format by `scripts/build-trainer-data.mjs`, nothing added | https://github.com/fusionpit/WhatsTraining |
 
 The fonts are not renamed or modified.
 

@@ -326,13 +326,14 @@ L.add("enUS", "Options", {
   firePlatesLabel = "Turn on nameplates when sitting down",
   firePlatesTip = "Turns on friendly player nameplates when you sit down so the chronicle can tell who shares the fire; your previous setting returns when you stand up.",
   shotsLabel = "Automatic screenshots",
-  shotsTip = "At special moments (level-up, rare enemies, death, new area, bosses) the Chronicle takes a screenshot by itself. Turned off, only your own screenshots are taken.",
+  shotsTip = "At special moments (level-up, death, new area, kills of rare enemies, elite kills and bosses) the Chronicle takes a screenshot by itself. Turned off, only your own screenshots are taken.",
   meterLabel = "Turn on Damage Meter automatically",
   meterTip = "Turns on the game's damage meter so fights record damage and healing (like /chronik meter).",
   diagLabel = "Diagnostics",
   diagButton = "To chat",
   diagTip = "Writes the addon's state to the chat (like /chronik diag).",
   soundTip = "Sound for “%s”. It plays as a preview when you pick it; “Off” silences the event.",
+  version = "Version %s",
   previewTip = "Plays the selected sound for “%s” once.",
 })
 

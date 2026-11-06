@@ -20,6 +20,9 @@ QuestBook.T = ns.Locale.ns("m.QuestBook", {
   -- verb per objective kind; if it is already in the objective text (lowercase) it is not appended
   verbs = { monster = "getötet", item = "gesammelt", object = "benutzt", player = "besiegt" },
   withVerb = "%s %s",
+  -- words that may stay lowercase inside a bare name ("Spion der Dunkeleisenzwerge") and first words that open a sentence
+  glue = "der die das des dem den von vom zu zur zum im in an auf und",
+  actions = "benutzt nutzt setzt erhaltet sprecht redet sammelt tötet besiegt findet bringt geht holt rettet erforscht untersucht zerstört begebt reitet fliegt kauft lernt seht betretet öffnet gebt bergt entzündet plündert fangt besucht überlebt entkommt erreicht löst vertreibt stehlt tretet wendet",
   progress = "%s: %s %%",
   doneN = "%s× %s",
   haveOf = "%s: %s von %s",
@@ -484,6 +487,30 @@ function QuestBook.table(book, opts)
 end
 
 local VERB_KINDS = { monster = true, item = true, object = true, player = true }
+local BARE_WORDS_MAX = 4
+local LOWER_LATIN = { [164] = true, [182] = true, [188] = true, [159] = true } -- second byte of a, o, u umlauts and sharp s
+
+local function wordSet(text)
+  local set = {}
+  for w in string.gmatch(text or "", "%S+") do set[w] = true end
+  return set
+end
+
+-- true for a bare name ("Mondrudel-Worg", "Spion der Dunkeleisenzwerge") that still needs a verb; false when the client's
+-- objective text is already a phrase ("Ratten gefangen", "Benutzt Farsens Fernsicht", "Use the Farsight"): a lowercase word
+-- that is no glue word, an opening verb, or more than a handful of words
+local function looksBare(name)
+  local T = QuestBook.T
+  local glue, actions = wordSet(T.glue), wordSet(T.actions)
+  local n = 0
+  for w in string.gmatch(name, "%S+") do
+    n = n + 1
+    local lw = fold(w)
+    if n == 1 and actions[lw] then return false end
+    if n > 1 and not glue[lw] and (string.find(w, "^[a-z]") or (string.byte(w, 1) == 195 and LOWER_LATIN[string.byte(w, 2)])) then return false end
+  end
+  return n >= 1 and n <= BARE_WORDS_MAX
+end
 
 function QuestBook.objectiveText(o)
   if type(o) ~= "table" then return nil end
@@ -496,7 +523,7 @@ function QuestBook.objectiveText(o)
   end
   local done = need and have >= need or (not need and have > 0)
   local verb = VERB_KINDS[o.kind] and T.verbs[o.kind] or nil
-  if verb and find(fold(name), verb, 1, true) then verb = nil end -- the objective text already names the verb
+  if verb and (find(fold(name), verb, 1, true) or not looksBare(name)) then verb = nil end -- the text already names the verb or reads as a phrase
   local base = verb and T("withVerb", name, verb) or name
   if done then
     if need and need > 1 then return T("doneN", format("%d", have), base) end

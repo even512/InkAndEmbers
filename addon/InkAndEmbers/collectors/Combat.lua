@@ -487,6 +487,36 @@ function ns.meterStatus()
   return line, now, last and last.why or nil
 end
 
+-- Health at combat end: is it readable at all? The result of the last combat end (and the state of the self-test) lands in
+-- diag.hpEnd = "ok" | "secret". Evidence (WoW Forever): UnitHealth('player') is secret at PLAYER_REGEN_ENABLED and also
+-- later outside combat (diag.state.healthSecret = true), so a later read is no substitute: without a readable value the
+-- "close win" can never be measured. The medal "Um Haaresbreite" hides itself then (journal/model/Chronik.lua).
+local function diagTable()
+  local db = rawget(_G, "EveNChronicleDB")
+  return type(db) == "table" and type(db.diag) == "table" and db.diag or nil
+end
+
+local function noteHpEnd(hp)
+  local diag = diagTable()
+  if not diag then return end
+  if isSecret(hp) then
+    diag.hpEnd = "secret"
+  elseif num(hp) ~= nil then
+    diag.hpEnd = "ok"
+  end
+end
+
+-- false only when it is known that the health at combat end cannot be read; unknown (no combat yet, no self-test) = true
+function ns.closeWinReadable()
+  local diag = diagTable()
+  if not diag then return true end
+  if diag.hpEnd == "secret" then return false end
+  if diag.hpEnd == "ok" then return true end
+  local state = diag.state
+  if type(state) == "table" and state.healthSecret == true then return false end
+  return true
+end
+
 handlers.PLAYER_REGEN_DISABLED = function(self)
   self.fight = { start = GetTime(), kills = 0 }
 end
@@ -503,6 +533,7 @@ handlers.PLAYER_REGEN_ENABLED = function(self)
   local duration = GetTime() - f.start
   local dead = f.dead or call(UnitIsDeadOrGhost, "player") == true
   local hp, hpMax = call(UnitHealth, "player"), num(call(UnitHealthMax, "player"))
+  noteHpEnd(hp)
   local pct
   if isSecret(hp) then
     pct = hp -- secret: '?'

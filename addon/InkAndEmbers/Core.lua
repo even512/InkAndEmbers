@@ -24,9 +24,13 @@ ns.version = Core.readVersion()
 local format, floor, concat = string.format, math.floor, table.concat
 
 -- Texts (German here, English in locales/enUS_core.lua, section 'Core'; pattern: docs/i18n.md). Stored data
--- (diag notes, collector status) stays German and is not translated.
+-- (diag notes, collector status) stays German; what the chat shows of a note is translated (noteText).
 local T = ns.Locale.ns("Core", {
   prefix = "Chronik:",
+  noteMissing = "fehlt: %s",
+  noteStartFailed = "Start fehlgeschlagen",
+  noteBlocked = "gesperrt (nie registriert): %s",
+  noteUnknownEvent = "Event unbekannt: %s",
   handlerOff = "Sammler \"%s\": die Aufzeichnung \"%s\" schlug wiederholt fehl und bleibt bis zum nächsten Neuladen aus. Details: /chronik diag",
   handlersPaused = "Pausierte Aufzeichnungen: %s",
   handlersOff = "Bis zum Neuladen abgeschaltete Aufzeichnungen: %s",
@@ -551,13 +555,21 @@ end
 
 local startCollector
 
+-- the note of a collector for the chat in the current language (the stored e.note stays German); parts = { { key, arg }, ... }
+local function noteText(e)
+  if type(e.noteParts) ~= "table" then return e.note end
+  local out = {}
+  for _, p in ipairs(e.noteParts) do out[#out + 1] = p[2] and T(p[1], p[2]) or T(p[1]) end
+  return concat(out, "; ")
+end
+
 -- a failed init gets exactly one new try after INIT_RETRY seconds (an API may only be ready after the login)
 local function scheduleInitRetry(e)
   if e.initRetried or type(C_Timer) ~= "table" or type(C_Timer.After) ~= "function" then return end
   e.initRetried = true
   pcall(C_Timer.After, Core.INIT_RETRY, function()
     if e.status ~= "disabled" or not e.initFailed then return end
-    e.status, e.initFailed, e.note, e.disabledAt = "registered", nil, nil, nil
+    e.status, e.initFailed, e.note, e.noteParts, e.disabledAt = "registered", nil, nil, nil, nil
     startCollector(e)
     Core.syncDiag()
   end)
@@ -570,6 +582,7 @@ function startCollector(e)
   if #missing > 0 then
     e.status = "missing"
     e.note = "fehlt: " .. concat(missing, ", ")
+    e.noteParts = { { "noteMissing", concat(missing, ", ") } }
     return
   end
   e.active = true -- already during init so Core.after/ticker/hook work there
@@ -585,6 +598,7 @@ function startCollector(e)
       if not e.firstError then e.firstError, e.firstErrorAt = msg, at end
       e.status = "disabled"
       e.note = "Start fehlgeschlagen"
+      e.noteParts = { { "noteStartFailed" } }
       e.disabledAt = at
       e.initFailed = true
       -- what the failed init started must not run twice after the retry: cancel its tickers, drop its timers (e.gen)
@@ -641,8 +655,15 @@ function startCollector(e)
   end
   if #rejected > 0 then e.rejected = concat(rejected, ", ") end
   if #unknown > 0 then e.unknown = concat(unknown, ", ") end
-  if e.rejected then e.note = "gesperrt (nie registriert): " .. e.rejected end
-  if e.unknown then e.note = (e.note and (e.note .. "; ") or "") .. "Event unbekannt: " .. e.unknown end
+  if e.rejected then
+    e.note = "gesperrt (nie registriert): " .. e.rejected
+    e.noteParts = { { "noteBlocked", e.rejected } }
+  end
+  if e.unknown then
+    e.note = (e.note and (e.note .. "; ") or "") .. "Event unbekannt: " .. e.unknown
+    e.noteParts = e.noteParts or {}
+    e.noteParts[#e.noteParts + 1] = { "noteUnknownEvent", e.unknown }
+  end
 end
 
 -- timers and hooks for collectors: run under pcall, errors count against the collector, inactive collectors do nothing
@@ -999,7 +1020,7 @@ function Core.runDiag()
   local active, total = Core.collectorCounts()
   local inactive = {}
   for _, e in ipairs(order) do
-    if not e.active then inactive[#inactive + 1] = e.name .. " (" .. (e.note or e.status) .. ")" end
+    if not e.active then inactive[#inactive + 1] = e.name .. " (" .. (noteText(e) or e.status) .. ")" end
   end
   local line = T("collectorsActive", active, total)
   if #inactive > 0 then line = line .. T("inactive", shortList(inactive, 4)) end

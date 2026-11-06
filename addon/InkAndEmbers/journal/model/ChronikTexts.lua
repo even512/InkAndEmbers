@@ -88,11 +88,11 @@ add("diary", "diary_guild_join", "Der Gilde „{guild}“ beigetreten.", kind("g
 add("diary", "diary_guild_leave", "Die Gilde „{guild}“ verlassen.", kind("guild", function(c) return c.leave == true end), 2)
 
 add("margin", "margin_fast_1", "{=duration} – schnellste Stufe!", kind("fastest"), 3)
-add("margin", "margin_fast_2", "Stufe {=level} in {=duration}. Wie im Rausch.", kind("fastest"), 1)
-add("margin", "margin_fast_3", "Kaum angekommen, schon Stufe {=level} vorbei: {=duration}.", kind("fastest"), 1)
+add("margin", "margin_fast_2", "Stufe {=level} in {=duration} Wie im Rausch.", kind("fastest"), 1)
+add("margin", "margin_fast_3", "Kaum angekommen, schon Stufe {=level} vorbei: {=duration}", kind("fastest"), 1)
 add("margin", "margin_slow_1", "{=duration} – die längste.", kind("slowest"), 3)
-add("margin", "margin_slow_2", "Stufe {=level} zog sich: {=duration}.", kind("slowest"), 1)
-add("margin", "margin_slow_3", "Auf Stufe {=level} verging die Zeit langsam: {=duration}.", kind("slowest"), 1)
+add("margin", "margin_slow_2", "Stufe {=level} zog sich: {=duration}", kind("slowest"), 1)
+add("margin", "margin_slow_3", "Auf Stufe {=level} verging die Zeit langsam: {=duration}", kind("slowest"), 1)
 
 -- ctx.raceFile = info.raceFile; the two undead mottos are already in Texts.lua
 

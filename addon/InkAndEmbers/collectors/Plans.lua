@@ -120,9 +120,38 @@ function Plans.label(p)
   return p.text
 end
 
+-- The automatic teacher to-do keeps the text of the language it was made in ("Zum Lehrer: 3 neue Zauber (5 S 10 K)"). For display it is
+-- rebuilt in the current language from the count and the price in it, so archived ones are not left in the other language.
+-- The stored text stays as it is (data). Texts like collectors/Trainer.lua (todo_one/todo_other); English in locales/enUS_core.lua.
+local PT = ns.Locale.ns("col.Plans", {
+  trainerOne = "Zum Lehrer: %s neuer Zauber (%s)",
+  trainerOther = "Zum Lehrer: %s neue Zauber (%s)",
+  unitG = "G",
+  unitS = "S",
+  unitK = "K",
+})
+-- pattern per stored language and the unit letters of its price: { pattern, g, s, k }
+local TRAINER_SHAPES = {
+  { "^Zum Lehrer: (%d+) neue[r]? Zauber %((.+)%)$", "G", "S", "K" },
+  { "^To the trainer: (%d+) new spells? %((.+)%)$", "g", "s", "c" },
+}
+
+local function displayText(p)
+  if p.auto ~= "trainer" or isSecret(p.text) or type(p.text) ~= "string" then return p.text end
+  for _, shape in ipairs(TRAINER_SHAPES) do
+    local n, price = string.match(p.text, shape[1])
+    if n and #price <= 40 then
+      local units = { [shape[2]] = PT.unitG, [shape[3]] = PT.unitS, [shape[4]] = PT.unitK }
+      price = string.gsub(price, "(%d) (%a)%f[%A]", function(d, u) return d .. " " .. (units[u] or u) end)
+      return PT(ns.Locale.plural(tonumber(n), "trainerOne", "trainerOther"), n, price)
+    end
+  end
+  return p.text
+end
+
 local function copy(p)
   local k = kindOf(p)
-  local c = { id = p.id, text = p.text, kind = k, mapID = p.mapID, created = p.created, done = p.done, doneAt = p.done,
+  local c = { id = p.id, text = displayText(p), kind = k, mapID = p.mapID, created = p.created, done = p.done, doneAt = p.done,
     auto = type(p.auto) == "string" and p.auto or nil }
   if k == "place" then c.x, c.y = coord01(p.x), coord01(p.y) end
   if type(p.target) == "table" then

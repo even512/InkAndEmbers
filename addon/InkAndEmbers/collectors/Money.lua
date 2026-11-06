@@ -71,6 +71,15 @@ end
 
 -- Source / purpose
 
+-- Retail (Warband bank): gold moved between the purse and the account bank is a transfer, neither income nor expense. Forever has no
+-- gold in the bank (a bought bank slot there stays an expense), so this only applies to a retail client. Unknown client = no.
+local function retailClient()
+  local ms = ns.Journal and ns.Journal.MapSpace
+  if not (ms and type(ms.retailClient) == "function") then return false end
+  local ok, r = pcall(ms.retailClient)
+  return ok and r == true
+end
+
 local function classify(self, delta)
   if delta < 0 then
     if recent(self.repairAt, REPAIR_TTL) then return "repair" end
@@ -82,6 +91,7 @@ local function classify(self, delta)
     if active("mail") then return "mail" end
     if active("trade") then return "trade" end
     if active("guildbank") then return "guildbank" end
+    if active("bank") and retailClient() then return "warband" end
     return "other"
   end
   if recent(self.mailAt, MAIL_TTL) and self.mailSource then return self.mailSource end
@@ -90,6 +100,7 @@ local function classify(self, delta)
   if active("mail") then return "mail" end
   if active("trade") then return "trade" end
   if active("guildbank") then return "guildbank" end
+  if active("bank") and retailClient() then return "warband" end
   if active("quest") then return "quest" end
   if active("loot") or recent(self.lootMsgAt, MONEY_MSG_TTL) then return "loot" end
   return "other"
@@ -134,7 +145,11 @@ handlers.PLAYER_MONEY = function(self)
   end
   local delta = now - last
   if delta == 0 then return end
-  writeChange(self, delta, now, classify(self, delta))
+  local source = classify(self, delta)
+  -- transfer to/from the Warband bank: the balance is booked (holdings stay true), the amount counts as neither income nor
+  -- expense (a line without delta, like 'start': the index and the counters skip it)
+  if source == "warband" then delta = nil end
+  writeChange(self, delta, now, source)
 end
 
 handlers.CHAT_MSG_MONEY = function(self, text)

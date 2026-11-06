@@ -595,11 +595,17 @@ local function drawLeft(self, view)
 
   local seals = view.seals
   set(u.sealCount, seals.countText or Page.TEXT("ofSeals", Journal.Texts.int(seals.broken), Journal.Texts.int(seals.total)))
+  local shown = 0 -- visible cells so far: a hidden medal (s.hidden, e.g. health locked) leaves no gap in the grid
   for i, b in ipairs(u.seals) do
     local s = seals.list[i]
     local def = Chronik.SEALS[i]
     b.seal = s
-    if s and def then
+    if s and def and s.hidden then
+      b:Hide()
+    elseif s and def then
+      b:ClearAllPoints()
+      b:SetPoint("TOPLEFT", u.sealContent, "TOPLEFT", (shown % SEAL_COLS) * SEAL_W, -floor(shown / SEAL_COLS) * SEAL_H)
+      shown = shown + 1
       b:Show()
       local dim = not s.broken
       local base, motif = Theme.sealLayers(def, s.broken and s.tier or nil)

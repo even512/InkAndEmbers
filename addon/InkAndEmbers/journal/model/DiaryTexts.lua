@@ -65,17 +65,17 @@ V.instance = {
 }
 V.killsTop = {
   "{=n} Gegner haben heute den Kürzeren gezogen. Am häufigsten erwischt hat es: {top} ({=topn}-mal).",
-  "{=n} Kämpfe ausgefochten. Ganz oben auf meiner Liste: {top}, {=topn}-mal.",
+  "{=n} Gegner niedergestreckt. Ganz oben auf meiner Liste: {top}, {=topn}-mal.",
   "{=n} Gegner gezählt. Ganz vorn dabei: {top}, {=topn} an der Zahl.",
   "{top} wird mich nicht vermissen. {=topn} von ihnen lagen am Ende am Boden, insgesamt waren es {=n}.",
-  "Meine Waffe hatte zu tun: {=n} Kämpfe. Vor allem gegen diese hier: {top} ({=topn}-mal).",
+  "Meine Waffe hatte zu tun: {=n} Gegner. Vor allem diese hier: {top} ({=topn}-mal).",
   "{top} hat heute {=topn}-mal den Kürzeren gezogen, bei {=n} Gegnern insgesamt.",
 }
 V.kills = {
   "{=n} Gegner haben heute den Kürzeren gezogen.",
-  "Ich habe {=n} Kämpfe ausgefochten und alle gewonnen, die zählen.",
+  "Ich habe {=n} Gegner besiegt, und zwar alle, die zählen.",
   "{=n} Gegner gezählt. Meine Waffe braucht dringend Pflege.",
-  "Heute waren es {=n} Kämpfe. Ruhig war anders.",
+  "Heute waren es {=n} Gegner. Ruhig war anders.",
 }
 V.killsOne = {
   "Ein einziger Kampf heute, kaum der Rede wert.",
@@ -85,7 +85,7 @@ V.killsOne = {
 }
 V.killsFew = {
   "Nur {=n} kleine Rangeleien, sonst war es ruhig.",
-  "{=n} Kämpfe, mehr nicht. Ein friedlicher Tag.",
+  "{=n} Gegner, mehr nicht. Ein friedlicher Tag.",
   "Ein paar Gegner, genau {=n}. Nichts, was mich aufgehalten hätte.",
   "{=n}-mal musste ich die Waffe ziehen. Hätte schlimmer kommen können.",
 }
