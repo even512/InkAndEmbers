@@ -1961,6 +1961,30 @@ const narratorBgTexture = (id) => ({
   },
 });
 
+// Lagerfeuer (Rauchzeichen): weisser Grund weg, aufgemalte Rauchfahne weg, Sockel per von Hand nachgezogener Oberkante von den Flammen getrennt
+// (Masse im Quellbild, 688 x 688). Unter die Oberkante laufen die Flammen ein Stueck weiter, damit beim Bewegen keine Luecke am Holz entsteht.
+// Jede Flammenphase verzerrt nach oben zunehmend: eine Welle laeuft aufwaerts, der Fuss bleibt stehen; nach acht Phasen schliesst sich die Schleife.
+export const CAMPFIRE = {
+  source: "art/toast/campfire_sign_v1.png",
+  crop: { x: 100, y: 170, size: 490 },
+  key: { from: 690, to: 745 },
+  erode: 2,
+  base: 256,
+  cell: 128,
+  cols: 4,
+  rows: 2,
+  footY: 300, // im Ausschnitt: hier steht die Verzerrung still
+  amp: 15, // groesster Seitenversatz an der Spitze, Pixel im Ausschnitt
+  stretch: 0.045,
+  fill: 40,
+  top: [
+    [90, 700], [90, 560], [125, 500], [170, 490], [185, 478], [200, 474], [225, 474], [238, 482], [245, 488], [292, 475], [294, 468],
+    [274, 450], [275, 436], [285, 428], [289, 414], [300, 409], [319, 409], [332, 418], [356, 446], [375, 424], [388, 415], [401, 416],
+    [413, 422], [426, 440], [427, 453], [414, 471], [404, 479], [440, 494], [456, 496], [462, 486], [478, 474], [505, 474], [532, 500],
+    [590, 560], [600, 700],
+  ],
+};
+
 export const TEXTURES = [
   { name: "Book", w: 1024, h: 1024, html: () => ART(BOOK_FILE, BOOK_CROP, 1024, 1024), post: BOOK_KEY },
   ...PAGE_IDS.flatMap((id) => [pageTexture(id, "l"), pageTexture(id, "r")]),
@@ -2184,6 +2208,12 @@ export const TEXTURES = [
   // und hebt rechts duenn ab) und Grabstein des Graeberfelds. Weiss auf durchsichtig, im Spiel per SetVertexColor in Tinte.
   { name: "Stroke", w: 64, h: 16, pixels: () => strokePixels(64, 16) },
   { name: "Grave", w: 32, h: 32, pixels: () => gravePixels(32, 32) },
+  // Rauchzeichen (journal/Smoke.lua): ein Stueck Rauchfaden. Laengs weiches Fenster (bei 50 % Ueberlappung gleichmaessig), quer dunkler Kern
+  // mit breiterem hellen Saum, Farben fest in der Textur, Deckkraft je Sprite im Spiel.
+  { name: "SmokeThread", w: 128, h: 128, pixels: () => smokeThreadPixels(128, 128) },
+  // Lagerfeuer der Rauchzeichen (art/toast/campfire_sign_v1.png, Gemini): Sockel und Flammen getrennt, Flammen als acht verzerrte Phasen.
+  { name: "CampfireBase", w: CAMPFIRE.base, h: CAMPFIRE.base, source: CAMPFIRE.source, pixels: () => campfireBasePixels() },
+  { name: "CampfireFlames", w: CAMPFIRE.cell * CAMPFIRE.cols, h: CAMPFIRE.cell * CAMPFIRE.rows, source: CAMPFIRE.source, pixels: () => campfireFlamePixels() },
   // Momente-Seite (Nachtrag M1): Zeichen je Momentart (Gemini-Bild art/journal/moment_icons.jpg, freigestellt) und Balken der
   // Spielzeit-Uhr (aus Rechnung). Die Zettel selbst nutzen den Notizzettel (TodoPad).
   { name: "MomentIcons", w: 512, h: 256, html: () => MOMENT_ICONS_HTML(), post: (rgba, w, h) => MOMENT_ICONS_KEY(rgba, w, h) },
@@ -2282,6 +2312,145 @@ export function jpegSize(buf) {
     pos += 2 + len;
   }
   return null;
+}
+
+function inPolygon(pts, x, y) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, yi] = pts[i];
+    const [xj, yj] = pts[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+let campfireCache = null;
+/** Ausschnitt in zwei Lagen: { size, base, flames } (RGBA, Masse des Ausschnitts) */
+export function campfireLayers(file = path.join(ROOT, CAMPFIRE.source)) {
+  if (campfireCache) return campfireCache;
+  const img = decodePng(readFileSync(file));
+  const rgba = Buffer.from(img.rgba);
+  erodeEdge(keyWhite(rgba, img.w, img.h, CAMPFIRE.key), img.w, img.h, CAMPFIRE.erode);
+  // Rauchfahne: alles ueber der Flammenspitze, daneben rechts die feine Spur neben der Spitze (Flammenkante etwa x = 342 + (y - 187))
+  for (let y = 0; y < 200; y++) {
+    for (let x = 0; x < img.w; x++) {
+      if (y < 186 || (x < 375 && x > 344 + (y - 187))) rgba[(y * img.w + x) * 4 + 3] = 0;
+    }
+  }
+  const { x: cx, y: cy, size } = CAMPFIRE.crop;
+  const base = Buffer.alloc(size * size * 4);
+  const flames = Buffer.alloc(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const s = ((y + cy) * img.w + x + cx) * 4;
+      const d = (y * size + x) * 4;
+      const out = inPolygon(CAMPFIRE.top, x + cx, y + cy) ? base : flames;
+      rgba.copy(out, d, s, s + 4);
+    }
+  }
+  for (let x = 0; x < size; x++) {
+    let last = -1000;
+    let col = null;
+    for (let y = 0; y < size; y++) {
+      const d = (y * size + x) * 4;
+      if (flames[d + 3] > 128) {
+        last = y;
+        col = [flames[d], flames[d + 1], flames[d + 2]];
+      } else if (col && y - last <= CAMPFIRE.fill && inPolygon(CAMPFIRE.top, x + cx, y + cy)) {
+        flames[d] = col[0];
+        flames[d + 1] = col[1];
+        flames[d + 2] = col[2];
+        flames[d + 3] = 255;
+      }
+    }
+  }
+  campfireCache = { size, base, flames };
+  return campfireCache;
+}
+
+// Verkleinern mit vorab multipliziertem Alpha (kein heller Saum); warp(x, y) liefert die Quellstelle im Ausschnitt
+function campfireScale(src, size, out, stride, ox, oy, cell, warp) {
+  const N = 4;
+  const k = size / cell;
+  for (let y = 0; y < cell; y++) {
+    for (let x = 0; x < cell; x++) {
+      let r = 0, g = 0, b = 0, a = 0;
+      for (let j = 0; j < N; j++) {
+        for (let i = 0; i < N; i++) {
+          const [sx, sy] = warp((x + (i + 0.5) / N) * k, (y + (j + 0.5) / N) * k);
+          const px = Math.floor(sx), py = Math.floor(sy);
+          if (px < 0 || py < 0 || px >= size || py >= size) continue;
+          const s = (py * size + px) * 4;
+          const al = src[s + 3];
+          r += src[s] * al;
+          g += src[s + 1] * al;
+          b += src[s + 2] * al;
+          a += al;
+        }
+      }
+      const d = ((y + oy) * stride + x + ox) * 4;
+      if (a > 0) {
+        out[d] = Math.round(r / a);
+        out[d + 1] = Math.round(g / a);
+        out[d + 2] = Math.round(b / a);
+        out[d + 3] = Math.round(a / (N * N));
+      }
+    }
+  }
+}
+
+export function campfireBasePixels() {
+  const { size, base } = campfireLayers();
+  const out = Buffer.alloc(CAMPFIRE.base * CAMPFIRE.base * 4);
+  campfireScale(base, size, out, CAMPFIRE.base, 0, 0, CAMPFIRE.base, (x, y) => [x, y]);
+  return out;
+}
+
+export function campfireFlamePixels() {
+  const { size, flames } = campfireLayers();
+  const { cell, cols, rows, footY, amp, stretch } = CAMPFIRE;
+  const out = Buffer.alloc(cell * cols * cell * rows * 4);
+  const frames = cols * rows;
+  for (let f = 0; f < frames; f++) {
+    const ph = (f / frames) * 2 * Math.PI;
+    const up = 1 + stretch * Math.sin(ph + 0.8);
+    campfireScale(flames, size, out, cell * cols, (f % cols) * cell, Math.floor(f / cols) * cell, cell, (x, y) => {
+      const h = Math.max(0, Math.min(1, (footY - y) / footY));
+      const dx = amp * h ** 1.3 * (Math.sin(ph + y * 0.03) + 0.45 * Math.sin(2 * ph + y * 0.055 + 1));
+      return [x - dx, footY - (footY - y) / up];
+    });
+  }
+  return out;
+}
+
+// 128 x 128 (vorher 64): im Spiel wird die Textur je Sprite gestaucht und gestreckt, mehr Aufloesung = weichere Uebergaenge.
+// Quer zum Faden: Texturkante = 2,4 Radien. Dunkler Kern fuer hellen Himmel, heller warmer Saum (1,8-fache Breite) fuer dunklen Himmel.
+// Laengs sin^1,5 statt Hann: so bleibt die Ueberblendung auch bei rund 60 % Deckkraft gleichmaessig (Alpha addiert sich nicht linear).
+export const SMOKE_COLORS = { core: [92, 66, 40], hem: [190, 160, 120] };
+export const SMOKE_HEM_ALPHA = 0.72;
+export function smokeThreadPixels(w, h) {
+  const rgba = Buffer.alloc(w * h * 4);
+  const [cr, cg, cb] = SMOKE_COLORS.core;
+  const [hr, hg, hb] = SMOKE_COLORS.hem;
+  for (let y = 0; y < h; y++) {
+    const v = Math.abs(((y + 0.5) / h) * 2 - 1);
+    const d = v * 2.4; // Abstand in Radien
+    const edge = clamp01((1 - v) / 0.4);
+    const taper = edge * edge * (3 - 2 * edge); // glatt bis auf Alpha 0 am Rand (kein sichtbarer Absatz beim Vergroessern)
+    const core = Math.exp(-((d / 0.95) ** 2)) * taper;
+    const hem = SMOKE_HEM_ALPHA * Math.exp(-((d / (0.95 * 1.8)) ** 2)) * taper;
+    const a = 1 - (1 - core) * (1 - hem);
+    const mix = a > 0 ? core / a : 0;
+    for (let x = 0; x < w; x++) {
+      const along = Math.sin(((x + 0.5) / w) * Math.PI) ** 1.5;
+      const o = (y * w + x) * 4;
+      rgba[o] = Math.round(hr + (cr - hr) * mix);
+      rgba[o + 1] = Math.round(hg + (cg - hg) * mix);
+      rgba[o + 2] = Math.round(hb + (cb - hb) * mix);
+      rgba[o + 3] = Math.round(255 * a * along);
+    }
+  }
+  return rgba;
 }
 
 /** Tintenstrich: Breite laengs veraenderlich (Aufsetzen, leichtes Schwellen, duenner Abstrich), weiche Kanten */

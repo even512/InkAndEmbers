@@ -59,6 +59,7 @@ local T = ns.Locale.ns("col.Campfire", {
   roundNone = "Lagerfeuer-Runde: keine.",
   roundLastEnd = " Letzte endete: %s.",
   notesMissing = "Lagerfeuer: Die Zettel-Anzeige ist noch nicht eingebaut.",
+  smokeMissing = "Lagerfeuer: Die Rauchzeichen sind nicht geladen.",
   combatNoRead = "Lagerfeuer: im Kampf nicht lesbar, bitte nach dem Kampf erneut abfragen.",
   sitAura = "Lagerfeuer: Sitz-Aura %s: %s, Lagerfeuer in der Nähe (%d): %s.",
   plates = "Plaketten freundlicher Spieler: %s (%s = %s), beim Hinsetzen einschalten: %s%s.",
@@ -1220,14 +1221,28 @@ function Campfire.statusLine()
   return T.roundNone .. (Campfire.diag.lastEnd and T("roundLastEnd", whyText(Campfire.diag.lastEnd)) or "")
 end
 
-function Campfire.slash(rest)
+function Campfire.slash(rest, all)
   rest = type(rest) == "string" and string.lower(rest) or ""
+  -- development probe for the camp boni (journal/FireProbe.lua, not in the release package): then this word is no status call
+  if rest == "boni" and ns.FireProbe and type(ns.FireProbe.slash) == "function" then
+    ns.FireProbe.slash(all)
+    return
+  end
   if rest == "test" then
     local notes = ns.Journal and ns.Journal.FireNotes
     if notes and type(notes.test) == "function" then
       notes.test()
     else
       Core.print(T.notesMissing)
+    end
+    return
+  end
+  if rest == "rauch" or rest == "smoke" then
+    local smoke = ns.Journal and ns.Journal.Smoke
+    if smoke and type(smoke.preview) == "function" then
+      smoke.preview()
+    else
+      Core.print(T.smokeMissing)
     end
     return
   end

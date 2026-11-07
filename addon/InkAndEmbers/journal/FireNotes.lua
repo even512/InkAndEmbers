@@ -14,6 +14,10 @@
 -- (FireNotes.ember, alias FireNotes.spark): before the first line it draws one new note (free slot first, else the weakest note
 -- gives way); after the first sent line all notes vanish and the embers bring 1-2 follow-up notes (a normal note if none is left).
 -- After FireNotes.SILENCE s of silence one follow-up appears by itself (at most FireNotes.AUTO_MAX per session).
+-- Close (x right of the third note, only while notes or embers are out): ends the notes for this round only. Everything
+-- fades out (no animation with reduceMotion) and nothing is filled again (silence, update, guests, refill, card wait, embers)
+-- until the next sit-down (onCampfire "start"), "/chronik feuer test" or switching the option off and on. The round in
+-- collectors/Campfire.lua is not touched; the flag st.closed lives in memory only.
 -- Position: edit mode element "fire" (journal/EditMode.lua) via FireNotes.hud.place, else FireNotes.DEFAULT_POS.
 -- Settings (EveNChronicleDB.campfire): notes, show = "cardFirst" | "both" | "notesOnly".
 local _, ns = ...
@@ -47,6 +51,14 @@ FireNotes.SPARK_N = 2
 FireNotes.SPARK_THROTTLE = 3
 FireNotes.SPARK_SIZE = 34
 FireNotes.EMBER_W, FireNotes.EMBER_H = 160, 30
+FireNotes.CLOSE_SIZE, FireNotes.CLOSE_GAP, FireNotes.CLOSE_FONT = 24, 7, 17
+FireNotes.CLOSE_RING = { 0.75, 0.55, 0.28, 0.6 }
+FireNotes.CLOSE_RING_HOVER = { 1, 0.75, 0.35, 1 }
+FireNotes.CLOSE_GROUND = { 0.06, 0.04, 0.03, 0.6 }
+FireNotes.CLOSE_INK = { 1, 0.93, 0.76, 1 }
+FireNotes.CLOSE_INK_HOVER = { 1, 1, 0.9, 1 }
+FireNotes.CLOSE_SHADE = { 0, 0, 0, 0.85 }
+FireNotes.CLOSE_ARM, FireNotes.CLOSE_THICK = 5, 2   -- half arm length (10 px cross), line thickness
 FireNotes.FOLLOW_AVOID = 10   -- ring of recent follow-ups (kept across rounds of this login), softened if nothing else is left
 FireNotes.TOPICS = { death = true, rare = true, quest = true, newzone = true, level = true, elite = true, profession = true }
 FireNotes.W = FireNotes.COUNT * FireNotes.NOTE_W + (FireNotes.COUNT - 1) * FireNotes.GAP
@@ -75,6 +87,7 @@ FireNotes.TEXT = ns.Locale.ns("FireNotes", {
   emberTitle = "Glut",
   emberHow = "Klick: neuen Gesprächszettel aus der Glut holen",
   emberEmpty = "Lagerfeuer: Gerade liegt kein neuer Zettel in der Glut.",
+  closeTip = "Zettel für diese Rast schließen",
   samples = {
     "Ein Feuer in Durotar – besser hätte der Tag nicht enden können.",
     "Woher kommst du gerade, Kuno?",
@@ -142,7 +155,10 @@ function FireNotes.setEnabled(on)
   local c = cfTable(true)
   if not c then return false end
   c.notes = on and true or false
-  if not c.notes then FireNotes.stop("off") elseif FireNotes.state.session and not FireNotes.state.active then
+  if not c.notes then
+    FireNotes.state.closed = false
+    FireNotes.stop("off")
+  elseif FireNotes.state.session and not FireNotes.state.active and not FireNotes.state.closed then
     FireNotes.onCampfire("start", FireNotes.state.session)
   end
   changed()
@@ -192,7 +208,7 @@ end
 
 local st = { active = false, test = false, waiting = false, session = nil, talk = nil, notes = {}, buttons = {}, gen = 0,
   slotGen = {}, lastSend = -math.huge, frame = nil, phase = nil, autoN = 0, lastTalk = nil, speaker = nil, topic = nil,
-  recentFollow = {}, lastSpark = -math.huge, spark = nil, silenceGen = nil, guests = {} }
+  recentFollow = {}, lastSpark = -math.huge, spark = nil, silenceGen = nil, guests = {}, closed = false, closing = nil }
 FireNotes.state = st
 
 local function reduceMotion()
@@ -365,6 +381,11 @@ function FireNotes.place()
   f:SetPoint(p.point, UIParent, p.point, p.x, p.y)
 end
 
+local function tintClose(cb, c)
+  for _, ln in ipairs(cb.ink or {}) do ln:SetColorTexture(c[1], c[2], c[3], c[4]) end
+  if cb.label and cb.label.SetTextColor then cb.label:SetTextColor(c[1], c[2], c[3], c[4]) end
+end
+
 local function build()
   if st.frame then return st.frame end
   local f = CreateFrame("Frame", nil, UIParent)
@@ -432,6 +453,94 @@ local function build()
   end
   sp:Hide()
   st.spark, st.ember = sp, sp
+  -- close "x": right of the third note, top-aligned with the highest reach of the notes (FLOAT), CLOSE_GAP away from the block
+  -- (it may stick out of the frame width). A dark, half-transparent round ground with a thin warm ring and a bright parchment x,
+  -- readable on light and dark sky; 24 x 24 click area above the notes (never clicks through).
+  local cb = CreateFrame("Button", nil, f)
+  cb:SetSize(FireNotes.CLOSE_SIZE, FireNotes.CLOSE_SIZE)
+  cb:SetPoint("TOPLEFT", f, "TOPRIGHT", FireNotes.CLOSE_GAP, -FireNotes.FLOAT)
+  if cb.SetFrameLevel and f.GetFrameLevel then cb:SetFrameLevel((num(f:GetFrameLevel()) or 0) + 6) end
+  cb:EnableMouse(true)
+  local discTex = Th and Th.TEX and Th.TEX.disc or "Interface\\AddOns\\InkAndEmbers\\Media\\Disc"
+  cb.ring = cb:CreateTexture(nil, "BACKGROUND")
+  cb.ring:SetAllPoints(cb)
+  cb.ring:SetTexture(discTex)
+  cb.ring:SetVertexColor(unpack(FireNotes.CLOSE_RING))
+  cb.ground = cb:CreateTexture(nil, "BORDER")
+  cb.ground:SetPoint("CENTER", cb, "CENTER", 0, 0)
+  cb.ground:SetSize(FireNotes.CLOSE_SIZE - 3, FireNotes.CLOSE_SIZE - 3)
+  cb.ground:SetTexture(discTex)
+  cb.ground:SetVertexColor(unpack(FireNotes.CLOSE_GROUND))
+  cb.hl = cb:CreateTexture(nil, "HIGHLIGHT")
+  cb.hl:SetPoint("CENTER", cb, "CENTER", 0, 0)
+  cb.hl:SetSize(FireNotes.CLOSE_SIZE + 12, FireNotes.CLOSE_SIZE + 12)
+  cb.hl:SetTexture(glowTex)
+  if cb.hl.SetBlendMode then cb.hl:SetBlendMode("ADD") end
+  cb.hl:SetVertexColor(1, 0.7, 0.3, 1)
+  -- the x is drawn, not written: two crossed lines around the exact centre of ring and ground (independent of font and
+  -- language), a dark copy 1 px lower right underneath as shadow. Without CreateLine: the old font x as fallback.
+  cb.ink, cb.shade = {}, {}
+  if type(cb.CreateLine) == "function" then
+    local d = FireNotes.CLOSE_ARM
+    local ok, built = pcall(function()
+      for _, layerSet in ipairs({ { cb.shade, 1, FireNotes.CLOSE_SHADE, 1, -1 }, { cb.ink, 2, FireNotes.CLOSE_INK, 0, 0 } }) do
+        local list, sub, col, dx, dy = layerSet[1], layerSet[2], layerSet[3], layerSet[4], layerSet[5]
+        for _, dir in ipairs({ 1, -1 }) do
+          local ln = cb:CreateLine(nil, "OVERLAY", nil, sub)
+          if not ln then return false end -- the client gave no line: the font x below takes over, no error
+          ln:SetThickness(FireNotes.CLOSE_THICK)
+          ln:SetColorTexture(col[1], col[2], col[3], col[4])
+          ln:SetStartPoint("CENTER", cb, -d + dx, dir * d + dy)
+          ln:SetEndPoint("CENTER", cb, d + dx, -dir * d + dy)
+          list[#list + 1] = ln
+        end
+      end
+      return true
+    end)
+    if not ok or not built then cb.ink, cb.shade = {}, {} end
+  end
+  if #cb.ink == 0 then
+    cb.label = cb:CreateFontString(nil, "OVERLAY")
+    cb.label:SetPoint("CENTER", cb, "CENTER", 0, 1)
+    if Th and Th.font then
+      Th.font(cb.label, "title", FireNotes.CLOSE_FONT, nil, "OUTLINE")
+    else
+      pcall(cb.label.SetFont, cb.label, "Fonts\\MORPHEUS.TTF", FireNotes.CLOSE_FONT, "OUTLINE")
+    end
+    if cb.label.SetTextColor then cb.label:SetTextColor(unpack(FireNotes.CLOSE_INK)) end
+    if cb.label.SetShadowOffset then cb.label:SetShadowOffset(1, -1) end
+    if cb.label.SetShadowColor then cb.label:SetShadowColor(0, 0, 0, 1) end
+    cb.label:SetText("x")
+  end
+  if cb.RegisterForClicks then cb:RegisterForClicks("LeftButtonUp") end
+  cb:SetScript("OnClick", function() FireNotes.close() end)
+  cb:SetScript("OnEnter", function(self)
+    tintClose(self, FireNotes.CLOSE_INK_HOVER)
+    if self.ring then self.ring:SetVertexColor(unpack(FireNotes.CLOSE_RING_HOVER)) end
+    if not GameTooltip then return end
+    pcall(function()
+      GameTooltip:SetOwner(self, "ANCHOR_TOP")
+      GameTooltip:SetText(T.closeTip, 1, 0.82, 0)
+      GameTooltip:Show()
+    end)
+  end)
+  cb:SetScript("OnLeave", function(self)
+    tintClose(self, FireNotes.CLOSE_INK)
+    if self.ring then self.ring:SetVertexColor(unpack(FireNotes.CLOSE_RING)) end
+    hideTip(self)
+  end)
+  st.closeBtn = cb
+  if type(f.CreateAnimationGroup) == "function" then
+    local g = f:CreateAnimationGroup()
+    if type(g) == "table" and type(g.CreateAnimation) == "function" then
+      local a = g:CreateAnimation("Alpha")
+      a:SetFromAlpha(1)
+      a:SetToAlpha(0)
+      a:SetDuration(FireNotes.FADE)
+      if g.SetToFinalAlpha then g:SetToFinalAlpha(true) end
+      f.fadeOut = g
+    end
+  end
   st.frame = f
   FireNotes.place()
   f:Hide()
@@ -623,15 +732,74 @@ end
 
 FireNotes.showEmber = showSpark
 
+-- a fade-out in progress (close) is over: mouse and alpha back to normal for the next round
+local function endClosing()
+  st.closing = nil
+  local f = st.frame
+  if not f then return end
+  if f.fadeOut then f.fadeOut:Stop() end
+  f:SetAlpha(1)
+  for slot = 1, FireNotes.COUNT do
+    local b = st.buttons[slot]
+    if b then b:EnableMouse(true) end
+  end
+  if st.ember then st.ember:EnableMouse(true) end
+  if st.closeBtn then st.closeBtn:EnableMouse(true) end
+end
+
 function FireNotes.stop(why)
+  if st.closing then endClosing() end
   st.gen = st.gen + 1
   st.active, st.waiting, st.test = false, false, false
   st.phase, st.silenceGen = nil, nil
   st.slotGen = {}
   for slot = 1, FireNotes.COUNT do hideSlot(slot) end
   showSpark(false)
+  if st.closeBtn then
+    if st.closeBtn.hl then st.closeBtn.hl:Hide() end
+    hideTip(st.closeBtn)
+  end
   if st.frame then st.frame:Hide() end
   st.lastStop = why
+  return true
+end
+
+-- the "x": end the notes for this round only. State is closed at once (nothing fills again), the picture fades out.
+function FireNotes.close()
+  local f = st.frame
+  if not (st.active and f and f:IsShown()) then return false end
+  st.closed = true
+  local soft = f.fadeOut and not reduceMotion() and type(C_Timer) == "table" and type(C_Timer.After) == "function"
+  if not soft then
+    FireNotes.stop("closed")
+    return true
+  end
+  st.gen = st.gen + 1
+  st.active, st.waiting, st.test = false, false, false
+  st.phase, st.silenceGen = nil, nil
+  st.slotGen = {}
+  st.notes = {}
+  for slot = 1, FireNotes.COUNT do
+    local b = st.buttons[slot]
+    if b then
+      hideTip(b)
+      b:EnableMouse(false)
+    end
+  end
+  if st.ember then
+    if st.ember.hl then st.ember.hl:Hide() end
+    hideTip(st.ember)
+    st.ember:EnableMouse(false)
+  end
+  if st.closeBtn then
+    if st.closeBtn.hl then st.closeBtn.hl:Hide() end
+    hideTip(st.closeBtn)
+    st.closeBtn:EnableMouse(false)
+  end
+  local token = {}
+  st.closing = token
+  f.fadeOut:Play()
+  after(FireNotes.FADE, function() if st.closing == token then FireNotes.stop("closed") end end)
   return true
 end
 
@@ -660,6 +828,7 @@ end
 
 local function begin(session)
   FireNotes.stop("restart")
+  st.closed = false
   if inCombat() then return false end
   st.session = session
   st.talk = FireNotes.adapt(session, nil)
@@ -680,12 +849,16 @@ end
 
 function FireNotes.onCampfire(what, session)
   if what == "end" then
-    if not st.test then FireNotes.stop("end") end
+    if not st.test then
+      FireNotes.stop("end")
+      st.closed = false
+    end
     st.session = nil
     return
   end
   if what == "start" then
     st.session = session
+    st.closed = false
     if not FireNotes.settings().notes then return end
     begin(session)
     return
@@ -922,6 +1095,7 @@ function FireNotes.test()
     return false
   end
   FireNotes.stop("test")
+  st.closed = false
   st.test, st.active = true, true
   st.talk = { startT = time and time() or nil, people = {} }
   local n = fillAll()

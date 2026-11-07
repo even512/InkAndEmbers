@@ -70,7 +70,7 @@ local T = ns.Locale.ns("Core", {
   helpTutorial = "/chronik tutorial - Einführung (kleines Buch zum Durchblättern) erneut zeigen",
   helpDebug = "Fehlersuche:",
   helpDiag = "/chronik diag - Selbsttest aller Schnittstellen (Ergebnis in EveNChronicleDB.diag)",
-  helpCampfire = "/chronik feuer - Lagerfeuer: Sitz-Aura, erkannte Mitspieler mit Quelle, Plaketten (\"feuer test\" zeigt die Testanzeige)",
+  helpCampfire = "/chronik feuer - Lagerfeuer: Sitz-Aura, erkannte Mitspieler mit Quelle, Plaketten (\"feuer test\" zeigt die Testanzeige, \"feuer rauch\" die Rauchzeichen)",
   helpSim = "/chronik sim feuer - Lagerfeuer in Retail simulieren: an|aus|status|setzen|aufstehen|gast|laut|löschen",
   helpAuras = "/chronik auren - listet die aktuellen Buffs (spellID + Name), z.B. am Lagerfeuer abfragen",
   helpCoins = "/chronik muenzen - zeigt, welche Münzgrafik (Auflösung) im Buch genutzt wird",
@@ -1410,7 +1410,8 @@ function Core.slash(msg)
     end
   elseif cmd == "feuer" then
     if ns.Campfire and ns.Campfire.slash then
-      ns.Campfire.slash(rest)
+      -- second argument: the whole rest of the line (the probe /chronik feuer boni an|aus takes several words)
+      ns.Campfire.slash(rest, string.match(type(msg) == "string" and msg or "", "^%s*%S+%s+(.-)%s*$"))
     else
       Core.print(T.campfireMissing)
     end

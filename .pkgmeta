@@ -22,9 +22,10 @@ move-folders:
   InkAndEmbers/addon/InkAndEmbers_Data: InkAndEmbers_Data
 
 # Everything outside the addon folders stays out of the zip, plus the development simulation
-# (journal/SimPanel.lua; its TOC line is removed by the #@do-not-package@ block in the TOC).
+# (journal/SimPanel.lua and journal/FireProbe.lua; their TOC lines are removed by the #@do-not-package@ block in the TOC).
 ignore:
   - addon/InkAndEmbers/journal/SimPanel.lua
+  - addon/InkAndEmbers/journal/FireProbe.lua
   - .github
   - .gitignore
   - .gitattributes

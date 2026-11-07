@@ -1,4 +1,4 @@
--- HUD elements in edit mode via the embedded LibEditMode: toast, slip (welcome greeting), card (campfire recap), todo, quick, fire. Each has an unprotected holder on UIParent
+-- HUD elements in edit mode via the embedded LibEditMode: toast, slip (welcome greeting), card (campfire recap), todo, quick, fire, smoke. Each has an unprotected holder on UIParent
 -- (size = scale, opacity = alpha), saved per layout in chars[guid].editMode.layouts. The draft is committed when Blizzard saves
 -- (hooksecurefunc SaveLayouts + EventRegistry "EditMode.SavedLayouts"), discarded on revert. Writing into EditModeManagerFrame would taint: own section.
 local ADDON_NAME, ns = ...
@@ -11,11 +11,11 @@ local floor, max, min = math.floor, math.max, math.min
 local EditMode = {}
 Journal.EditMode = EditMode
 
-EditMode.IDS = { "toast", "slip", "card", "todo", "quick", "fire" }
+EditMode.IDS = { "toast", "slip", "card", "todo", "quick", "fire", "smoke" }
 EditMode.SCALE = { min = 50, max = 150, step = 5, default = 100 }
 -- Toasts and cards start smaller (80 %) than the other HUD elements; saved sizes stay as they are. The welcome note keeps its
--- real size by default (125 % x BASE_SCALE 0.8 = 1.0).
-EditMode.SCALE_DEFAULTS = { toast = 80, card = 80, slip = 125 }
+-- real size by default (125 % x BASE_SCALE 0.8 = 1.0). The smoke signal starts at 100 % (80 % of its real size), as set by hand.
+EditMode.SCALE_DEFAULTS = { toast = 80, card = 80, slip = 125, smoke = 100 }
 -- Default place of the welcome note: left screen edge, a figure's inset away (Begleiter.CUTOUTS inset), Begleiter.SLIP.y
 EditMode.SLIP_INSET = 12
 -- Default position of the toasts and cards: the top edge sits TOAST_BELOW_FRAC x screen height under the screen centre (not in the middle of the view)
@@ -24,7 +24,7 @@ function EditMode.scaleDefault(id) return EditMode.SCALE_DEFAULTS[id] or EditMod
 EditMode.BASE_SCALE = 0.8   -- 100 % in edit mode = 80 % of the base size
 EditMode.ALPHA = { min = 20, max = 100, step = 5, default = 100 }
 EditMode.DURATION = { min = 2, max = 30, step = 1 }
-EditMode.LEVEL = { toast = 30, slip = 20, card = 10, todo = 10, quick = 10, fire = 10 }
+EditMode.LEVEL = { toast = 30, slip = 20, card = 10, todo = 10, quick = 10, fire = 10, smoke = 10 }
 EditMode.LAYOUTS_MAX = 64
 EditMode.NAME_BYTES = 64
 EditMode.POINTS = { TOPLEFT = true, TOP = true, TOPRIGHT = true, LEFT = true, CENTER = true, RIGHT = true, BOTTOMLEFT = true,
@@ -32,7 +32,7 @@ EditMode.POINTS = { TOPLEFT = true, TOP = true, TOPRIGHT = true, LEFT = true, CE
 
 EditMode.TEXT = ns.Locale.ns("EditMode", {
   name = { toast = "Chronik: Einblendungen", slip = "Chronik: Willkommen-Gruß", card = "Chronik: Rast-Rückblick",
-    todo = "Chronik: Mini-To-Do-Zettel", quick = "Chronik: Schnellnotizen", fire = "Chronik: Zettel am Feuer" },
+    todo = "Chronik: Mini-To-Do-Zettel", quick = "Chronik: Schnellnotizen", fire = "Chronik: Zettel am Feuer", smoke = "Chronik: Rauchzeichen" },
   scale = "Größe",
   scaleDesc = "Größe des Elements, 50 bis 150 %.",
   alpha = "Deckkraft",
@@ -71,7 +71,7 @@ EditMode.TEXT = ns.Locale.ns("EditMode", {
   },
   panelTitle = "Ink & Embers",
   panelHint = "Im Bearbeitungsmodus zeigen",
-  panelNames = { toast = "Einblendungen", slip = "Willkommen-Gruß", card = "Rast-Rückblick", todo = "Mini-To-Do-Zettel", quick = "Schnellnotizen", fire = "Zettel am Feuer" },
+  panelNames = { toast = "Einblendungen", slip = "Willkommen-Gruß", card = "Rast-Rückblick", todo = "Mini-To-Do-Zettel", quick = "Schnellnotizen", fire = "Zettel am Feuer", smoke = "Rauchzeichen" },
   dirty = "Ungespeicherte Änderungen",
   clean = "Alles gespeichert",
   save = "Speichern",
@@ -108,6 +108,7 @@ local function Toast() return Journal.Toast end
 local function TT() return Journal.TodoTracker end
 local function QN() return Journal.QuickNote end
 local function FN() return Journal.FireNotes end
+local function SM() return Journal.Smoke end
 local function BG() return Journal.Begleiter end
 
 local function layoutKey(name)
@@ -274,6 +275,10 @@ function EditMode.natural(id)
     local F = FN()
     return F and F.W or 688, F and F.H or 134
   end
+  if id == "smoke" then
+    local S = SM()
+    return S and S.W or 660, S and S.H or 160
+  end
   local Q = QN()
   return Q and Q.W or 250, Q and Q.H or 130
 end
@@ -291,6 +296,9 @@ function EditMode.defaultPos(id)
   if id == "fire" then
     local p = FN() and FN().DEFAULT_POS or { point = "CENTER", x = 0, y = 60 }
     return { point = p.point, x = p.x, y = p.y }
+  end
+  if id == "smoke" then
+    return { point = "TOP", x = 0, y = SM() and SM().defaultY() or -10 }
   end
   return { point = "TOPRIGHT", x = -40, y = -530 }
 end
@@ -448,6 +456,7 @@ local function newHolder(id)
   h.elementId = id
   if id == "toast" or id == "card" or id == "slip" then h.preview = buildPreview(h, id) end
   if id == "fire" and FN() and FN().buildPreview then h.preview = FN().buildPreview(h) end
+  if id == "smoke" and SM() and SM().buildPreview then h.preview = SM().buildPreview(h) end
   h:Show()
   st.holders[id] = h
   return h
@@ -483,6 +492,7 @@ function EditMode.applyAll()
   if TT() and TT().state.frame then TT().place() end
   if QN() and QN().state.frame then QN().place() end
   if FN() and FN().state.frame then FN().place() end
+  if SM() and SM().state.frame then SM().place() end
 end
 
 function EditMode.toastId(item)
@@ -999,6 +1009,7 @@ local function after(id)
   if id == "todo" and TT() and TT().state.frame then TT().place() end
   if id == "quick" and QN() and QN().state.frame then QN().place() end
   if id == "fire" and FN() and FN().state.frame then FN().place() end
+  if id == "smoke" and SM() and SM().state.frame then SM().place() end
   updatePanel()
 end
 
@@ -1144,7 +1155,7 @@ function EditMode.init()
   if EditMode.active then return true end
   local lib = EditMode.findLib()
   if not lib then return false end
-  local To, Tr, Q, F = Toast(), TT(), QN(), FN()
+  local To, Tr, Q, F, S = Toast(), TT(), QN(), FN(), SM()
   st.lib = lib
   local ids = {}
   if To then ids[#ids + 1] = "toast" end
@@ -1153,6 +1164,8 @@ function EditMode.init()
   if Tr then ids[#ids + 1] = "todo" end
   if Q then ids[#ids + 1] = "quick" end
   if F then ids[#ids + 1] = "fire" end
+  -- WoW Forever only; the Retail test preview (/chronik feuer rauch) falls back to the default position
+  if S and S.active() then ids[#ids + 1] = "smoke" end
   local ok, err = pcall(function()
     for _, id in ipairs(ids) do register(lib, id) end
   end)
@@ -1186,6 +1199,19 @@ function EditMode.init()
     F.hud = {
       place = function(f)
         local h = holder("fire")
+        if not h then return false end
+        if f:GetParent() ~= h then f:SetParent(h) end
+        f:SetFrameStrata("MEDIUM")
+        f:ClearAllPoints()
+        f:SetPoint("CENTER", h, "CENTER", 0, 0)
+        return true
+      end,
+    }
+  end
+  if S and S.active() then
+    S.hud = {
+      place = function(f)
+        local h = holder("smoke")
         if not h then return false end
         if f:GetParent() ~= h then f:SetParent(h) end
         f:SetFrameStrata("MEDIUM")

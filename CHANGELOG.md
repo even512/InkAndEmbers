@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.7
+
+### New
+- **Smoke signal near a campfire (WoW Forever only):** when you come near a campfire, smoke blows in from the left across the top of the screen and uncovers the words "Campfire nearby", then fades into a small campfire with a rising column of smoke that stays for as long as the fire is close. It stays away in combat, while sitting and on flights, and with reduced motion it only fades. You can switch it off in the settings ("Smoke signal") and move it in Edit Mode; `/chronik feuer rauch` shows a preview.
+
+### Changes
+- **Close the campfire notes:** a small "x" next to the campfire notes ends them for the current rest (tooltip "Close the notes for this rest"). The notes and the embers fade out and nothing new appears until you sit down at a fire again; the round itself (companions, log, smoke signal) keeps running unchanged.
+- **Quest data updated to QuestieDB 1.0.12:** more German names for quests, creatures and items, and a few corrected quest givers and prerequisites, including the "Camping 101" quests. The dungeon quest lists are unchanged by this update.
+
+### Fixes
+- **Chronicle, XP sources:** the note "of which rested bonus" no longer overlaps the last line of the legend; it now sits below it, whatever the number of rows or the language.
+
 ## 1.0.6
 
 ### New

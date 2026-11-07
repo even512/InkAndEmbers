@@ -151,6 +151,8 @@ local TX = ns.Locale.ns("Options", {
   fireDu = "du",
   fireIhr = "Ihr",
   fireMix = "Gemischt",
+  fireSmokeLabel = "Rauchzeichen",
+  fireSmokeTip = "Kommt Ihr in die Nähe eines Lagerfeuers, zieht Rauch von links über den oberen Bildrand herein und legt den Schriftzug „Lagerfeuer in der Nähe“ frei. Danach blendet der Rauch in ein kleines Lagerfeuer mit aufsteigender Rauchsäule über, das dort bleibt, solange das Feuer nah ist. Verschieben lässt es sich im Bearbeitungsmodus.",
   firePlatesLabel = "Plaketten beim Hinsetzen einschalten",
   firePlatesTip = "Schaltet beim Hinsetzen die Namensplaketten freundlicher Spieler ein, damit die Chronik erkennt, wer mit am Feuer sitzt; beim Aufstehen kommt die alte Einstellung zurück.",
   shotsLabel = "Automatische Screenshots",
@@ -261,6 +263,11 @@ end
 local function fireHidden()
   local ms = Journal.MapSpace
   return ms ~= nil and type(ms.fireTalkHidden) == "function" and ms.fireTalkHidden() == true
+end
+
+local function smokeHidden()
+  local S = Journal.Smoke
+  return S ~= nil and S.active() == false
 end
 
 function Options.isHidden(entry)
@@ -566,6 +573,10 @@ Options.GROUPS = {
         end,
         get = function() local CT = Journal.CampfireTalk return CT and CT.settings().address or "du" end,
         set = function(v) local CT = Journal.CampfireTalk if CT then call(CT.setAddress, v) end end },
+      { kind = "check", key = "fireSmoke", label = tx("fireSmokeLabel"), default = true, hidden = smokeHidden,
+        tip = tx("fireSmokeTip"),
+        get = function() local S = Journal.Smoke return not S or S.settings().enabled end,
+        set = function(v) local S = Journal.Smoke if S then call(S.setEnabled, v) end end },
       { kind = "check", key = "firePlates", label = tx("firePlatesLabel"), default = true,
         tip = tx("firePlatesTip"),
         get = function() local C = ns.Campfire return not C or C.settings().showFriendPlates ~= false end,

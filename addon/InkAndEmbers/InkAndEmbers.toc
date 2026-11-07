@@ -130,6 +130,7 @@ journal\TodoMarks.lua
 journal\QuickNote.lua
 journal\FireNoteAreas.lua
 journal\FireNotes.lua
+journal\Smoke.lua
 #@do-not-package@
 # Development only: the campfire simulation window. The packager removes this block (.pkgmeta ignores the file too);
 # the addon works without it (Core.lua: /chronik sim exists only if journal\SimPanel.lua was loaded).

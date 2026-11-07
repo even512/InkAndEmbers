@@ -92,6 +92,11 @@ Theme.TEX.mapCurrent = MEDIA .. "MapCurrent"
 -- Quest giver mark "!" (Media/QuestMark.tga 64 x 64), untinted; locked = desaturated
 Theme.TEX.questMark = MEDIA .. "QuestMark"
 for i = 1, 5 do Theme.TEX["fireNote" .. i] = MEDIA .. "FireNote" .. i end
+-- Smoke thread sprite (journal/Smoke.lua): colours baked in, alpha set per sprite
+Theme.TEX.smokeThread = MEDIA .. "SmokeThread"
+-- Campfire of the smoke signal: base (static) and eight flame phases, 4 x 2 cells
+Theme.TEX.campfireBase = MEDIA .. "CampfireBase"
+Theme.TEX.campfireFlames = MEDIA .. "CampfireFlames"
 Theme.HAS_MAP_ICONS = true
 Theme.HAS_MAP_CURRENT = true
 Theme.MAP_ICONS = {

@@ -323,6 +323,8 @@ L.add("enUS", "Options", {
   fireDu = "du (informal)",
   fireIhr = "Ihr (formal)",
   fireMix = "Mixed",
+  fireSmokeLabel = "Smoke signal",
+  fireSmokeTip = "When you come near a campfire, smoke blows in from the left across the top of the screen and uncovers the words \"Campfire nearby\". It then fades into a small campfire with a rising column of smoke that stays there for as long as the fire is close. You can move it in Edit Mode.",
   firePlatesLabel = "Turn on nameplates when sitting down",
   firePlatesTip = "Turns on friendly player nameplates when you sit down so the chronicle can tell who shares the fire; your previous setting returns when you stand up.",
   shotsLabel = "Automatic screenshots",
@@ -720,6 +722,14 @@ L.add("enUS", "TodoTracker", {
   dockedSlash = "Your to-dos are docked to the quest tracker. To undock: Options -> AddOns -> Ink & Embers -> \"Dock to-dos to the quest tracker\".",
 })
 
+L.add("enUS", "Smoke", {
+  label = "Campfire nearby",
+  previewOn = "Campfire: smoke signal preview.",
+  previewCombat = "Campfire: no preview during combat.",
+  previewEdit = "Campfire: Edit Mode is already showing the smoke signal.",
+  previewFail = "Campfire: the smoke signal cannot be shown right now.",
+})
+
 L.add("enUS", "FireNotes", {
   tipTitle = "Campfire note",
   tipHow = "Left-click: say · Right-click: dismiss",
@@ -740,6 +750,7 @@ L.add("enUS", "FireNotes", {
   emberTitle = "Embers",
   emberHow = "Click: draw a new conversation note from the embers",
   emberEmpty = "Campfire: No new note in the embers right now.",
+  closeTip = "Close the notes for this rest",
   samples = {
     "A fire in Durotar – the day couldn't have ended any better.",
     "Where are you coming from, Kuno?",
@@ -846,7 +857,7 @@ L.add("enUS", "Begleiter", {
 
 L.add("enUS", "EditMode", {
   name = { toast = "Chronicle: Notifications", slip = "Chronicle: Welcome greeting", card = "Chronicle: Campfire recap",
-    todo = "Chronicle: Mini to-do note", quick = "Chronicle: Quick notes", fire = "Chronicle: Campfire notes" },
+    todo = "Chronicle: Mini to-do note", quick = "Chronicle: Quick notes", fire = "Chronicle: Campfire notes", smoke = "Chronicle: Smoke signal" },
   scale = "Size",
   scaleDesc = "Size of the element, 50 to 150%.",
   alpha = "Opacity",
@@ -885,7 +896,7 @@ L.add("enUS", "EditMode", {
   },
   panelTitle = "Ink & Embers",
   panelHint = "Show in Edit Mode",
-  panelNames = { toast = "Notifications", slip = "Welcome greeting", card = "Campfire recap", todo = "Mini to-do note", quick = "Quick notes", fire = "Campfire notes" },
+  panelNames = { toast = "Notifications", slip = "Welcome greeting", card = "Campfire recap", todo = "Mini to-do note", quick = "Quick notes", fire = "Campfire notes", smoke = "Smoke signal" },
   dirty = "Unsaved changes",
   clean = "Everything saved",
   save = "Save",

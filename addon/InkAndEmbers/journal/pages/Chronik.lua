@@ -56,6 +56,9 @@ Page.RING_THICK = 4 -- stroke width at 60 levels (Forever); more levels (Retail)
 local FLOW_H = 100
 local DIARY_ROWS, DIARY_ROW_H = 6, G.line.row   -- 6 rows (mouse wheel scrolls): room for XP + note above the quill
 local BAR_W = 150   -- XP sources: the bar ends before the forecast note (grid 402 wide)
+-- XP sources: legend rows start 38 px below the block top, 14 px apart; the note sits directly below the last visible row
+-- and may reach down to SRC_NOTE_BOTTOM (above the quill and ink, from y 593)
+local SRC_LEG_Y, SRC_LEG_STEP, SRC_NOTE_BOTTOM = 38, 14, 590
 
 -- locale scope "p.Chronik" (English in locales/enUS_pages.lua), read when drawing
 Page.TEXT = ns.Locale.ns("p.Chronik", {
@@ -485,8 +488,9 @@ local function buildRight(self, right)
     u.legends[i] = { swatch = sw, text = lt }
   end
   local sn = font(right, "label", SZ.xs, "sepia", "LEFT")
-  sn:SetPoint("TOPLEFT", right, "TOPLEFT", bx, y0 - 84)
+  sn:SetPoint("TOPLEFT", right, "TOPLEFT", bx, y0 - SRC_LEG_Y - #Chronik.SOURCES * SRC_LEG_STEP) -- placed again per legend length (drawSources)
   sn:SetWidth(SR.x + SR.w - 10 - bx)
+  u.srcY0 = y0
   sn:SetJustifyV("TOP")
   u.srcNote = sn
   -- explanation of rested bonus/jump in the tooltip above the short line
@@ -730,6 +734,20 @@ local function drawSources(self, src)
   if src.restedText then notes[#notes + 1] = src.restedText end
   if src.unclearText then notes[#notes + 1] = src.unclearText end
   set(u.srcNote, table.concat(notes, "\n"))
+  -- the note starts below the last visible legend row (or the two-line empty text), so it never overlaps the legend
+  -- whatever the number of rows or the language; the line count is capped to the room left above the quill
+  local y0 = u.srcY0
+  if y0 then
+    local lineH = Page.SEAL.lineH
+    local top = empty and (20 + 2 * lineH + 4) or (SRC_LEG_Y + #src.parts * SRC_LEG_STEP)
+    local lines = math.max(1, floor((SRC_NOTE_BOTTOM + y0 - top) / lineH)) -- y0 is negative: the block top is -y0
+    u.srcNote:ClearAllPoints()
+    u.srcNote:SetPoint("TOPLEFT", self.right, "TOPLEFT", Theme.gridX("R", 4), y0 - top)
+    if u.srcNote.SetMaxLines then u.srcNote:SetMaxLines(lines) end
+    u.srcNoteHit:ClearAllPoints()
+    u.srcNoteHit:SetPoint("TOPLEFT", u.srcNote, "TOPLEFT", 0, 2)
+    u.srcNoteHit:SetHeight(lines * lineH + 2)
+  end
 end
 
 -- sub-views: diary and companions. Entry via the sub-bookmarks (Page.subs), Esc leads back to the overview
