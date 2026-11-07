@@ -84,6 +84,7 @@ local T = ns.Locale.ns("Core", {
   labHand = "Handschrift",
   labTodo = "To-Do-Liste",
   labOpenQuests = "Offene Quests",
+  labDungeonQuests = "Dungeon-Quests",
   labMarks = "Namensplaketten-Markierung",
   labMeter = "Schadensmesser",
   labFire = "Lagerfeuer",
@@ -1053,6 +1054,12 @@ function Core.runDiag()
     if type(openQuests.retry) == "function" then pcall(openQuests.retry) end
     local ok, line = pcall(openQuests.diagLine)
     Core.print(ok and tostring(line) or T("checkFailed", T.labOpenQuests, tostring(line)))
+  end
+  -- dungeon quests (same data add-on, table Dungeons.lua): counts and missing quest IDs
+  local dungeonQuests = ns.Journal and ns.Journal.DungeonQuests
+  if dungeonQuests and type(dungeonQuests.diagLine) == "function" then
+    local ok, line = pcall(dungeonQuests.diagLine)
+    Core.print(ok and tostring(line) or T("checkFailed", T.labDungeonQuests, tostring(line)))
   end
   -- installed QuestieDB add-on (version and contract from its TOC only) next to the data extract; nil in Retail = no line
   if openQuests and type(openQuests.qdbDiagLine) == "function" then

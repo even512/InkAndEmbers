@@ -126,7 +126,7 @@ git-ignored folder `data-capture/questiedb-release`. Then it runs `scripts/build
 (`--help` lists the options). Accepted residual risk: `release.json` and the ZIP come from the same host (GitHub), so the
 checksum protects against damage and a swapped file, not against a compromised release. To close that, pin a version and the
 checksum you got from another trusted source: `node scripts/fetch-questiedb-release.mjs --tag vX.Y.Z --sha256 <64 hex digits>`
-(refused if the release's archive hash differs). Offline, use `node scripts/fetch-questiedb-release.mjs --from-zip <QuestieDB-Forever.zip> --release-json <release.json>`.
+(refused if the release's archive hash differs). Offline, use `node scripts/fetch-questiedb-release.mjs --from-zip <QuestieDB-<version>-Forever.zip> --release-json <release.json>`.
 The two generators read local files only and write only into the target folder. The output is sorted and has no
 timestamps, so the same inputs give identical files. The inputs:
 

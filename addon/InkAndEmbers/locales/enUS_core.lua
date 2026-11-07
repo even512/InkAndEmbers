@@ -75,6 +75,7 @@ L.add("enUS", "Core", {
   labHand = "Handwriting",
   labTodo = "To-do list",
   labOpenQuests = "Open Quests",
+  labDungeonQuests = "Dungeon Quests",
   labMarks = "Nameplate marker",
   labMeter = "Damage Meter",
   labFire = "Campfire",

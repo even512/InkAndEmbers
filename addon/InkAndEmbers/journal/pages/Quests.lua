@@ -22,6 +22,8 @@ local T = ns.Locale.ns("p.Quests", {
   subHistoryTip = "Abgeschlossene Quests mit Questtext, Lebenslauf und Belohnung",
   subOpen = "Offen",
   subOpenTip = "Quests, die Ihr jetzt annehmen könnt, mit Karte der Questgeber (Daten: QuestieDB)",
+  subDungeons = "Dungeons",
+  subDungeonsTip = "Alle Dungeon-Quests und ihre Questketten (Daten: QuestieDB)",
   subTrain = "Lehrplan",
   subTrainTip = "Was Euch der Klassenlehrer ab welcher Stufe beibringt (nur WoW Forever)",
   pageOf = "Seite %d von %d", prevPage = "Vorige Seite", nextPage = "Nächste Seite", level = "Stufe %s",
@@ -935,6 +937,14 @@ function Quests:ClosePopup()
 end
 
 function Quests:ToggleTable()
+  -- came from the Dungeons page ("Questtext lesen"): "Zurück" leads back there once, then everything is as usual
+  if self.returnTo and not self.tableOpen then
+    local to = self.returnTo
+    self.returnTo, self.tableOpen = nil, true
+    self:ShowSub(to)
+    Pages.subChanged("quests")
+    return
+  end
   self.tableOpen = not self.tableOpen
   self.drop = nil
   self:Render()
@@ -1404,6 +1414,7 @@ function Quests.Refresh(self, data)
   self:Render()
   if self.openView and self.openOpen then self.openView:Refresh() end
   if self.trainView and self.trainOpen then self.trainView:Refresh() end
+  if self.dungeonView and self.dungeonOpen then self.dungeonView:Refresh() end
 end
 
 -- sub-bookmarks (contract journal/Pages.lua): history · open (open quests, pages/QuestsOffen.lua). Labels are read late
@@ -1417,16 +1428,38 @@ end
 Quests.subs = {
   subTab("historie", "subHistory", "subHistoryTip"),
   subTab("offen", "subOpen", "subOpenTip"),
+  subTab("dungeons", "subDungeons", "subDungeonsTip"),
   subTab("lehrplan", "subTrain", "subTrainTip"),
 }
 
 function Quests:GetSub()
   if self.trainOpen then return "lehrplan" end
+  if self.dungeonOpen then return "dungeons" end
   return self.openOpen and "offen" or "historie"
 end
 
 function Quests:ShowSub(key)
   if key == self:GetSub() then return end
+  self.returnTo = nil
+  -- dungeon quests (pages/QuestsDungeons.lua): its own view over the table, like "Offen"
+  if key == "dungeons" then
+    local V = Journal.DungeonQuestsView
+    if not (V and self.mainL) then return end
+    if self.openView and self.openOpen then self.openView:Close() end
+    self.openOpen = false
+    if self.trainView and self.trainOpen then self.trainView:Close() end
+    self.trainOpen = false
+    if not self.dungeonView then self.dungeonView = V.new(self, self.holderL, self.holderR) end
+    self.drop = nil
+    if self.ui and self.ui.pop then self.ui.pop:Hide() end
+    self.mainL:Hide()
+    self.mainR:Hide()
+    self.dungeonOpen = true
+    self.dungeonView:Open()
+    return
+  end
+  if self.dungeonView and self.dungeonOpen then self.dungeonView:Close() end
+  self.dungeonOpen = false
   -- trainer plan (pages/QuestsLehrplan.lua): its own view over the table, like "Offen"
   if key == "lehrplan" then
     local V = Journal.LehrplanView
@@ -1465,6 +1498,17 @@ function Quests:ShowSub(key)
   end
 end
 
+-- "Questtext lesen" of the Dungeons page: the quest text in the history; "Zurück" leads back to the Dungeons page once
+function Quests:OpenFromDungeons(id)
+  local q = self.book and self.book.byId[id]
+  if not (q and (q.state == "done" or q.state == "abandoned")) then return false end
+  self:ShowSub("historie")
+  Pages.subChanged("quests")
+  self:Select(id, true)
+  self.returnTo = "dungeons"
+  return true
+end
+
 -- on leaving: tooltips off, selection lists closed, search box without focus; the next open starts with the table again
 -- (filter and sort stay)
 function Quests.OnHide(self)
@@ -1478,6 +1522,8 @@ function Quests.OnHide(self)
     self.openView.ui.pins:ReleaseAll()
     self.openView.pinData = nil
   end
+  if self.dungeonView then self.dungeonView:OnPageHide() end
+  self.returnTo = nil
   self.tableOpen, self.drop, self.popKey = true, nil, nil
   if ui.pop then ui.pop:Hide() end
   if ui.search then ui.search:ClearFocus() end
@@ -1503,4 +1549,11 @@ Pages.register("quests", Quests)
 Pages.hideSub("quests", "lehrplan", function()
   local L = Journal.Lehrplan
   return L ~= nil and type(L.active) == "function" and L.active() == false
+end)
+
+-- Retail: the dungeon quests exist only in WoW Forever (no bookmark, nothing is loaded); the test mode keeps them like the model
+Pages.hideSub("quests", "dungeons", function()
+  local OQ = Journal.OpenQuests
+  if not (OQ and OQ.retailClient()) then return false end
+  return not (OQ.test() ~= nil or OQ.ALLOW_RETAIL)
 end)

@@ -34,6 +34,13 @@ import { decodePng, encodePng, KEEPOUT, renderSpreadRaw } from "./render-media.m
 
 export const TABS = ["reise", "chronik", "kampf", "quests", "schaetze", "momente", "notizen"];
 const TAB_LABEL = { reise: "Reise", chronik: "Chronik", kampf: "Kampf", quests: "Quests", schaetze: "Schätze", momente: "Momente", notizen: "Notizen" };
+const DUNGEONS_CLOSE = `
+  local P = NS.Journal.QuestsPage
+  local DV = P.dungeonView
+  DV.level, DV.mode, DV.all, DV.key, DV.sel, DV.chains, DV.scrollDg = 1, "quests", false, nil, nil, {}, nil
+  P:ShowSub("historie")
+  C_QuestLog.IsQuestFlaggedCompleted, C_QuestLog.GetNumQuestLogEntries = DV_SAVED.flagged, DV_SAVED.n
+  NS.Journal.OpenQuests.invalidate()`;
 // Unteransichten: [reiter, name, Lua zum Oeffnen, Lua zum Schliessen]
 export const SUBVIEWS = [
   ["reise", "gesamt", "NS.Journal.Frame.selectTotal()", "NS.Journal.Frame.selectTotal()"],
@@ -78,6 +85,14 @@ export const SUBVIEWS = [
   ["quests", "offen-ostkoenigreiche", () => OPEN_QUESTS_LUA("all", "OV:SetContinent(1415)"), 'NS.Journal.QuestsPage:ShowSub("historie")'],
   ["quests", "offen-durotar", () => OPEN_QUESTS_LUA(1411), 'NS.Journal.QuestsPage:ShowSub("historie")'],
   ["quests", "offen-unterstadt", () => OPEN_QUESTS_LUA(1458), 'NS.Journal.QuestsPage:ShowSub("historie")'],
+  // Dungeons (Unter-Lesezeichen "Dungeons", nur Forever): echtes Datenaddon, Untoter Paladin, Fortschritt aus den Stufen (DUNGEONS_LUA)
+  ["quests", "dungeons", () => DUNGEONS_LUA(24), DUNGEONS_CLOSE],
+  ["quests", "dungeons-karte", () => DUNGEONS_LUA(24, 'DV:SetMode("map")'), DUNGEONS_CLOSE],
+  ["quests", "dungeons-seite", () => DUNGEONS_LUA(24, 'DV:OpenDungeon("721")'), DUNGEONS_CLOSE],
+  ["quests", "dungeons-scholomance", () => DUNGEONS_LUA(58, 'DV:SelectDungeon("2057")'), DUNGEONS_CLOSE],
+  // 106er-Kette (Fraktionen zusammen, "Alle"): zugeklappt mit Deckel, dann die ganze Kette nach einem Klick auf den Deckel
+  ["quests", "dungeons-brs", () => DUNGEONS_LUA(58, 'DV:SetAll(true) DV:OpenDungeon("1583") DV_LONG()'), DUNGEONS_CLOSE],
+  ["quests", "dungeons-brs-offen", () => DUNGEONS_LUA(58, 'DV:SetAll(true) DV:OpenDungeon("1583") DV_LONG() local it = DV_MORE() if it then DV:OnItem(it) end'), DUNGEONS_CLOSE],
   // Lehrplan (Unter-Lesezeichen "Lehrplan", nur Forever): Untoter Paladin Stufe 20, ein Teil gelernt, ein Lehrer bekannt, Talentpunkt frei
   ["quests", "lehrplan", () => LEHRPLAN_LUA, 'NS.Journal.QuestsPage:ShowSub("historie") LEHRPLAN_RESTORE()'],
   ["schaetze", "funde", "NS.Journal.SchaetzePage:OpenFunde()", "NS.Journal.SchaetzePage:CloseFunde()"],
@@ -88,18 +103,18 @@ export const SUBVIEWS = [
 ];
 // Offene Quests: das echte Datenaddon (wird erst beim Oeffnen der Rubrik gelesen), Kartenkunst als Platzhalter-Kachel
 const QUEST_DATA_DIR = path.join(ROOT, "addon", "InkAndEmbers_QuestData");
-export const OPEN_QUESTS_LUA = (zone, after = "") => `
+const QUEST_DATA_LUA = () => `
   if not REAL_QUEST_DATA then
     REAL_QUEST_DATA = function()
 ${readFileSync(path.join(QUEST_DATA_DIR, "Quests.lua"), "utf8")}
 ${readFileSync(path.join(QUEST_DATA_DIR, "Givers.lua"), "utf8")}
 ${readFileSync(path.join(QUEST_DATA_DIR, "Names.lua"), "utf8")}
 ${readFileSync(path.join(QUEST_DATA_DIR, "Overlays.lua"), "utf8")}
+${readFileSync(path.join(QUEST_DATA_DIR, "Dungeons.lua"), "utf8")}
     end
     C_AddOns = C_AddOns or {}
     C_AddOns.LoadAddOn = function() REAL_QUEST_DATA() return true end
   end
-  H.units.player.level = 8; H.units.player.raceFile = "Scourge"; H.units.player.classFile = "PALADIN"; H.units.player.faction = "Horde"
   local V = NS.Journal.View
   V.zoneArt = function(id) return { w = 1002, h = 668, tileW = 1002, tileH = 668, files = { 100 + id } } end
   V.mapArt = V.zoneArt
@@ -107,7 +122,9 @@ ${readFileSync(path.join(QUEST_DATA_DIR, "Overlays.lua"), "utf8")}
   NS.Journal.Geo.setProvider({ rect = function(id)
     local x, y = ((id * 37) % 70) / 100 + 0.1, ((id * 53) % 70) / 100 + 0.1
     return x, x + 0.08, y, y + 0.08
-  end })
+  end })`;
+export const OPEN_QUESTS_LUA = (zone, after = "") => `${QUEST_DATA_LUA()}
+  H.units.player.level = 8; H.units.player.raceFile = "Scourge"; H.units.player.classFile = "PALADIN"; H.units.player.faction = "Horde"
   NS.Journal.Pages.setSetting("openZone", ${JSON.stringify(zone)})
   NS.Journal.Pages.setSetting("openLocked", true)
   local P = NS.Journal.QuestsPage
@@ -116,6 +133,27 @@ ${readFileSync(path.join(QUEST_DATA_DIR, "Overlays.lua"), "utf8")}
   OV:SetZone(${JSON.stringify(zone)})
   ${after}
   if OV.items[2] then OV:SelectQuest(OV.items[2].id, true) end`;
+
+// Dungeons-Vorschau: Untoter Paladin der genannten Stufe; erledigt ist, was deutlich unter seiner Stufe liegt (jede vierte Quest nicht),
+// im Log zwei Quests seiner Stufe. Der Geo-Schein von QUEST_DATA_LUA legt die Zonen auf den Kontinent; zu welchem Kontinent eine Zone
+// gehoert, kommt aus MapSpace.
+export const DUNGEONS_LUA = (level, after = "") => `${QUEST_DATA_LUA()}
+  H.units.player.level = ${level}; H.units.player.raceFile = "Scourge"; H.units.player.classFile = "PALADIN"; H.units.player.faction = "Horde"
+  local OQ = NS.Journal.OpenQuests
+  DV_SAVED = DV_SAVED or { flagged = C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted, n = C_QuestLog and C_QuestLog.GetNumQuestLogEntries, info = C_QuestLog and C_QuestLog.GetInfo }
+  C_QuestLog = C_QuestLog or {}
+  C_QuestLog.IsQuestFlaggedCompleted = function(id)
+    local r = OQ.record(id)
+    return r ~= nil and (r.level or 99) <= ${level} - 6 and id % 4 ~= 0
+  end
+  C_QuestLog.GetNumQuestLogEntries = function() return 0, 0 end
+  OQ.invalidate()
+  local P = NS.Journal.QuestsPage
+  P:ShowSub("dungeons")
+  DV = P.dungeonView
+  function DV_MORE() for _, it in ipairs(DV.items) do if it.kind == "more" then return it end end end
+  function DV_LONG() for _, it in ipairs(DV.items) do if it.kind == "more" then DV.ui.list:SetOffset(0) return end end end
+  ${after}`;
 
 // Lehrplan-Vorschau: Zauberbuch-Attrappe (Namen aus Zauber-IDs), ein gelernter Teil bis Stufe 12, ein bekannter Lehrer, 1 Talentpunkt frei
 export const LEHRPLAN_LUA = `

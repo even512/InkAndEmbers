@@ -21,6 +21,7 @@
 --   money         { source[src] = { gain, loss, n }, level[level] = { gain, loss, out[src] },
 --                 hold[level] = { top = highest balance in the level (incl. the balance carried in), last = balance at its last
 --                 GD line }, first / last / peak = { t, balance } }
+--   afkLevel[level] = away seconds (AF lines)
 --   skills[name] = { rank, max, t }     ah[action] = { n, deposit, price }     restT, restInnT, restFireT = rest times
 --                                       (RA); restKinds = { inn, fire }
 --   questObj[questID]  flat array, Index.QOBJ_STRIDE slots per objective from (idx-1)*STRIDE: have, need (0 = unknown),
@@ -195,6 +196,7 @@ local function newState(db, guid, char)
     killSeries = { size = Index.KILL_BUCKET, b = {}, c = {} },
     questObj = {}, questObjN = 0,
     restT = {}, restInnT = {}, restFireT = {}, restKinds = { inn = 0, fire = 0 },
+    afkLevel = {}, -- away seconds per level (AF lines; the level is the one at the end of the phase)
     richN = 0, -- balance steps reached (Index.RICH_STEPS)
   }
 end
@@ -572,6 +574,14 @@ H.RA = function(S, t)
     local kt = kind == "inn" and S.restInnT or S.restFireT
     kt[#kt + 1] = t
   end
+end
+
+-- away phase (AF): only the seconds per level (the forecast leaves away time out of the pace); bounded by 200 levels
+H.AF = function(S)
+  local secs, lv = toNum(SF[1]), toNum(SF[2])
+  if not secs or secs <= 0 or not lv or lv < 1 or lv > 200 then return end
+  lv = floor(lv)
+  S.afkLevel[lv] = (S.afkLevel[lv] or 0) + secs
 end
 
 -- profession: best known value per name. Only lines with a maximum (max) are professions; weapon skills have none.

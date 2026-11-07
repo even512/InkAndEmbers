@@ -10,7 +10,7 @@
 //   --soft         Fehler/offline ist kein Fehler (Exit 0); bisherige Daten bleiben
 //   --force        auch laden, wenn die Version unveraendert ist, und die Plausibilitaetspruefung uebergehen
 //   --dry-run      laden und pruefen, aber nichts schreiben
-//   --from-zip     ein bereits geladenes QuestieDB-Forever.zip (lokale Datei) statt des Downloads (offline/Test);
+//   --from-zip     ein bereits geladenes QuestieDB-Forever.zip bzw. QuestieDB-<Version>-Forever.zip (lokale Datei) statt des Downloads (offline/Test);
 //                  mit --release-json <Datei> wird es gegen die Pruefsumme der release.json geprueft, sonst nur mit Warnung
 //
 // Ablauf: release.json des Releases laden und pruefen (Version = Tag, Contract-Bereich, SHA-256 und Groesse von
@@ -23,6 +23,8 @@
 //   data-capture/questiedb-release/Interface/AddOns/QuestieDB/QuestieDB_Forever.toc   (gleiche Pfad-Endung wie im Spielordner)
 //   data-capture/questiedb-release/Interface/AddOns/QuestieDB/src/corrections/...   (die fest benannten Korrektur-Lua-Dateien, byte-gleich aus dem
 //       Archiv; sie werden von scripts/build-quest-data.mjs nur GEPARST (Horde UND Allianz) und passen so immer zur geladenen TOC)
+//   data-capture/questiedb-release/Interface/AddOns/QuestieDB/support/Forever/Zones/dungeons.lua   (Dungeon-Gebiete mit Eingaengen, byte-gleich aus dem
+//       Archiv; scripts/build-quest-data.mjs liest sie nur GEPARST fuer Dungeons.lua; fehlt sie im Archiv, ist das nur ein Befund)
 //   data-capture/questiedb-release/stamp.json   (Version, Kanal, Contract-Bereich, Commit, Groessen, SHA-256 von Archiv und TOC)
 //   data-capture/questiedb-release/fixes.json   (ausgewertete Horde-/fraktionsneutrale Laufzeitkorrekturen, an die TOC gebunden)
 //
@@ -46,7 +48,12 @@ import { readZipEntries, ZIP_LIMITS, ZipError } from "./lib/zip-reader.mjs";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const REPO = "Questie/QuestieDB";
 export const API_URL = `https://api.github.com/repos/${REPO}/releases?per_page=30`;
+/** Alte Namensform des Forever-Archivs (bis v1.0.10); ab v1.0.11 heisst es QuestieDB-<Version>-Forever.zip. */
 export const ASSET_ZIP = "QuestieDB-Forever.zip";
+/** Neue Namensform (Version im Namen), als Muster fuer die Download-Adresse; die Version selbst kommt aus der geprueften release.json. */
+export const ASSET_ZIP_VERSIONED_RE = /^QuestieDB-[0-9A-Za-z.+_-]{1,40}-Forever\.zip$/;
+/** Erlaubte Namen des Forever-Archivs eines Releases mit dieser Version: neue Form zuerst, alte Form als Rueckfall. */
+export const zipNames = (version) => [`QuestieDB-${version}-Forever.zip`, ASSET_ZIP];
 export const ASSET_JSON = "release.json";
 /** Erlaubte Hosts (exakt). github.com leitet auf einen Asset-Host um; welcher, hat GitHub schon gewechselt. */
 export const ALLOWED_HOSTS = Object.freeze(["api.github.com", "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"]);
@@ -57,6 +64,9 @@ export const MAX_ZIP_BYTES = ZIP_LIMITS.maxArchiveBytes;
 /** TOC 1.0.10: rund 16 MB entpackt; 32 MB = Lese-Limit. */
 export const MAX_TOC_BYTES = 32 * 1024 * 1024;
 export const MAX_JSON_BYTES = 2 * 1024 * 1024;
+/** Eintrag mit den Dungeon-Gebieten und -Eingaengen (Archiv 1.0.11: 13 KB; nur geparst, nie ausgefuehrt). */
+export const DUNGEONS_ENTRY = "QuestieDB/support/Forever/Zones/dungeons.lua";
+export const MAX_DUNGEONS_BYTES = 256 * 1024;
 export const REQUEST_TIMEOUT_MS = 120_000;
 /** Gesamtfrist ueber alle Abrufe inkl. Umleitungen, Wartezeit und Wiederholung. */
 export const TOTAL_DEADLINE_MS = 180_000;
@@ -154,7 +164,7 @@ export function checkUrl(value) {
 /** Download-Adresse eines Release-Assets, aus dem validierten Tag gebaut ("preview" nur mit ausdruecklichem Wunsch). */
 export function assetUrl(tag, name) {
   if (tag !== "preview" && !TAG_RE.test(tag)) throw new FetchError("Ungueltiger Release-Tag.");
-  if (name !== ASSET_ZIP && name !== ASSET_JSON) throw new FetchError("Ungueltiger Asset-Name.");
+  if (name !== ASSET_ZIP && name !== ASSET_JSON && !(typeof name === "string" && ASSET_ZIP_VERSIONED_RE.test(name))) throw new FetchError("Ungueltiger Asset-Name.");
   return `https://github.com/${REPO}/releases/download/${tag}/${name}`;
 }
 
@@ -288,8 +298,8 @@ const isObj = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
 const isInt = (v, min, max) => Number.isSafeInteger(v) && v >= min && v <= max;
 
 /**
- * release.json pruefen (Schema, Version = Tag, Contract-Bereich, Eintrag fuer QuestieDB-Forever.zip). Liefert
- * { version, contractVersion, minSupportedContract, producerCommit, sha256, bytes }. `tag` null = Tag nicht pruefen (--from-zip).
+ * release.json pruefen (Schema, Version = Tag, Contract-Bereich, Eintrag fuer das Forever-Archiv, alte oder neue Namensform). Liefert
+ * { version, contractVersion, minSupportedContract, producerCommit, file, sha256, bytes } (file = Name des Archivs, neue oder alte Form). `tag` null = Tag nicht pruefen (--from-zip).
  */
 export function checkReleaseJson(json, { tag = null, preview = false } = {}) {
   const q = isObj(json) ? json.questiedb : null;
@@ -303,13 +313,15 @@ export function checkReleaseJson(json, { tag = null, preview = false } = {}) {
   if (q.minSupportedContract > KNOWN_CONTRACT_VERSION) {
     throw new FetchError(`Release unterstuetzt erst Contract ${q.minSupportedContract} aufwaerts; dieser Build kennt Contract 1 bis ${KNOWN_CONTRACT_VERSION}. Abbruch.`);
   }
-  const arts = Array.isArray(q.artifacts) ? q.artifacts.filter((a) => isObj(a) && a.file === ASSET_ZIP) : [];
-  if (arts.length !== 1) throw new FetchError(`release.json: Eintrag fuer ${ASSET_ZIP} fehlt oder ist mehrfach vorhanden.`);
+  // Forever-Archiv: neue Namensform (QuestieDB-<Version>-Forever.zip) oder alte (QuestieDB-Forever.zip); genau ein Eintrag insgesamt
+  const names = zipNames(q.version);
+  const arts = Array.isArray(q.artifacts) ? q.artifacts.filter((a) => isObj(a) && typeof a.file === "string" && names.includes(a.file)) : [];
+  if (arts.length !== 1) throw new FetchError(`release.json: Eintrag fuer ${names.join(" bzw. ")} fehlt oder ist mehrfach vorhanden.`);
   const art = arts[0];
   if (typeof art.sha256 !== "string" || !SHA_RE.test(art.sha256)) throw new FetchError("release.json: SHA-256 fehlt oder ist ungueltig.");
   if (!isInt(art.bytes, 1, MAX_ZIP_BYTES)) throw new FetchError(`release.json: Groesse fehlt oder ist unzulaessig (erlaubt bis ${MAX_ZIP_BYTES} Byte).`);
   const commit = typeof q.producerCommit === "string" && COMMIT_RE.test(q.producerCommit) ? q.producerCommit : "";
-  return { version: q.version, contractVersion: q.contractVersion, minSupportedContract: q.minSupportedContract, producerCommit: commit, sha256: art.sha256, bytes: art.bytes };
+  return { version: q.version, contractVersion: q.contractVersion, minSupportedContract: q.minSupportedContract, producerCommit: commit, file: art.file, sha256: art.sha256, bytes: art.bytes };
 }
 
 /** Archiv-Bytes gegen die Angaben der release.json pruefen (Groesse und SHA-256, vor jedem Entpacken). */
@@ -401,6 +413,22 @@ export function extractFixes(zipBytes) {
   return { ...parsed, files: meta, buffers: files, findings: [...findings, ...parsed.findings] };
 }
 
+/**
+ * dungeons.lua (fest benannter Eintrag) im Speicher entpacken. Fehlt sie oder ist sie nicht lesbar, ist das nur ein Befund (null),
+ * nie ein Abbruch: die Quest-Daten bleiben nutzbar, nur Dungeons.lua faellt dann leer aus. Liefert { data: Buffer } oder { data: null, reason }.
+ */
+export function extractDungeons(zipBytes) {
+  const limits = { ...ZIP_LIMITS, maxCompressedBytes: MAX_DUNGEONS_BYTES, maxUncompressedBytes: MAX_DUNGEONS_BYTES, maxTotalUncompressedBytes: MAX_DUNGEONS_BYTES };
+  try {
+    const got = readZipEntries(zipBytes, [DUNGEONS_ENTRY], limits).get(DUNGEONS_ENTRY);
+    if (!got || got.data.length === 0) return { data: null, reason: "leer" };
+    return { data: got.data };
+  } catch (err) {
+    if (!(err instanceof ZipError)) throw err;
+    return { data: null, reason: err.message };
+  }
+}
+
 // ---------------------------------------------------------------- Stempel und Ablage
 
 const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
@@ -409,7 +437,10 @@ const mb = (bytes) => (bytes / (1024 * 1024)).toFixed(1).replace(".", ",");
 /** Pfade fuer einen Projektordner (Tests: Wegwerf-Ordner). */
 export function releasePaths(root = ROOT) {
   const dir = path.join(root, "data-capture", "questiedb-release");
-  return { dir, tocFile: path.join(dir, ...TOC_SEGMENTS), stampFile: path.join(dir, "stamp.json"), fixesFile: path.join(dir, "fixes.json") };
+  return {
+    dir, tocFile: path.join(dir, ...TOC_SEGMENTS), stampFile: path.join(dir, "stamp.json"), fixesFile: path.join(dir, "fixes.json"),
+    dungeonsFile: path.join(dir, "Interface", "AddOns", ...DUNGEONS_ENTRY.split("/")),
+  };
 }
 
 /** Stempel lesen und Form pruefen; null wenn fehlend/ungueltig. */
@@ -547,12 +578,15 @@ export async function main(argv, opts = {}) {
       if (args.sha256 && rel.sha256 !== args.sha256) throw new FetchError("SHA-256 laut release.json passt nicht zum angegebenen Pin (--sha256); abgelehnt.");
       if (before && !args.force && before.version === rel.version && before.zipSha256 === rel.sha256 && before.channel === (args.preview ? "preview" : "stable")) {
         const fixesOk = await readFile(paths.fixesFile, "utf8").then((t) => JSON.parse(t)?.tocSha256 === before.tocSha256, () => false);
-        if (fixesOk) {
+        // ein aelterer Abruf (vor Dungeon-Quests) kennt dungeons.lua noch nicht (Stempel ohne dungeonsSha256): dann trotz gleicher Version nachladen;
+        // "" = das Archiv hatte keine dungeons.lua (kein Grund zum erneuten Laden)
+        const dungeonsOk = typeof before.dungeonsSha256 === "string" && (before.dungeonsSha256 === "" || (await lstat(paths.dungeonsFile).then((st) => st.isFile(), () => false)));
+        if (fixesOk && dungeonsOk) {
           log(`QuestieDB ${rel.version} ist bereits geladen (${before.fetchedAt}). Kein Download noetig.`);
           return { status: "current", exitCode: 0, version: rel.version };
         }
       }
-      zip = await downloadWithRetry({ ...net, url: assetUrl(tag, ASSET_ZIP), maxBytes: Math.min(MAX_ZIP_BYTES, rel.bytes) });
+      zip = await downloadWithRetry({ ...net, url: assetUrl(tag, rel.file), maxBytes: Math.min(MAX_ZIP_BYTES, rel.bytes) });
       verifyArchive(zip, rel);
       if (args.sha256 && sha256(zip) !== args.sha256) throw new FetchError("SHA-256 des Archivs passt nicht zum angegebenen Pin (--sha256); abgelehnt.");
       log(`Archiv geladen und Pruefsumme stimmt: ${mb(zip.length)} MB.`);
@@ -566,6 +600,8 @@ export async function main(argv, opts = {}) {
     const contractMin = rel?.minSupportedContract ?? 1;
     if (info.contractVersion > KNOWN_CONTRACT_VERSION) warn(`HINWEIS: Contract ${info.contractVersion} (bekannt bis ${KNOWN_CONTRACT_VERSION}); das Release sichert Kompatibilitaet ab Contract ${contractMin} zu. Daten bitte pruefen.`);
     const fixes = extractFixes(zip);
+    const dungeons = extractDungeons(zip);
+    if (!dungeons.data) warn(`WARNUNG: dungeons.lua fehlt oder ist nicht lesbar (${dungeons.reason}) - Dungeons.lua im Datenaddon bleibt dann leer.`);
     log(`QuestieDB ${info.version}: ${info.counts.quests} Quest-, ${info.counts.npcs} NPC-, ${info.counts.objects} Objekt-, ${info.counts.items} Item-Eintraege (TOC ${mb(toc.length)} MB, Contract ${info.contractVersion}).`);
     const fc = fixes.counts;
     log(`  Laufzeitkorrekturen: ${fc.read} gelesen (${fc.horde} Horde, ${fc.neutral} fraktionsneutral), ${fc.allianceSkipped} Allianz uebergangen, ${fc.nonLiteral} nicht-literal (nicht uebernommen), ${fc.files}/${FIX_ENTRIES.length} Dateien.`);
@@ -599,6 +635,7 @@ export async function main(argv, opts = {}) {
       zipSha256: sha256(zip),
       tocBytes: toc.length,
       tocSha256: sha256(toc),
+      dungeonsSha256: dungeons.data ? sha256(dungeons.data) : "",
       counts: info.counts,
     };
     const fixesOut = { schema: FIXES_SCHEMA, tocSha256: stamp.tocSha256, version: info.version, quest: fixes.quest, npc: fixes.npc, item: fixes.item, object: fixes.object, sources: fixes.sources, counts: fixes.counts, files: fixes.files, findings: fixes.findings };
@@ -611,11 +648,17 @@ export async function main(argv, opts = {}) {
       // Korrektur-Dateien: feste Namen aus FIX_ENTRIES/ENUM_ENTRIES (nie aus dem Archiv), alte Staende vorher entfernen
       const addonDir = path.dirname(paths.tocFile);
       await rm(path.join(addonDir, "src"), { recursive: true, force: true });
+      await rm(path.join(addonDir, "support"), { recursive: true, force: true });
       for (const { entry } of corrFiles) {
         const target = path.join(addonDir, ...entry.slice("QuestieDB/".length).split("/"));
         await assertNoLinks(root, target);
         await mkdir(path.dirname(target), { recursive: true });
         await writeAtomic(target, fixes.buffers.get(entry));
+      }
+      if (dungeons.data) {
+        await assertNoLinks(root, paths.dungeonsFile);
+        await mkdir(path.dirname(paths.dungeonsFile), { recursive: true });
+        await writeAtomic(paths.dungeonsFile, dungeons.data);
       }
       await writeAtomic(paths.fixesFile, JSON.stringify(fixesOut) + "\n");
       await writeAtomic(paths.stampFile, JSON.stringify(stamp, null, 2) + "\n");

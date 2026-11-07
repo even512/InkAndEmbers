@@ -1104,6 +1104,8 @@ L.add("enUS", "m.Chronik", {
   forecastTitle = "At this pace",
   forecastEarly = "Too early for a forecast",
   forecastNone = "Not enough level times for an estimate yet.",
+  forecastNoTable = "The experience needed per level is not documented for this game version, so there is no forecast.",
+  forecastNoXp = "No forecast without a readable experience value.",
   forecastDone = "Level %s reached. The journey goes on anyway.",
   src_quest = "Quests", src_kill = "Kills", src_explore = "Exploration", src_other = "Other",
   dm_first_blue = "the first rare piece", dm_first_epic = "the first epic piece", dm_first_bag = "the first bag",
@@ -1344,7 +1346,7 @@ L.add("enUS", "m.Chronik", {
   deaths_other = "%s deaths",
   over = "over %s hr",
   forecastHead = "At this pace: level %s in %s",
-  forecastBody = "rough estimate from the last %s levels",
+  forecastBody = "rough estimate: experience still needed up to level %s, at your pace of the last %s levels, away time left out",
   fb_level = "A new level.", fb_quest = "Turned in a quest.", fb_loot = "Received something valuable.",
   fb_kill = "A special foe fell.", fb_close = "A narrow victory.", fb_death = "Died.", fb_moment = "A moment for the chronicle.",
   fb_campfire = "Rested at a campfire.", fb_zone = "Entered new land.", fb_subzone = "Discovered a new place.",
@@ -1716,6 +1718,25 @@ L.add("enUS", "m.OpenQuests", {
   testLevelUsage = "Open Quests: /chronik open test level <number>",
   testRaceUsage = "Open Quests: race token, e.g. Scourge, Human, Orc, NightElf, Dwarf, Gnome, Tauren, Troll",
   testClassUsage = "Open Quests: class token, e.g. PALADIN, WARRIOR, MAGE, PRIEST, DRUID",
+})
+
+L.add("enUS", "m.DungeonQuests", {
+  hintEstimated = "Assignment guessed",
+  tipEstimated = "The assignment to this dungeon is derived, not confirmed",
+  tipAmbiguous = "Probably belongs to: %s",
+  hintGiverInside = "Giver in the dungeon",
+  tipGiverInside = "The giver stands inside the dungeon, the map shows the entrance",
+  hintGiverNone = "Starts with an item",
+  tipGiverNone = "No giver on the map: the quest starts with an item (no to-do possible)",
+  hintForeverNew = "New Forever quest",
+  tipForeverNew = "Forever-only quest: data incomplete",
+  todoEntrance = "Enter dungeon: %s (quest: %s)",
+  footerAssign = "Dungeon assignment: zone, quest type, derived",
+  reasonRetail = "Dungeon quests do not exist in Retail",
+  reasonNoData = "Dungeon data missing (reinstall the data add-on)",
+  reasonCombat = "in combat (loads afterwards)",
+  diagLoaded = "Dungeon quests: %d dungeons, %d quests (%d missing in the quest data)",
+  diagNotLoaded = "Dungeon quests: not loaded: %s",
 })
 
 L.add("enUS", "m.OpenQuestsRetail", {

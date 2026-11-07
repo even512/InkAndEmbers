@@ -16,6 +16,8 @@
 //                  Schnappschuss scripts\data\wago-1.60.1.70170; fehlt der Ordner: Overlays.lua ohne Eintraege (Warnung).
 //   --overlays-retail  dasselbe fuer den Retail-Build (Standard: $CHRONICLE_OVERLAYS_RETAIL, sonst scripts\data\wago-retail-12.1.5.70575)
 //                  fuer die Retail-uiMapIDs aus journal\MapSpace.lua (ZONES); fehlt der Ordner: overlayRetail leer (Retail zeigt dann nur Erkundetes).
+//   --dungeons     dungeons.lua der QuestieDB (support\Forever\Zones; Gebiete + Eingaenge, nur geparst). Standard: im Korrektur-Ordner bzw. neben der TOC;
+//                  fehlt sie, wird Dungeons.lua ohne Eintraege erzeugt (Warnung).
 //   --out          Zielordner. Standard: addon\InkAndEmbers_QuestData (TOC wird mit erzeugt)
 //   --fetch        vorher scripts/fetch-questiedb-release.mjs (--soft) als Kindprozess ausfuehren (kein eigener Netzcode hier); offline ist kein Fehler
 // Exit-Codes: 0 = ok, 1 = Fehler (Quelle fehlt/unlesbar, Vertragsversion ungueltig oder Release-Untergrenze > 4, Ergebnis unplausibel klein oder Datei zu gross, unbekannte Option)
@@ -26,6 +28,9 @@
 //   Givers.lua  EveNChronicleQuestData.giver  = je Geber "\n<n|o><id>[A|H]\t<Name>\t<uiMapID>:<x>,<y>;...|<uiMapID>:..."
 //   Names.lua   EveNChronicleQuestData.questEN / giverEN = "\n<id|Schluessel>\t<englischer Name>" (nur wo der Name oben deutsch ist);
 //               questNoDE / giverNoDE = "<id|Schluessel>,..." (ohne deutschen Namen: der deutsche Client fragt seinen Cache)
+//   Dungeons.lua EveNChronicleQuestData.dungeon = je Dungeon "\n<areaId>\t<Name de>\t<Name en>\t<lvMin>\t<lvMax>\t<uiMapID>:<x>,<y>;...\t<questId><guete>[*],..."
+//               guete: z Zone, t Forever-DB-Gebiet, a abgeleitet (streng), k nur ueber die Kette, m Handtabelle; * = mehrdeutig (steht unter mehreren Dungeons)
+//               Quellen: Zone/Quest-Typ der Quests + support/Forever/Zones/dungeons.lua der QuestieDB (nur geparst) + scripts/data/dungeon-overrides.json
 //   Overlays.lua EveNChronicleQuestData.overlay = je Overlay "\n<uiMapID>\t<Breite>\t<Hoehe>\t<OffsetX>\t<OffsetY>\t<fileDataID>,..."
 //               (Pixel der Kartenebene 1, Kacheln 256 zeilenweise)
 //               EveNChronicleQuestData.overlayRetail = dasselbe Format fuer die Retail-Karten-IDs (nur Retail-Client)
@@ -57,10 +62,15 @@ const MAX_CSV_BYTES = 4 * 1024 * 1024;
 const MAIN_TOC = path.join(ROOT, "addon", "InkAndEmbers", "InkAndEmbers.toc");
 const FETCH_TIMEOUT_MS = 240_000;
 const FETCH_SCRIPT = path.join(ROOT, "scripts", "fetch-questiedb-release.mjs");
+/** Handtabelle der Dungeon-Zuordnung (nicht zuordenbare/mehrdeutige Quests) und Lage der dungeons.lua im QuestieDB-Ordner */
+export const DUNGEON_OVERRIDES_FILE = path.join(ROOT, "scripts", "data", "dungeon-overrides.json");
+export const DUNGEONS_LUA_REL = ["support", "Forever", "Zones", "dungeons.lua"];
 
 export const MAX_FILE_BYTES = 600 * 1024; // je Datei
 export const MIN_QUESTS_WITH_GIVER = 3000;
 export const MIN_GIVERS = 1000;
+export const MIN_DUNGEONS = 18;
+export const MIN_DUNGEON_QUESTS = 350;
 export const UNSURE_ABOVE = 30;
 export const MAX_POINTS_PER_MAP = 4;
 const MAX_LEVEL = 100;
@@ -72,7 +82,7 @@ const PLACEHOLDER = /\(Only GM|\bUNUSED\b|\bDEPRECATED\b|\bNYI\b|\bzzOLD|\[PH\]|
 // QuestieDB-Feldnummern (src/meta/questMeta.lua, npcMeta.lua, objectMeta.lua)
 export const QF = Object.freeze({
   name: 1, startedBy: 2, requiredLevel: 4, questLevel: 5, requiredRaces: 6, requiredClasses: 7, preQuestGroup: 12, preQuestSingle: 13,
-  exclusiveTo: 16, zoneOrSort: 17, requiredSkill: 18, requiredMinRep: 19, requiredMaxRep: 20, specialFlags: 24,
+  finishedBy: 3, objectives: 10, exclusiveTo: 16, zoneOrSort: 17, requiredSkill: 18, requiredMinRep: 19, requiredMaxRep: 20, specialFlags: 24,
   breadcrumbForQuestId: 27, requiredSpell: 30, requiredMaxLevel: 32,
 });
 const NF = Object.freeze({ name: 1, spawns: 7 });
@@ -120,6 +130,7 @@ Quellen (lokal; die Pfade koennen auch als Umgebungsvariablen bzw. in der lokale
   --corrections  QuestieDB-Addonordner mit src\\corrections (Standard: neben der TOC, sonst WOW_DIR\\_forever_ bzw. _classic_beta_)
   --overlays     wago.tools-CSV-Ordner fuer die Karten-Overlays (Standard: CHRONICLE_OVERLAYS, sonst scripts\data\wago-1.60.1.70170)
   --overlays-retail  dasselbe fuer den Retail-Build (Standard: CHRONICLE_OVERLAYS_RETAIL, sonst scripts\data\wago-retail-12.1.5.70575)
+  --dungeons     dungeons.lua der QuestieDB (support\\Forever\\Zones; Standard: im Korrektur-Ordner bzw. neben der TOC)
   --out          Zielordner (Standard: addon\\${QUEST_DATA_ADDON})
   --fetch        vorher scripts/fetch-questiedb-release.mjs mit --soft ausfuehren (stabiles QuestieDB-Release; offline ist kein Fehler)
 `;
@@ -127,12 +138,12 @@ Quellen (lokal; die Pfade koennen auch als Umgebungsvariablen bzw. in der lokale
 // ---------------------------------------------------------------- Argumente / Pfade
 
 export function parseArgs(argv) {
-  const out = { help: false, fetch: false, questie: null, forever: null, corrections: null, out: null, overlays: null, "overlays-retail": null };
+  const out = { help: false, fetch: false, questie: null, forever: null, corrections: null, dungeons: null, out: null, overlays: null, "overlays-retail": null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--help" || a === "-h") out.help = true;
     else if (a === "--fetch") out.fetch = true;
-    else if (a === "--questie" || a === "--forever" || a === "--out" || a === "--corrections" || a === "--overlays" || a === "--overlays-retail") {
+    else if (a === "--questie" || a === "--forever" || a === "--out" || a === "--corrections" || a === "--dungeons" || a === "--overlays" || a === "--overlays-retail") {
       const v = argv[++i];
       if (!v || v.startsWith("--")) throw new Error(`Option ${a} braucht einen Pfad.`);
       if (v.includes("\0")) throw new Error(`Option ${a}: ungueltiger Pfad.`);
@@ -155,6 +166,14 @@ export function correctionCandidates(questieToc) {
 }
 
 const hasCorrections = (dir) => FIX_FILES.every((f) => isRealFile(path.join(dir, ...f.rel.split("/"))));
+
+/** Echte Datei (kein Symlink) mit Groessenlimit lesen */
+function readRealFile(file, maxBytes) {
+  if (!isRealFile(file)) throw new Error(`Datei fehlt oder ist keine echte Datei: ${file}`);
+  const buf = readFileSync(file);
+  if (buf.length > maxBytes) throw new Error(`Datei zu gross (${buf.length} Byte): ${file}`);
+  return buf;
+}
 
 function isRealFile(file) {
   try {
@@ -367,6 +386,7 @@ export function createZoneResolver(zonesRaw) {
       uiMapId: Number.isSafeInteger(value.uiMapId) ? value.uiMapId : undefined,
       parent: Number.isSafeInteger(value.parent) ? value.parent : undefined,
       instance: value.instanceType === "dungeon" || value.instanceType === "raid" || value.instanceType === "battleground",
+      instanceType: typeof value.instanceType === "string" ? value.instanceType : undefined,
     });
   }
   const cache = new Map();
@@ -391,6 +411,8 @@ export function createZoneResolver(zonesRaw) {
     size: zones.size,
     resolveMapId,
     isInstance: (areaId) => zones.get(areaId)?.instance === true,
+    parentOf: (areaId) => zones.get(areaId)?.parent,
+    instanceType: (areaId) => zones.get(areaId)?.instanceType,
     sortGroup: (sort) => (typeof sortGroups[String(sort)] === "string" ? sortGroups[String(sort)] : undefined),
   };
 }
@@ -401,6 +423,7 @@ export function openForeverQuests(dir) {
   const deFile = path.join(dir, "l10n", "deDE", "search.json");
   const de = existsSync(deFile) ? readJson(deFile) : {};
   const type = new Map();
+  const zoneOf = new Map();
   const repeatable = new Set();
   const qdir = path.join(dir, "quest");
   if (existsSync(qdir)) {
@@ -410,15 +433,20 @@ export function openForeverQuests(dir) {
         const id = Number(k);
         if (!Number.isSafeInteger(id) || !isObj(q)) continue;
         if (typeof q.type === "string") type.set(id, q.type);
+        if (Number.isSafeInteger(q.zone?.zone) && q.zone.zone > 0) zoneOf.set(id, q.zone.zone);
         if (q.repeatable === true) repeatable.add(id);
       }
     }
   }
   const pick = (m, id) => (isObj(m) && typeof m[String(id)] === "string" ? m[String(id)] : undefined);
+  const zoneDeFile = path.join(dir, "l10n", "deDE", "zones.json");
+  const zoneDe = existsSync(zoneDeFile) ? readJson(zoneDeFile) : {};
   return {
     zones,
     type,
+    zoneOf,
     repeatable,
+    deZone: (areaId) => pick(zoneDe, areaId),
     deQuest: (id) => pick(de.quest, id),
     deNpc: (id) => pick(de.npc, id),
     deObject: (id) => pick(de.object, id),
@@ -528,20 +556,23 @@ export function mergeRaceMasks(h, a) {
  * Baut Quest- und Geber-Liste. q = openQuestie(...), fdb = openForeverQuests(...), fixes = { horde, alliance } (Map je Datentyp).
  * Liefert { quests: [...], givers: Map key -> { name, loc }, stats }.
  */
-export function buildQuestData(q, fdb, fixes) {
-  const stats = { total: 0, skippedName: 0, withGiver: 0, instancePoints: 0, unmappedPoints: 0, de: 0, factionGiverQuests: 0, factionRaceQuests: 0, unsure: 0 };
-  const views = ["horde", "alliance"];
-  const fx = (view, kind, id, nr) => fixes[view]?.[kind]?.get(id);
-  // Feld aus Sicht einer Fraktion: Korrektur vor TOC
-  const get = (view, kind, id, nr) => {
-    const rec = fx(view, kind, id);
+/** Feld einer Entitaet aus Sicht einer Fraktion: Korrektur vor TOC. kind = quest | npc | object | item (item nur TOC, keine Korrekturen). */
+export function makeGetter(q, fixes) {
+  return (view, kind, id, nr) => {
+    const rec = fixes[view]?.[kind]?.get(id);
     if (rec && rec.has(nr)) {
       const v = rec.get(nr);
       return v === null ? undefined : v;
     }
-    const tocKind = kind === "quest" ? "Quest" : kind === "npc" ? "Npc" : "Object";
+    const tocKind = kind === "quest" ? "Quest" : kind === "npc" ? "Npc" : kind === "item" ? "Item" : "Object";
     return q.field(tocKind, id, nr);
   };
+}
+
+export function buildQuestData(q, fdb, fixes) {
+  const stats = { total: 0, skippedName: 0, withGiver: 0, instancePoints: 0, unmappedPoints: 0, de: 0, factionGiverQuests: 0, factionRaceQuests: 0, unsure: 0 };
+  const views = ["horde", "alliance"];
+  const get = makeGetter(q, fixes);
 
   // Geber: Standort je Fraktions-Sicht; gleich -> ein Schluessel ohne Endung, verschieden -> <key>A / <key>H
   const giverCache = new Map(); // "n123" -> { horde: locText, alliance: locText, name }
@@ -651,6 +682,326 @@ export function buildQuestData(q, fdb, fixes) {
   }
   quests.sort((a, b) => a.id - b.id);
   return { quests, givers, stats };
+}
+
+// ---------------------------------------------------------------- Dungeons (Reiter "Dungeons": Dungeon -> Quests)
+
+/** Gebiete aus dungeons.lua, die KEINE Dungeons sind (Forever-Sondergebiete bzw. Transport): Dalaran, Excavation Site: Wetlands, Deeprun Tram. */
+export const DUNGEON_EXCLUDED_AREAS = Object.freeze([16544, 16732, 2257]);
+/** Forever-DB-Instanztypen, die nie als Dungeon gelten (Raids, Schlachtfelder) */
+const NOT_DUNGEON_TYPES = new Set(["raid", "battleground"]);
+export const MAX_DUNGEONS_LUA_BYTES = 256 * 1024;
+const MAX_ENTRANCES = 6;
+/** Zuordnungsgueten in Dungeons.lua: z Zone, t Forever-DB-Gebiet, a abgeleitet (streng), k nur ueber die Kette, m Handtabelle */
+export const DUNGEON_GRADES = Object.freeze(["z", "t", "a", "k", "m"]);
+
+/**
+ * dungeons.lua der QuestieDB (support/Forever/Zones) NUR parsen: `local dungeons = { [areaId] = {Name, {Alternativ-IDs}|nil, Elterngebiet,
+ * {{Gebiet, x, y}, ...}}, ... }`. Nicht-literale Eintraege (z. B. fraktionsabhaengige Eingaenge bei Alterac Valley) werden uebersprungen (gezaehlt).
+ * Liefert { entries: [{ id, name, alts, parent, entrances: [{ zone, x, y }] }], skipped }.
+ */
+export function parseDungeonsLua(buf) {
+  if (!Buffer.isBuffer(buf)) throw new Error("dungeons.lua: keine Bytes");
+  if (buf.length > MAX_DUNGEONS_LUA_BYTES) throw new Error(`dungeons.lua zu gross (${buf.length} Byte)`);
+  const ast = luaparse.parse(buf.toString("latin1"), { luaVersion: "5.1", comments: false, scope: false, locations: false, encodingMode: "pseudo-latin1" });
+  let table;
+  for (const st of ast.body) {
+    if (st.type === "LocalStatement" && st.variables.length === 1 && st.variables[0].name === "dungeons" && st.init[0]?.type === "TableConstructorExpression") table = st.init[0];
+  }
+  if (!table) throw new Error("dungeons.lua: Tabelle `dungeons` nicht gefunden");
+  const entries = [];
+  let skipped = 0;
+  const seen = new Set();
+  for (const f of table.fields) {
+    const id = f.type === "TableKey" ? numberOf(f.key) : undefined;
+    if (!Number.isSafeInteger(id) || id <= 0 || id > MAX_ID || seen.has(id)) {
+      skipped++;
+      continue;
+    }
+    let v;
+    try {
+      v = literalValue(f.value, Object.create(null));
+    } catch {
+      skipped++;
+      continue;
+    }
+    if (!Array.isArray(v) || typeof v[0] !== "string") {
+      skipped++;
+      continue;
+    }
+    const alts = (Array.isArray(v[1]) ? v[1] : []).filter((a) => Number.isSafeInteger(a) && a > 0 && a <= MAX_ID);
+    const entrances = [];
+    for (const e of (Array.isArray(v[3]) ? v[3] : []).slice(0, MAX_ENTRANCES)) {
+      if (Array.isArray(e) && Number.isSafeInteger(e[0]) && e[0] > 0 && typeof e[1] === "number" && typeof e[2] === "number" && e[1] >= 0 && e[1] <= 100 && e[2] >= 0 && e[2] <= 100) {
+        entrances.push({ zone: e[0], x: e[1], y: e[2] });
+      }
+    }
+    seen.add(id);
+    entries.push({ id, name: cleanName(v[0]), alts, parent: Number.isSafeInteger(v[2]) ? v[2] : undefined, entrances });
+  }
+  return { entries, skipped };
+}
+
+/** Handtabelle scripts/data/dungeon-overrides.json lesen: { quests: { "<questId>": { dungeons: [areaId, ...], note } } }; leere Liste = Quest gehoert zu keinem Dungeon. */
+export function readDungeonOverrides(file) {
+  if (!file || !isRealFile(file)) return new Map();
+  const buf = readFileSync(file);
+  if (buf.length > MAX_FIX_FILE_BYTES) throw new Error(`dungeon-overrides.json zu gross: ${file}`);
+  const data = JSON.parse(buf.toString("utf8"));
+  const out = new Map();
+  for (const [idText, rec] of Object.entries(isObj(data?.quests) ? data.quests : {})) {
+    const id = Number(idText);
+    if (!Number.isSafeInteger(id) || id <= 0 || id > MAX_ID || !isObj(rec) || !Array.isArray(rec.dungeons)) continue;
+    out.set(id, [...new Set(rec.dungeons.filter((a) => Number.isSafeInteger(a) && a > 0 && a <= MAX_ID))].sort((a, b) => a - b));
+  }
+  return out;
+}
+
+/** Lua-Liste von Eintraegen [id, ...] (Ziele) -> Ids */
+const entryIds = (v) => [...new Set(asList(v).map((e) => int(Array.isArray(e) ? e[0] : e)).filter((x) => Number.isSafeInteger(x) && x > 0 && x <= MAX_ID))];
+
+/**
+ * Dungeon-Zuordnung der Quests. Eingaben: q (QuestieDB), fdb (Forever-DB), fixes (wie buildQuestData), quests (Ergebnis von buildQuestData: nur
+ * diese Quests koennen vorkommen), parsed (parseDungeonsLua), overrides (readDungeonOverrides).
+ *
+ * Seeds je Quest (erste zutreffende Stufe gewinnt):
+ *   m  Handtabelle
+ *   z  zoneOrSort der Quest liegt in einem Dungeon-Gebiet (Haupt- oder Alternativ-ID, auch ueber Eltern-Gebiete)
+ *   t  Quest-Typ "Dungeon" und das Forever-DB-Gebiet der Quest liegt in einem Dungeon-Gebiet
+ *   a  Quest-Typ "Dungeon", STRENG abgeleitet (nur Dinge, die ausschliesslich in Instanzen stehen): Geber/Abgabe-NPC, sonst Ziel-Kreaturen/-Objekte,
+ *      sonst Ziel-/Start-Gegenstaende, deren bekannte Dropper alle nur in Instanzen spawnen
+ *   k  Quest-Typ "Dungeon", sonst nur ueber die Kette: alle direkten Vor-/Folgequests mit Zuordnung gehoeren zu genau einem Dungeon
+ * Mehrdeutige Quests (mehrere Dungeons) stehen unter jedem passenden Dungeon (ambiguous). Quests, deren Gebiet/Beleg nur in Raids/Schlachtfeldern/
+ * Sondergebieten liegt, gehoeren zu keinem Dungeon. Ketten werden nicht vorberechnet (Laufzeit: preAll/preAny).
+ * Liefert { dungeons: [{ key, name, nameEn, lvMin, lvMax, entrances: [{ map, x, y }], quests: [{ id, grade, ambiguous }] }], unassigned: [id], stats }.
+ */
+export function buildDungeonData({ q, fdb, fixes, quests, parsed, overrides = new Map() }) {
+  const get = makeGetter(q, fixes);
+  const views = ["horde", "alliance"];
+  const stats = { seeds: 0, assigned: 0, ambiguous: 0, unassigned: 0, raidOnly: 0, byGrade: { z: 0, t: 0, a: 0, k: 0, m: 0 }, overrideUnknown: 0, entrancesUnmapped: 0 };
+
+  // Gebiete -> Dungeon (Haupt-ID). included = false: Raid/Schlachtfeld/Sondergebiet (zaehlt als "Instanz, aber kein Dungeon")
+  const excluded = new Set(DUNGEON_EXCLUDED_AREAS);
+  const areaInfo = new Map();
+  const entryByKey = new Map();
+  // Eintraege mit gleichem Namen und gleichem Elterngebiet sind ein Dungeon (Dire Maul: ein Eintrag je Fluegel) -> niedrigste ID ist der Schluessel
+  const groups = new Map();
+  for (const e of [...parsed.entries].sort((a, b) => a.id - b.id)) {
+    const gk = `${e.name}|${e.parent ?? ""}`;
+    if (!groups.has(gk)) groups.set(gk, []);
+    groups.get(gk).push(e);
+  }
+  for (const list of groups.values()) {
+    const head = list[0];
+    const included = !excluded.has(head.id) && !NOT_DUNGEON_TYPES.has(fdb.zones.instanceType(head.id));
+    const alts = [...new Set(list.flatMap((e) => [e.id, ...e.alts]).filter((a) => a !== head.id))];
+    const entrances = list.flatMap((e) => e.entrances).slice(0, MAX_ENTRANCES);
+    entryByKey.set(head.id, { ...head, alts, entrances, included });
+    for (const a of [head.id, ...alts]) if (!areaInfo.has(a)) areaInfo.set(a, { key: head.id, included });
+  }
+  const OTHER_INSTANCE = Object.freeze({ key: 0, included: false });
+  const dungeonOfArea = (areaId) => {
+    let cur = areaId;
+    for (let d = 0; d < 8 && cur !== undefined; d++) {
+      const info = areaInfo.get(cur);
+      if (info) return info;
+      cur = fdb.zones.parentOf(cur);
+    }
+    return fdb.zones.isInstance(areaId) ? OTHER_INSTANCE : null;
+  };
+
+  // Entitaeten: in welchen Dungeons stehen sie? inside = hat Spawns und alle in Instanzen
+  const spawnAreas = (kind, id) => {
+    const areas = new Set();
+    for (const view of views) {
+      const sp = get(view, kind, id, kind === "npc" ? NF.spawns : OF.spawns);
+      if (!isObj(sp) && !Array.isArray(sp)) continue;
+      const keys = Array.isArray(sp) ? sp.map((v, i) => (v === undefined || v === null ? null : i + 1)).filter((x) => x !== null) : Object.keys(sp).map(Number);
+      for (const a of keys) if (Number.isSafeInteger(a)) areas.add(a);
+    }
+    return areas;
+  };
+  const classCache = new Map();
+  const classify = (kind, id) => {
+    const key = `${kind}${id}`;
+    if (classCache.has(key)) return classCache.get(key);
+    const areas = spawnAreas(kind, id);
+    const r = { known: areas.size > 0, outside: false, keys: new Set(), other: false };
+    for (const a of areas) {
+      const info = dungeonOfArea(a);
+      if (!info) r.outside = true;
+      else if (info.included) r.keys.add(info.key);
+      else r.other = true;
+    }
+    classCache.set(key, r);
+    return r;
+  };
+  const insideOf = (c) => c.known && !c.outside;
+
+  const startFinish = (kindSlots, id, field) => {
+    const out = new Map();
+    for (const view of views) {
+      const v = get(view, "quest", id, field);
+      for (const [kind, slot] of kindSlots) for (const x of idList(slotOf(v, slot))) out.set(`${kind}:${x}`, { kind, id: x });
+    }
+    return [...out.values()];
+  };
+  const objectiveEntities = (id, slot, kind) => {
+    const out = new Set();
+    for (const view of views) for (const x of entryIds(slotOf(get(view, "quest", id, QF.objectives), slot))) out.add(x);
+    return [...out].map((n) => ({ kind, id: n }));
+  };
+  const dropperClasses = (itemId) => {
+    const out = [];
+    for (const [field, kind] of [[2, "npc"], [3, "object"]]) {
+      for (const d of idList(get("horde", "item", itemId, field))) {
+        const c = classify(kind, d);
+        if (c.known) out.push(c);
+      }
+    }
+    return out;
+  };
+  const union = (sets) => new Set(sets.flatMap((s) => [...s]));
+  const NPC_OBJ = [["npc", GIVER_SLOT.npc], ["object", GIVER_SLOT.object]];
+
+  /** Stufe a: abgeleitet, streng. null = kein Beleg; { raid: true } = Beleg nur in Raids/Sondergebieten */
+  const derive = (id) => {
+    let raid = false;
+    // 1) Geber/Abgabe in der Instanz
+    const people = [...startFinish(NPC_OBJ, id, QF.startedBy), ...startFinish(NPC_OBJ, id, QF.finishedBy)];
+    const pc = people.map((e) => classify(e.kind, e.id)).filter(insideOf);
+    const pk = union(pc.map((c) => c.keys));
+    if (pk.size) return { keys: pk };
+    if (pc.length) raid = true;
+    // 2) Ziel-Kreaturen/-Objekte, die nur in der Instanz stehen
+    const targets = [...objectiveEntities(id, 1, "npc"), ...objectiveEntities(id, 2, "object")].map((e) => classify(e.kind, e.id)).filter(insideOf);
+    const tk = union(targets.map((c) => c.keys));
+    if (tk.size) return { keys: tk };
+    if (targets.length) raid = true;
+    // 3) Gegenstaende (Ziel- und Start-Gegenstand): ein Gegenstand zaehlt, wenn ALLE seine Dropper mit bekannten Spawns nur in Instanzen stehen;
+    //    ein Gegenstand genuegt (die Quest ist ohnehin vom Typ "Dungeon"; ein Gegenstand mit Droppern in der Welt belegt nichts)
+    const items = [...objectiveEntities(id, 3, "item"), ...startFinish([["item", GIVER_SLOT.item]], id, QF.startedBy)];
+    const only = items.map((e) => dropperClasses(e.id)).filter((l) => l.length && l.every(insideOf));
+    const ik = union(only.flatMap((l) => l.map((c) => c.keys)));
+    if (ik.size) return { keys: ik };
+    if (only.length) raid = true;
+    return raid ? { raid: true } : null;
+  };
+
+  const named = new Map(quests.map((r) => [r.id, r]));
+  const assigned = new Map(); // id -> { keys: Set, grade }
+  const pending = [];
+  const keysOfZones = (zones) => {
+    const keys = new Set();
+    let other = false;
+    for (const z of zones) {
+      if (!(z > 0)) continue;
+      const info = dungeonOfArea(z);
+      if (!info) continue;
+      if (info.included) keys.add(info.key);
+      else other = true;
+    }
+    return { keys, other };
+  };
+  for (const r of quests) {
+    const id = r.id;
+    const ov = overrides.get(id);
+    if (ov) {
+      // Haupt- oder Alternativ-ID eines Dungeons; unbekannte/ausgeschlossene IDs zaehlen als Befund (overrideUnknown)
+      const infos = ov.map((a) => areaInfo.get(a)).filter((i) => i?.included);
+      const keys = new Set(infos.map((i) => i.key));
+      if (infos.length !== ov.length) stats.overrideUnknown++;
+      stats.seeds++;
+      if (keys.size) assigned.set(id, { keys, grade: "m" });
+      continue;
+    }
+    const isTypeDungeon = fdb.type.get(id) === "Dungeon";
+    const zk = keysOfZones(views.map((v) => int(get(v, "quest", id, QF.zoneOrSort))));
+    if (zk.keys.size) {
+      stats.seeds++;
+      assigned.set(id, { keys: zk.keys, grade: "z" });
+      continue;
+    }
+    if (!isTypeDungeon) {
+      if (zk.other) stats.raidOnly++; // Zone nur in Raid/Schlachtfeld/Sondergebiet und kein Dungeon-Typ: gehoert zu keinem Dungeon
+      continue;
+    }
+    // Typ "Dungeon" mit Raid-Zone (z. B. Molten-Core-Zulassung, Abgabe in den Blackrocktiefen): der Beleg entscheidet (Stufen a/k)
+    stats.seeds++;
+    const tk = keysOfZones([fdb.zoneOf.get(id)]);
+    if (tk.keys.size) {
+      assigned.set(id, { keys: tk.keys, grade: "t" });
+      continue;
+    }
+    const d = derive(id);
+    if (d?.keys) assigned.set(id, { keys: d.keys, grade: "a" });
+    else if (d?.raid) stats.raidOnly++;
+    else pending.push(id);
+  }
+  // k: nur ueber die Kette (direkte Vor-/Folgequests mit Zuordnung aus m/z/t/a)
+  const next = new Map();
+  for (const r of quests) {
+    for (const p of [...r.preAll, ...r.preAny]) {
+      if (!next.has(p)) next.set(p, []);
+      next.get(p).push(r.id);
+    }
+  }
+  const unassigned = [];
+  const fixed = new Map(assigned);
+  for (const id of pending) {
+    const r = named.get(id);
+    const nb = [...r.preAll, ...r.preAny, ...(next.get(id) ?? [])];
+    const keys = union(nb.map((n) => fixed.get(n)?.keys ?? new Set()));
+    if (keys.size === 1) assigned.set(id, { keys, grade: "k" });
+    else unassigned.push(id);
+  }
+
+  // Ausgabe je Dungeon
+  const byKey = new Map();
+  for (const [id, a] of assigned) {
+    const ambiguous = a.keys.size > 1;
+    stats.assigned++;
+    stats.byGrade[a.grade]++;
+    if (ambiguous) stats.ambiguous++;
+    for (const key of a.keys) {
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key).push({ id, grade: a.grade, ambiguous });
+    }
+  }
+  stats.unassigned = unassigned.length;
+  const dungeons = [];
+  for (const key of [...byKey.keys()].sort((a, b) => a - b)) {
+    const e = entryByKey.get(key);
+    const list = byKey.get(key).sort((a, b) => a.id - b.id);
+    // Stufenspanne = Stufe, ab der man die Quests annehmen kann (requiredLevel, sonst questLevel)
+    const lv = list.map((x) => named.get(x.id)).map((r) => r.reqLvl ?? r.qLvl).filter((n) => n !== undefined);
+    const de = [e.id, ...e.alts].map((a) => cleanName(fdb.deZone(a))).find((n) => n && !PLACEHOLDER.test(n));
+    const entrances = [];
+    const seen = new Set();
+    for (const en of e.entrances) {
+      const map = fdb.zones.resolveMapId(en.zone);
+      if (map === undefined) {
+        stats.entrancesUnmapped++;
+        continue;
+      }
+      const text = `${map}:${en.x.toFixed(1)},${en.y.toFixed(1)}`;
+      if (!seen.has(text)) {
+        seen.add(text);
+        entrances.push({ map, x: Number(en.x.toFixed(1)), y: Number(en.y.toFixed(1)) });
+      }
+    }
+    dungeons.push({ key, name: de || e.name, nameEn: e.name, lvMin: lv.length ? Math.min(...lv) : undefined, lvMax: lv.length ? Math.max(...lv) : undefined, entrances, quests: list });
+  }
+  return { dungeons, unassigned: unassigned.sort((a, b) => a - b), stats };
+}
+
+/** Dungeons.lua-Inhalt: je Dungeon "\n<key>\t<Name de>\t<Name en>\t<lvMin>\t<lvMax>\t<mapID>:<x>,<y>;...\t<questId><guete>[*],..." */
+export function dungeonBlob(dungeons) {
+  return (
+    dungeons
+      .map((d) => `\n${d.key}\t${d.name}\t${d.nameEn}\t${opt(d.lvMin)}\t${opt(d.lvMax)}\t${d.entrances.map((e) => `${e.map}:${e.x.toFixed(1)},${e.y.toFixed(1)}`).join(";")}\t${d.quests.map((x) => `${x.id}${x.grade}${x.ambiguous ? "*" : ""}`).join(",")}`)
+      .join("") + "\n"
+  );
 }
 
 // ---------------------------------------------------------------- Ausgabe
@@ -845,6 +1196,7 @@ export function tocText(version, iface) {
     "Givers.lua",
     "Names.lua",
     "Overlays.lua",
+    "Dungeons.lua",
     "",
   ].join("\n");
 }
@@ -904,11 +1256,52 @@ export function loadCorrections({ questie, corrections, tocSha }) {
   return { fixes: { horde: emptyFixes(), alliance: emptyFixes(), counts: {} }, factions: "none", source: "keine gefunden" };
 }
 
-/** limits (nur fuer Tests mit Mini-Daten): { minQuests, minGivers, maxFileBytes } */
-export async function build({ questie, forever, corrections = null, overlays = DEFAULT_OVERLAYS, overlaysRetail = DEFAULT_OVERLAYS_RETAIL, mapSpaceFile = MAP_SPACE_FILE, out, limits = {} }) {
+/** dungeons.lua im QuestieDB-Ordner: erster Kandidat mit echter Datei (kein Symlink), sonst null */
+export function findDungeonsLua(dirs) {
+  for (const dir of dirs) {
+    const file = path.join(dir, ...DUNGEONS_LUA_REL);
+    if (isRealFile(file)) return file;
+  }
+  return null;
+}
+
+/**
+ * dungeons.lua gegen den Stempel pruefen: liegt die Datei im gestempelten Release-Ordner (data-capture/questiedb-release, den
+ * scripts/fetch-questiedb-release.mjs geschrieben hat), muss ihre SHA-256 der dungeonsSha256 des Stempels entsprechen; Abweichung
+ * (nachtraeglich veraenderte Datei) oder fehlender Eintrag bricht ab. Dateien ausserhalb dieses Ordners (--dungeons <datei>) und
+ * ein lokaler Stand ohne Stempel haben keinen Pin: "checked: false". Geprueft werden genau die Bytes, die danach geparst werden.
+ */
+export function verifyDungeonsStamp(questie, dungeonsFile, bytes) {
+  const root = path.resolve(path.dirname(questie), "..", "..", "..");
+  const rel = path.relative(root, path.resolve(dungeonsFile));
+  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) return { checked: false, why: "Datei liegt nicht im gestempelten Release-Ordner" };
+  let stamp;
+  try {
+    stamp = JSON.parse(readFileSync(path.join(root, "stamp.json"), "utf8"));
+  } catch {
+    return { checked: false, why: "kein lesbarer Stempel (stamp.json)" };
+  }
+  const pinned = stamp?.dungeonsSha256;
+  if (typeof pinned !== "string" || !/^[0-9a-f]{64}$/.test(pinned)) {
+    throw new Error(`dungeons.lua: der Stempel (${path.join(root, "stamp.json")}) nennt keine gueltige dungeonsSha256; Release neu laden (node scripts/fetch-questiedb-release.mjs --force) oder die Datei entfernen.`);
+  }
+  const actual = createHash("sha256").update(bytes).digest("hex");
+  if (actual !== pinned) {
+    throw new Error(`dungeons.lua stimmt nicht mit dem Stempel ueberein (SHA-256 ${actual.slice(0, 12)}... statt ${pinned.slice(0, 12)}...): ${dungeonsFile} wurde nach dem Laden veraendert oder gehoert zu einem anderen Release. Abbruch; Release neu laden (node scripts/fetch-questiedb-release.mjs --force).`);
+  }
+  return { checked: true };
+}
+
+/**
+ * limits (nur fuer Tests mit Mini-Daten): { minQuests, minGivers, maxFileBytes, minDungeons, minDungeonQuests }
+ * dungeonsFile: dungeons.lua (null = Dungeons.lua ohne Eintraege); dungeonOverrides: Handtabelle (Datei, null = keine)
+ */
+export async function build({ questie, forever, corrections = null, overlays = DEFAULT_OVERLAYS, overlaysRetail = DEFAULT_OVERLAYS_RETAIL, mapSpaceFile = MAP_SPACE_FILE, dungeonsFile = null, dungeonOverrides = DUNGEON_OVERRIDES_FILE, out, limits = {} }) {
   const minQuests = limits.minQuests ?? MIN_QUESTS_WITH_GIVER;
   const minGivers = limits.minGivers ?? MIN_GIVERS;
   const maxBytes = limits.maxFileBytes ?? MAX_FILE_BYTES;
+  const minDungeons = limits.minDungeons ?? MIN_DUNGEONS;
+  const minDungeonQuests = limits.minDungeonQuests ?? MIN_DUNGEON_QUESTS;
   const tocRaw = readFileSync(questie, "utf8");
   const q = openQuestie(tocRaw, { minSupportedContract: stampedMinContract(questie) });
   const fdb = openForeverQuests(forever);
@@ -938,6 +1331,27 @@ export async function build({ questie, forever, corrections = null, overlays = D
     `EveNChronicleQuestData.giverEN = ${luaLong(enBlob(gRows))}\n` +
     `EveNChronicleQuestData.questNoDE = ${luaQuote(noDeList(qRows))}\n` +
     `EveNChronicleQuestData.giverNoDE = ${luaQuote(noDeList(gRows))}\n`;
+  // Dungeons: Zuordnung der Quests zu Dungeon-Gebieten (dungeons.lua nur geparst); ohne die Datei bleibt die Tabelle leer
+  let dungeonsBytes = null;
+  if (dungeonsFile) {
+    dungeonsBytes = readRealFile(dungeonsFile, MAX_DUNGEONS_LUA_BYTES);
+    verifyDungeonsStamp(questie, dungeonsFile, dungeonsBytes); // wirft bei Abweichung vom Stempel, bevor irgendetwas geschrieben wird
+  }
+  const dungeon = dungeonsFile
+    ? buildDungeonData({ q, fdb, fixes: corr.fixes, quests: data.quests, parsed: parseDungeonsLua(dungeonsBytes), overrides: readDungeonOverrides(dungeonOverrides) })
+    : { dungeons: [], unassigned: [], stats: null };
+  const dungeonQuestEntries = dungeon.dungeons.reduce((n, d) => n + d.quests.length, 0);
+  const dungeonText =
+    HEAD("dungeons with their quests", version, `${info}; dungeon areas ${dungeonsFile ? "QuestieDB support/Forever/Zones/dungeons.lua" : "none"}`) +
+    `-- Dungeons: ${dungeon.dungeons.length}, quest entries: ${dungeonQuestEntries}` +
+    (dungeon.stats ? ` (by grade z ${dungeon.stats.byGrade.z}, t ${dungeon.stats.byGrade.t}, a ${dungeon.stats.byGrade.a}, k ${dungeon.stats.byGrade.k}, m ${dungeon.stats.byGrade.m}; ambiguous ${dungeon.stats.ambiguous}; unassigned ${dungeon.stats.unassigned})` : "") +
+    "\n" +
+    "-- dungeon = per dungeon \"\\n<areaId>\\t<name de>\\t<name en>\\t<levelMin>\\t<levelMax>\\t<uiMapID>:<x>,<y>;...\\t<questId><grade>[*],...\"; entrance points as in the givers file\n" +
+    "-- grade: z zone of the quest, t Forever-database zone, a derived (strict), k only via quest chain, m hand table (scripts/data/dungeon-overrides.json); * = ambiguous (listed under several dungeons)\n" +
+    `EveNChronicleQuestData.dungeon = ${luaLong(dungeonBlob(dungeon.dungeons))}\n`;
+  if (dungeonsFile && (dungeon.dungeons.length < minDungeons || dungeonQuestEntries < minDungeonQuests)) {
+    throw new Error(`Dungeon-Ergebnis unplausibel klein (Dungeons ${dungeon.dungeons.length}, Quest-Eintraege ${dungeonQuestEntries})`);
+  }
   let ov = { list: [], skipped: 0, maps: 0, source: "keine" };
   if (overlays && existsSync(overlays)) ov = { ...readOverlays(overlays, giverMapIds(data.givers)), source: overlays };
   let ovR = { list: [], skipped: 0, maps: 0, source: "keine" };
@@ -955,9 +1369,9 @@ export async function build({ questie, forever, corrections = null, overlays = D
   const iface = /^## Interface:[ \t]*(.+?)[ \t]*$/m.exec(readFileSync(MAIN_TOC, "utf8"))?.[1] ?? "16001";
   const toc = tocText(version, iface);
   const sizes = { quest: Buffer.byteLength(questText), giver: Buffer.byteLength(giverText), names: Buffer.byteLength(namesText),
-    overlay: Buffer.byteLength(overlayText) };
+    overlay: Buffer.byteLength(overlayText), dungeon: Buffer.byteLength(dungeonText) };
   if (Object.values(sizes).some((n) => n > maxBytes)) {
-    throw new Error(`Datei zu gross (Quests.lua ${sizes.quest} B, Givers.lua ${sizes.giver} B, Names.lua ${sizes.names} B, Overlays.lua ${sizes.overlay} B; Grenze ${maxBytes} B)`);
+    throw new Error(`Datei zu gross (Quests.lua ${sizes.quest} B, Givers.lua ${sizes.giver} B, Names.lua ${sizes.names} B, Overlays.lua ${sizes.overlay} B, Dungeons.lua ${sizes.dungeon} B; Grenze ${maxBytes} B)`);
   }
   if (withGiver < minQuests || data.givers.size < minGivers) {
     throw new Error(`Ergebnis unplausibel klein (Quests mit Geber ${withGiver}, Geber ${data.givers.size})`);
@@ -967,8 +1381,9 @@ export async function build({ questie, forever, corrections = null, overlays = D
   await writeAtomic(path.join(out, "Givers.lua"), giverText);
   await writeAtomic(path.join(out, "Names.lua"), namesText);
   await writeAtomic(path.join(out, "Overlays.lua"), overlayText);
+  await writeAtomic(path.join(out, "Dungeons.lua"), dungeonText);
   await writeAtomic(path.join(out, `${QUEST_DATA_ADDON}.toc`), toc);
-  return { ...data, withGiver, sizes, questieVersion: version, corrections: corr, badValues: q.stats.badValues, overlays: ov, overlaysRetail: ovR };
+  return { ...data, withGiver, sizes, questieVersion: version, corrections: corr, badValues: q.stats.badValues, overlays: ov, overlaysRetail: ovR, dungeon, dungeonsFile };
 }
 
 /** --fetch: Fetch-Skript des Projekts als Kindprozess (feste Argumente, keine Shell). Fehler/offline = Hinweis, kein Abbruch. */
@@ -1004,7 +1419,9 @@ export async function main(argv) {
   const overlaysRetail = opts["overlays-retail"] ?? DEFAULT_OVERLAYS_RETAIL;
   if (!existsSync(overlaysRetail)) console.log(`WARNUNG: Retail-Overlay-Tabellen nicht gefunden (${overlaysRetail}) - Retail zeigt nur Erkundetes.`);
   if (!existsSync(overlays)) console.log(`WARNUNG: Overlay-Tabellen nicht gefunden (${overlays}) - Zonenkarten zeigen nur Erkundetes.`);
-  const r = await build({ questie, forever, corrections: opts.corrections, overlays, overlaysRetail, out });
+  const dungeonsFile = opts.dungeons ?? findDungeonsLua(opts.corrections ? [opts.corrections] : correctionCandidates(questie));
+  if (!dungeonsFile) console.log(`WARNUNG: dungeons.lua nicht gefunden (${DUNGEONS_LUA_REL.join("/")} im QuestieDB-Ordner; --dungeons <datei>, zuvor scripts/fetch-questiedb-release.mjs) - Dungeons.lua wird ohne Eintraege erzeugt.`);
+  const r = await build({ questie, forever, corrections: opts.corrections, overlays, overlaysRetail, dungeonsFile, out });
   const s = r.stats;
   console.log(`QuestieDB ${r.questieVersion}: ${questie}`);
   console.log(`Fraktionskorrekturen (${r.corrections.factions}): ${r.corrections.source}; ${JSON.stringify(r.corrections.fixes.counts)}`);
@@ -1016,7 +1433,11 @@ export async function main(argv) {
   console.log(`Geber: ${r.givers.size}; Punkte verworfen: Instanz ${s.instancePoints}, ohne Karte ${s.unmappedPoints}`);
   console.log(`Overlays: ${r.overlays.list.length} auf ${r.overlays.maps} Karten (verworfen ${r.overlays.skipped}); Quelle ${r.overlays.source}`);
   console.log(`Retail-Overlays: ${r.overlaysRetail.list.length} auf ${r.overlaysRetail.maps} Karten (verworfen ${r.overlaysRetail.skipped}); Quelle ${r.overlaysRetail.source}`);
-  console.log(`Dateigroessen: Quests.lua ${r.sizes.quest} B, Givers.lua ${r.sizes.giver} B, Names.lua ${r.sizes.names} B, Overlays.lua ${r.sizes.overlay} B`);
+  if (r.dungeon.stats) {
+    const d = r.dungeon.stats;
+    console.log(`Dungeons: ${r.dungeon.dungeons.length} (Quest-Eintraege ${r.dungeon.dungeons.reduce((n, x) => n + x.quests.length, 0)}; Seeds ${d.seeds}, zugeordnet ${d.assigned} [z ${d.byGrade.z}, t ${d.byGrade.t}, a ${d.byGrade.a}, k ${d.byGrade.k}, m ${d.byGrade.m}], mehrdeutig ${d.ambiguous}, nicht zuordenbar ${d.unassigned}); Quelle ${r.dungeonsFile}`);
+  }
+  console.log(`Dateigroessen: Quests.lua ${r.sizes.quest} B, Givers.lua ${r.sizes.giver} B, Names.lua ${r.sizes.names} B, Overlays.lua ${r.sizes.overlay} B, Dungeons.lua ${r.sizes.dungeon} B`);
   if (r.badValues) console.log(`Hinweis: ${r.badValues} QuestieDB-Werte nicht dekodierbar (als fehlend behandelt).`);
   console.log(`Ziel: ${out}`);
   return r;

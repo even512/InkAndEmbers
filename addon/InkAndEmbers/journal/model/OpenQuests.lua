@@ -35,6 +35,10 @@
 -- the data addon, its flags r/g are added, they carry the Forever database's quest type). Failure or no fitting QuestieDB:
 -- the data addon stays. OpenQuests.sourceInfo() tells source and reason (diagnostics), the footer names the source.
 -- The retail client never touches QuestieDB.
+-- Readers for other models (additive, change "dungeon-quests"; no effect on the open list): record(id), stateOf(id)/statesOf(ids)
+-- (done | log | open | locked | foreign, same rules as the open list), giversOf(id)/giverKind(id)/giverMap(id), pointOut,
+-- profileInfo, generation, listen (change notice, 0.5 s bundle), dungeonBlob (EveNChronicleQuestData.dungeon, kept raw for
+-- journal/model/DungeonQuests.lua) and addTodo options text/unique.
 local _, ns = ...
 
 local Journal = ns.Journal or {}
@@ -56,6 +60,7 @@ OpenQuests.MAX_PINS = 300
 OpenQuests.TOOLTIP_LINES = 10
 OpenQuests.NAME_REQUESTS = 60 -- client quest-title loads per evaluation (only quests without a German name)
 OpenQuests.NPC_TRIES = 3 -- tooltip lookups per NPC without a German name
+OpenQuests.DUNGEON_MAX = 600000 -- characters of the dungeon table that are accepted
 
 -- texts (German here, English in locales/enUS_model.lua, scope "m.OpenQuests"; read only on use)
 local T = ns.Locale.ns("m.OpenQuests", {
@@ -188,7 +193,7 @@ end
 -- eval = cached evaluation { gen, key, items = {...} }; flag = cache of IsQuestFlaggedCompleted; turned = quests turned
 -- in this session
 local S = { tried = false, loadCalls = 0, data = nil, reason = nil, nextTry = nil, gen = 0, eval = nil, flag = {}, turned = {}, test = nil,
-  levelHint = nil, evalCount = 0 }
+  levelHint = nil, evalCount = 0, ctx = nil, listeners = {}, nameGen = 0 }
 OpenQuests._state = S
 
 local EMPTY = {}
@@ -361,9 +366,12 @@ local function adopt()
   end
   local okO, overlays = pcall(parseOverlays, g.overlay)
   local okR, overlaysRetail = pcall(parseOverlays, g.overlayRetail)
+  -- dungeon table (E1, raw text, parsed on demand by journal/model/DungeonQuests.lua); size-limited, else ignored
+  local dungeon = (type(g.dungeon) == "string" and sub(g.dungeon, 1, 1) == "\n" and #g.dungeon <= OpenQuests.DUNGEON_MAX) and g.dungeon or nil
   S.data = { quests = quests, givers = givers, nQuests = nq, nGivers = ng, version = version, factions = factions,
-    overlays = okO and overlays or {}, overlaysRetail = okR and overlaysRetail or {}, german = german }
+    overlays = okO and overlays or {}, overlaysRetail = okR and overlaysRetail or {}, german = german, dungeon = dungeon }
   S.eval = nil
+  S.ctx = nil
   S.index = nil
   return true
 end
@@ -458,7 +466,8 @@ local function finishLive(L, job)
     end
   end
   S.data = { quests = job.quests, givers = job.givers, nQuests = job.nQuests, nGivers = job.nGivers, version = L.version,
-    overlays = old and old.overlays or {}, overlaysRetail = old and old.overlaysRetail or {}, german = job.ctx.german, live = true }
+    overlays = old and old.overlays or {}, overlaysRetail = old and old.overlaysRetail or {}, german = job.ctx.german, live = true,
+    dungeon = old and old.dungeon or nil }
   L.state, L.reason, L.job = "done", "ACTIVE", nil
   L.quests, L.givers = job.nQuests, job.nGivers
   L.sharedQuests, L.sharedGivers = job.sharedQuests, job.sharedGivers
@@ -1033,6 +1042,87 @@ local function buildIndex(faction, sp)
   return idx
 end
 
+-- judging context of one state (generation x profile x map space): the profile, "done" (Chronik log, session, test set, flag)
+-- and the quest log; shared by evaluate() and the readers stateOf/statesOf. partial = the Chronik index is not finished yet.
+local function newContext(p, sp, key)
+  S.flag = {}
+  local chronik, complete = chronikDone()
+  local testDone = S.test and S.test.doneSet or nil
+  local function done(id)
+    if chronik[id] or S.turned[id] then return true end
+    if testDone and testDone[id] then return true end
+    if S.test then return false end
+    return flagged(id)
+  end
+  local c = { gen = S.gen, key = key, profile = p, space = sp, done = done, inLog = questLogSet(), partial = not complete or nil,
+    states = {} }
+  S.ctx = c
+  return c
+end
+
+-- state of one not completed quest outside the log: "open" | "locked" | "foreign", reasons, notes (texts), raceUnsure
+local function judge(q, p, d, done, inLog)
+  local reasons, notes, raceNote
+  local state = "open"
+  local okR, whyR, unsureR = raceCheck(q.races, p)
+  if not okR then
+    state = "foreign"
+    reasons = { { kind = whyR or "race", text = whyR == "faction" and T.foreignFaction or T.foreignRace } }
+  elseif not classCheck(q.classes, p) then
+    state = "foreign"
+    reasons = { { kind = "class", text = T.foreignClass } }
+  else
+    reasons = {}
+    if q.minLevel > 0 and q.minLevel > p.level then
+      reasons[#reasons + 1] = { kind = "level", need = q.minLevel, text = T("level", q.minLevel) }
+    end
+    if q.preAll then
+      local missing = {}
+      for _, pid in ipairs(q.preAll) do
+        if not done(pid) then missing[#missing + 1] = pid end
+      end
+      if #missing > 0 then
+        local text
+        if #missing == 1 then
+          text = T("prequest", nameOf(d, missing[1]))
+        else
+          text = T("prequestMore", nameOf(d, missing[1]), #missing - 1)
+        end
+        reasons[#reasons + 1] = { kind = "prequest", ids = missing, text = text }
+      end
+    end
+    if q.preAny then
+      local any = false
+      for _, pid in ipairs(q.preAny) do
+        if done(pid) then any = true break end
+      end
+      if not any then
+        local text = T("prequestAny", joinNames(d, q.preAny, 3, " / ") .. (#q.preAny > 3 and " …" or ""))
+        reasons[#reasons + 1] = { kind = "prequest", ids = q.preAny, text = text }
+      end
+    end
+    if q.excl then
+      for _, xid in ipairs(q.excl) do
+        if done(xid) or inLog[xid] then
+          reasons[#reasons + 1] = { kind = "exclusive", ids = { xid }, text = T("exclusive", nameOf(d, xid)) }
+          break
+        end
+      end
+    end
+    if #reasons > 0 then state = "locked" end
+    if q.flags.s then
+      notes = notes or {}
+      notes[#notes + 1] = T.notChecked
+    end
+    if unsureR then
+      notes = notes or {}
+      notes[#notes + 1] = T.raceUnsure
+      raceNote = true
+    end
+  end
+  return state, reasons, notes, raceNote
+end
+
 -- evaluation of all quests; result per quest: { q, state = "open"|"locked"|"foreign", reasons, notes, raceUnsure }
 local function evaluate()
   local p = profile()
@@ -1040,84 +1130,20 @@ local function evaluate()
   local key = profileKey(p) .. "|" .. sp
   local ev = S.eval
   if ev and ev.gen == S.gen and ev.key == key and not ev.partial then return ev end
-  local d = S.data
   local idx = buildIndex(p.faction, sp)
-  S.flag = {}
   S.evalCount = S.evalCount + 1
-  local chronik, complete = chronikDone()
-  local testDone = S.test and S.test.doneSet or nil
-  local inLog = questLogSet()
-  local function done(id)
-    if chronik[id] or S.turned[id] then return true end
-    if testDone and testDone[id] then return true end
-    if S.test then return false end
-    return flagged(id)
-  end
+  local c = newContext(p, sp, key)
+  local d = S.data
+  local done, inLog = c.done, c.inLog
   local items = {}
   for _, q in ipairs(idx.quests) do
     local id = q.id
     if not done(id) and not inLog[id] then
-      local reasons, notes
-      local state = "open"
-      local okR, whyR, unsureR = raceCheck(q.races, p)
-      if not okR then
-        state = "foreign"
-        reasons = { { kind = whyR or "race", text = whyR == "faction" and T.foreignFaction or T.foreignRace } }
-      elseif not classCheck(q.classes, p) then
-        state = "foreign"
-        reasons = { { kind = "class", text = T.foreignClass } }
-      else
-        reasons = {}
-        if q.minLevel > 0 and q.minLevel > p.level then
-          reasons[#reasons + 1] = { kind = "level", need = q.minLevel, text = T("level", q.minLevel) }
-        end
-        if q.preAll then
-          local missing = {}
-          for _, pid in ipairs(q.preAll) do
-            if not done(pid) then missing[#missing + 1] = pid end
-          end
-          if #missing > 0 then
-            local text
-            if #missing == 1 then
-              text = T("prequest", nameOf(d, missing[1]))
-            else
-              text = T("prequestMore", nameOf(d, missing[1]), #missing - 1)
-            end
-            reasons[#reasons + 1] = { kind = "prequest", ids = missing, text = text }
-          end
-        end
-        if q.preAny then
-          local any = false
-          for _, pid in ipairs(q.preAny) do
-            if done(pid) then any = true break end
-          end
-          if not any then
-            local text = T("prequestAny", joinNames(d, q.preAny, 3, " / ") .. (#q.preAny > 3 and " …" or ""))
-            reasons[#reasons + 1] = { kind = "prequest", ids = q.preAny, text = text }
-          end
-        end
-        if q.excl then
-          for _, xid in ipairs(q.excl) do
-            if done(xid) or inLog[xid] then
-              reasons[#reasons + 1] = { kind = "exclusive", ids = { xid }, text = T("exclusive", nameOf(d, xid)) }
-              break
-            end
-          end
-        end
-        if #reasons > 0 then state = "locked" end
-        if q.flags.s then
-          notes = notes or {}
-          notes[#notes + 1] = T.notChecked
-        end
-        if unsureR then
-          notes = notes or {}
-          notes[#notes + 1] = T.raceUnsure
-        end
-      end
-      items[#items + 1] = { q = q, state = state, reasons = reasons, notes = notes }
+      local state, reasons, notes, raceNote = judge(q, p, d, done, inLog)
+      items[#items + 1] = { q = q, state = state, reasons = reasons, notes = notes, raceUnsure = raceNote }
     end
   end
-  ev = { gen = S.gen, key = key, items = items, profile = p, idx = idx, partial = not complete or nil }
+  ev = { gen = S.gen, key = key, items = items, profile = p, idx = idx, partial = c.partial }
   S.eval = ev
   return ev
 end
@@ -1545,6 +1571,9 @@ local function namesArrived(id)
   S.pending[id] = nil
   q.dname = nil
   S.eval = nil
+  S.ctx = nil -- the readers (stateOf/statesOf) cache reason texts with names in the context: judge anew
+  S.nameGen = S.nameGen + 1
+  OpenQuests._notify()
   changed()
 end
 OpenQuests._namesArrived = namesArrived
@@ -1568,9 +1597,225 @@ function OpenQuests.addTodo(q, opts)
   local Plans = ns.Plans
   if not (Plans and type(Plans.add) == "function") then return nil, "kein-plan" end
   local name = type(q.name) == "string" and q.name or T("questFallback", q.id or 0)
-  local ok, id, why = pcall(Plans.add, { kind = "place", mapID = mapID, x = x, y = y, text = T("todoText", name) })
+  -- opts.text replaces the standard text "Quest annehmen: <name>" (entrance variant of the dungeon page); opts.unique = no second
+  -- open place goal with the same text ("doppelt")
+  local text = (type(opts.text) == "string" and not isSecret(opts.text) and opts.text ~= "") and opts.text or T("todoText", name)
+  if opts.unique == true and type(Plans.list) == "function" then
+    local clean = type(Plans.cleanText) == "function" and Plans.cleanText(text) or text
+    local okL, open = pcall(Plans.list, "open")
+    if okL and type(open) == "table" then
+      for _, e in ipairs(open) do
+        if type(e) == "table" and e.kind == "place" and e.text == clean then return nil, "doppelt" end
+      end
+    end
+  end
+  local ok, id, why = pcall(Plans.add, { kind = "place", mapID = mapID, x = x, y = y, text = text })
   if not ok then return nil, "kein-plan" end
   return id, why
+end
+
+-- ---------------------------------------------------------------- readers for other models (additive)
+
+-- change notice for other models (journal/model/DungeonQuests.lua): fn() after the state changed (event, names, source), bundled
+-- to one call per 0.5 s
+function OpenQuests.listen(fn)
+  if type(fn) ~= "function" then return false end
+  S.listeners[#S.listeners + 1] = fn
+  return true
+end
+
+function OpenQuests._notify()
+  if #S.listeners == 0 or S.notifyQueued then return end
+  S.notifyQueued = true
+  local function fire()
+    S.notifyQueued = nil
+    for _, fn in ipairs(S.listeners) do pcall(fn) end
+  end
+  if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+    local ok = pcall(C_Timer.After, 0.5, fire)
+    if ok then return end
+  end
+  fire()
+end
+
+-- generation of the state: rises with every event (evaluation) and with arriving names; read-only caches compare both
+function OpenQuests.generation()
+  return S.gen, S.nameGen
+end
+
+-- the raw dungeon table of the data addon (EveNChronicleQuestData.dungeon) once loaded, else nil; never loads. Second value:
+-- the data table (identity changes when the live source replaces the data)
+function OpenQuests.dungeonBlob()
+  local d = S.data
+  return d and d.dungeon or nil, d
+end
+
+-- copy of the player's profile { race, class, level, faction, raceBit, classBit, test }
+function OpenQuests.profileInfo()
+  local p = profile()
+  return { race = p.race, class = p.class, level = p.level, faction = p.faction, raceBit = p.raceBit, classBit = p.classBit, test = p.test }
+end
+
+-- the client's map point of a data map point (Forever: unchanged), nil without a counterpart
+function OpenQuests.pointOut(mapID, x, y)
+  mapID, x, y = num(mapID), num(x), num(y)
+  if not (mapID and x and y) then return nil end
+  local sp = space()
+  if sp ~= "retail" then return floor(mapID), x, y end
+  local M = mapSpace()
+  if not (M and M.toClient) then return nil end
+  local oid, ox, oy = M.toClient(floor(mapID), x, y, sp)
+  if not oid then return nil end
+  return oid, ox, oy
+end
+
+-- read-only record of a loaded quest (nil = not loaded / unknown / retail world map source): id, name (display), level, minLevel,
+-- races, classes (bitmasks), flags (u = beta data unsure included), unsure, preAll/preAny/excl (ID lists, shared: do not modify)
+function OpenQuests.record(id)
+  id = num(id)
+  local d = S.data
+  if not (id and d) or retailSource() then return nil end
+  local q = d.quests[floor(id)]
+  if not q then return nil end
+  return { id = q.id, name = nameOf(d, q.id), level = q.level, minLevel = q.minLevel, races = q.races, classes = q.classes,
+    flags = flagsOut(q), unsure = isUnsure(q), preAll = q.preAll, preAny = q.preAny, excl = q.excl }
+end
+
+-- judging context for the readers: the cached one of this state, else a new one
+local function readContext()
+  local p = profile()
+  local sp = space()
+  local key = profileKey(p) .. "|" .. sp
+  local c = S.ctx
+  if c and c.gen == S.gen and c.key == key then return c end
+  return newContext(p, sp, key)
+end
+
+local function stateIn(c, q, d)
+  local id = q.id
+  local r = c.states[id]
+  if r then return r end
+  if c.done(id) then
+    r = { id = id, state = "done", reasons = {}, notes = {}, partial = c.partial }
+  elseif c.inLog[id] then
+    r = { id = id, state = "log", reasons = {}, notes = {}, partial = c.partial }
+  else
+    local state, reasons, notes, raceNote = judge(q, c.profile, d, c.done, c.inLog)
+    r = { id = id, state = state, reasons = reasons, notes = notes or {}, raceUnsure = raceNote, partial = c.partial }
+  end
+  r.unsure = isUnsure(q)
+  c.states[id] = r
+  return r
+end
+
+-- state of the quests in ids (list) for the player: map id -> { id, state = "done"|"log"|"open"|"locked"|"foreign", reasons
+-- (kind/text), notes (texts), raceUnsure, unsure, partial (Chronik index not finished: preliminary) }; unknown IDs are missing
+-- from the map. Loads the data addon on demand (like list); empty without data or in retail. Results are shared (read-only).
+function OpenQuests.statesOf(ids)
+  local out = {}
+  if type(ids) ~= "table" or isSecret(ids) or retailSource() or not OpenQuests.available() then return out end
+  local d = S.data
+  local c = readContext()
+  for _, id in ipairs(ids) do
+    id = num(id)
+    local q = id and d.quests[floor(id)]
+    if q then out[q.id] = stateIn(c, q, d) end
+  end
+  return out
+end
+
+function OpenQuests.stateOf(id)
+  id = num(id)
+  if not id then return nil end
+  return OpenQuests.statesOf({ id })[floor(id)]
+end
+
+-- kind of the giver of a quest: "outside" (fitting giver with a map point), "inside" (giver known, but without a map point:
+-- spawns in the dungeon), "none" (no giver: starts by an item or unknown); nil = unknown quest
+function OpenQuests.giverKind(id)
+  id = num(id)
+  local d = S.data
+  local q = id and d and d.quests[floor(id)]
+  if not q then return nil end
+  local faction = profile().faction
+  local any = false
+  for _, key in ipairs(q.givers or EMPTY) do
+    local g = d.givers[key]
+    local suffix = match(key, "([AH])$")
+    local fits
+    if g then
+      fits = giverFits(g, faction)
+    else
+      fits = suffix == nil or faction == nil or (suffix == "A" and faction == "Alliance") or (suffix == "H" and faction == "Horde")
+    end
+    if fits then
+      if g and #g.maps > 0 then return "outside" end
+      any = true
+    end
+  end
+  return any and "inside" or "none"
+end
+
+-- givers of a quest with their map points in the client's map space: list { key, kind, id, name, mapID, points }, giverKind
+-- (see giverKind), unmapped (points without a counterpart in the client's map space were dropped)
+function OpenQuests.giversOf(id)
+  id = num(id)
+  local d = S.data
+  local q = id and d and d.quests[floor(id)]
+  if not q or retailSource() then return {}, nil, false end
+  local p = profile()
+  local list, unmapped = giverOut(d, q, nil, p.faction, space())
+  return list, OpenQuests.giverKind(q.id), unmapped
+end
+
+-- the first map (client map space) of the quest's fitting givers, nil without one (no giver names are looked up)
+function OpenQuests.giverMap(id)
+  id = num(id)
+  local d = S.data
+  local q = id and d and d.quests[floor(id)]
+  if not q or retailSource() then return nil end
+  local faction, sp = profile().faction, space()
+  for _, key in ipairs(q.givers or EMPTY) do
+    local g = d.givers[key]
+    if g and giverFits(g, faction) then
+      local maps = clientMaps(g, sp)
+      if maps[1] then return maps[1].mapID end
+    end
+  end
+  return nil
+end
+
+-- id -> sorted list of the quests that name it as preAll/preAny (built once per data, shared: do not modify); nil without data
+function OpenQuests.followers()
+  local d = S.data
+  if not d or retailSource() then return nil end
+  if d.followers then return d.followers end
+  local f = {}
+  for id, q in pairs(d.quests) do
+    for _, list in ipairs({ q.preAll or EMPTY, q.preAny or EMPTY }) do
+      for _, pid in ipairs(list) do
+        local t = f[pid]
+        if not t then
+          t = {}
+          f[pid] = t
+        end
+        if t[#t] ~= id then t[#t + 1] = id end
+      end
+    end
+  end
+  for _, t in pairs(f) do
+    sort(t)
+    local n = 1
+    for i = 2, #t do -- a quest in preAll and preAny of the same quest: once
+      if t[i] ~= t[n] then
+        n = n + 1
+        t[n] = t[i]
+      end
+    end
+    for i = #t, n + 1, -1 do t[i] = nil end
+  end
+  d.followers = f
+  return f
 end
 
 function OpenQuests.test()
@@ -1666,7 +1911,9 @@ end
 function OpenQuests.invalidate()
   S.gen = S.gen + 1
   S.eval = nil
+  S.ctx = nil
   S.flag = {}
+  OpenQuests._notify()
 end
 
 function OpenQuests.onEvent(event, arg)
@@ -1690,7 +1937,7 @@ end
 -- index finished (Chronik log complete): discard a preliminary evaluation
 if Journal.Index and type(Journal.Index.onReady) == "function" then
   pcall(Journal.Index.onReady, function()
-    if S.eval and S.eval.partial then OpenQuests.invalidate() end
+    if (S.eval and S.eval.partial) or (S.ctx and S.ctx.partial) then OpenQuests.invalidate() end
   end)
 end
 

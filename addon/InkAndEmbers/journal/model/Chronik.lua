@@ -16,8 +16,25 @@ local format, find, match = string.format, string.find, string.match
 
 Chronik.MAX_LEVEL = 60        -- WoW Forever and the fallback; the live value is Chronik.maxLevel()
 Chronik.FORECAST_FROM = 10    -- forecast only from this level
-Chronik.FORECAST_LEVELS = 5   -- last level durations that go into the extrapolation
-Chronik.FACTOR_MIN, Chronik.FACTOR_MAX = 0.9, 1.08
+Chronik.FORECAST_LEVELS = 5   -- last completed levels that go into the pace
+Chronik.FORECAST_MIN_LEVELS = 2   -- fewer completed levels with a time: no estimate
+Chronik.FORECAST_MIN_SECONDS = 1200 -- ... or less than this much active time in them
+Chronik.AFK_FLOOR = 0.2       -- a level keeps at least this share of its time after the away time is taken out
+Chronik.FACTOR_MIN, Chronik.FACTOR_MAX = 0.9, 1.08 -- only Chronik.project (time-only extrapolation, no longer used by the forecast)
+
+-- Experience needed per level (what UnitXPMax returns at level n, n -> n+1), n = 1..59. This is the WoW Classic table
+-- (public, e.g. Wowpedia "Experience to level"; the 59 values add up to 4,084,700, the known total for 1 -> 60). Proof it holds on
+-- WoW Forever (preset 1): the xpMax values in a real Forever log (RS lines, levels 1-14) match it entry by entry. Beyond 14 it is
+-- not seen in game data: forecastOf only uses it while UnitXPMax at the current level equals the table entry, otherwise no forecast.
+-- Retail (max level 80/90) has a different curve: not covered, no forecast there.
+Chronik.XP_TABLE = {
+  400, 900, 1400, 2100, 2800, 3600, 4500, 5400, 6500, 7600,
+  8800, 10100, 11400, 12900, 14400, 16000, 17700, 19400, 21300, 23200,
+  25200, 27300, 29400, 31700, 34000, 36400, 38900, 41400, 44300, 47400,
+  50800, 54500, 58600, 62800, 67100, 71600, 76100, 80800, 85700, 90700,
+  95800, 101000, 106300, 111800, 117500, 123200, 129100, 135100, 141200, 147500,
+  153900, 160400, 167100, 173900, 180800, 187900, 195000, 202300, 209800,
+}
 Chronik.DIARY_MAX = 8000      -- diary entries (the newest are kept)
 Chronik.LOOT_MIN_QUALITY = 3  -- finds in the diary from blue (green left out)
 Chronik.NAME_MAX = 40         -- bytes for names in header and profile
@@ -41,6 +58,8 @@ local TEXT = Loc.ns("m.Chronik", {
   forecastTitle = "So weiter",
   forecastEarly = "Zu früh für eine Prognose",
   forecastNone = "Für eine Schätzung fehlen noch Stufen-Zeiten.",
+  forecastNoTable = "Für diese Spielversion ist die nötige Erfahrung je Stufe nicht belegt, darum keine Prognose.",
+  forecastNoXp = "Ohne lesbaren Erfahrungsstand keine Prognose.",
   forecastDone = "Stufe %s ist erreicht. Die Reise geht trotzdem weiter.",
   src_quest = "Quests", src_kill = "Kills", src_explore = "Entdeckung", src_other = "Sonstiges",
   dm_first_blue = "das erste seltene Stück", dm_first_epic = "das erste epische Stück", dm_first_bag = "die erste Tasche",
@@ -283,7 +302,7 @@ local TEXT = Loc.ns("m.Chronik", {
   deaths_other = "%s Tode",
   over = "über %s Std.",
   forecastHead = "So weiter: Stufe %s in %s",
-  forecastBody = "grobe Schätzung aus den letzten %s Stufen",
+  forecastBody = "grobe Schätzung: nötige Erfahrung bis Stufe %s, Euer Tempo der letzten %s Stufen, ohne AFK-Zeit",
   fb_level = "Eine neue Stufe.", fb_quest = "Eine Quest abgegeben.", fb_loot = "Etwas Wertvolles erhalten.",
   fb_kill = "Ein besonderer Gegner fiel.", fb_close = "Ein knapper Sieg.", fb_death = "Gestorben.", fb_moment = "Ein Moment für die Chronik.",
   fb_campfire = "Am Lagerfeuer gerastet.", fb_zone = "Neues Land betreten.", fb_subzone = "Einen neuen Ort entdeckt.",
@@ -1778,6 +1797,7 @@ local function buildStatic(index)
   local deaths, deathsNoLevel, deathsTotal = deathsByLevel(index)
   local st = {
     char = char, reach = reach, at = at, dur = dur, approx = approx, top = top,
+    afk = type(index.afkLevel) == "table" and index.afkLevel or {},
     deaths = deaths, deathsNoLevel = deathsNoLevel, deathsTotal = deathsTotal,
     sources = buildSources(index),
   }
@@ -1841,6 +1861,40 @@ function Chronik.project(durations, level, progress, maxLevel)
     series[#series + 1] = remaining
   end
   return remaining, series, f
+end
+
+-- Forecast from the experience still needed: remaining = (rest of the current level + the need of every level up to the top)
+-- divided by the pace. The pace is measured in "foe units": level n is worth XP_TABLE[n] / (45 + 5 * n) of them, because the
+-- XP of an equal-level foe grows with 45 + 5 * level (Classic formula). So a level that needs more experience also gives more
+-- per hour, which keeps the estimate from exploding the way a plain growth of the level times does. Pace = total units of
+-- the sample levels / their total active seconds (long levels count with their length, one lucky or lazy level does not
+-- tip it). Quest XP and rested XP are not modelled separately: they sit in the measured pace.
+-- samples = { { level = n, seconds = active seconds }, ... } of completed levels. xpDone = experience already earned in the
+-- current level (UnitXP). -> remaining seconds, EP per hour at the current level, number of levels used | nil
+local function foeUnits(n) return Chronik.XP_TABLE[n] / (45 + 5 * n) end
+
+function Chronik.projectXp(samples, level, xpDone, top)
+  local T = Chronik.XP_TABLE
+  top, level = tonumber(top), tonumber(level)
+  if type(samples) ~= "table" or not finite(top) or not finite(level) then return nil end
+  level, top = floor(level), floor(top)
+  if level < 1 or level >= top or top - 1 > #T then return nil end
+  local units, secs, n = 0, 0, 0
+  for _, s in ipairs(samples) do
+    local L, sec = type(s) == "table" and tonumber(s.level), type(s) == "table" and tonumber(s.seconds)
+    if L and sec and finite(L) and finite(sec) and sec > 0 and L >= 1 and L <= #T then
+      units, secs, n = units + foeUnits(floor(L)), secs + sec, n + 1
+    end
+  end
+  if n < Chronik.FORECAST_MIN_LEVELS or secs < Chronik.FORECAST_MIN_SECONDS then return nil end
+  local pace = units / secs -- foe units per second
+  local done = tonumber(xpDone)
+  done = (finite(done) and done > 0) and min(done, T[level]) or 0
+  local left = foeUnits(level) * (1 - done / T[level])
+  for L = level + 1, top - 1 do left = left + foeUnits(L) end
+  local remaining = left / pace
+  if not finite(remaining) then return nil end
+  return remaining, pace * (45 + 5 * level) * 3600, n
 end
 
 local function sessionCount(db, guid)
@@ -2110,7 +2164,10 @@ local function flowOf(index, st, level, playedSec, now, texts)
   }
 end
 
-local function forecastOf(st, level, curDur)
+-- Forecast "level <top> in ...": remaining experience / pace (Chronik.projectXp). Only where the experience table holds: top
+-- must be covered by it and UnitXPMax at the current level must equal the table entry (Forever Classic curve); Retail or another
+-- curve -> no number, with the reason as text. xp = view.xp (cur/max of the current level, live or from the SV).
+local function forecastOf(st, level, xp)
   local out = { ok = false, title = TEXT.forecastTitle }
   local top = Chronik.maxLevel()
   if level >= top then
@@ -2121,19 +2178,37 @@ local function forecastOf(st, level, curDur)
     out.body = TEXT.forecastEarly
     return out
   end
-  local d = {}
-  for L = max(1, level - Chronik.FORECAST_LEVELS), level - 1 do
-    if st.dur[L] and st.dur[L] > 0 then d[#d + 1] = st.dur[L] end
+  local T = Chronik.XP_TABLE
+  if top - 1 > #T then
+    out.body = TEXT.forecastNoTable
+    return out
   end
-  local remaining = Chronik.project(d, level, curDur or 0, top)
-  if not remaining or not finite(remaining) then
+  if type(xp) ~= "table" or not xp.max or xp.max <= 0 then
+    out.body = TEXT.forecastNoXp
+    return out
+  end
+  if xp.max ~= T[level] then
+    out.body = TEXT.forecastNoTable
+    return out
+  end
+  local samples = {}
+  for L = max(1, level - Chronik.FORECAST_LEVELS), level - 1 do
+    local d = st.dur[L]
+    if d and d > 0 then
+      -- away time (AF lines) is not pace: out of the level, but a level keeps a floor so it never turns to zero
+      local active = max(d * Chronik.AFK_FLOOR, d - (st.afk[L] or 0))
+      samples[#samples + 1] = { level = L, seconds = active }
+    end
+  end
+  local remaining, epPerHour, used = Chronik.projectXp(samples, level, xp.cur, top)
+  if not remaining then
     out.body = TEXT.forecastNone
     return out
   end
-  out.ok, out.hours = true, remaining / 3600
+  out.ok, out.hours, out.epPerHour = true, remaining / 3600, epPerHour
   local h = remaining > 9999 * 3600 and TEXT("over", int(9999)) or Chronik.approxDuration(remaining)
   out.title = TEXT("forecastHead", int(top), h)
-  out.body = TEXT("forecastBody", int(#d))
+  out.body = TEXT("forecastBody", int(top), int(used))
   return out
 end
 
@@ -2175,7 +2250,7 @@ function Chronik.evaluate(index, opts)
   view.flow = flowOf(index, st, level, playedSec, now, T())
   view.diary = st.diary
   view.sources = st.sources
-  view.forecast = forecastOf(st, level, view.flow.current)
+  view.forecast = forecastOf(st, level, view.xp)
   view.seed = T() and T().seed(type(st.char.info) == "table" and st.char.info.firstSeen) or "0"
   return view
 end

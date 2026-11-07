@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.6
+
+### New
+- **Dungeons tab under Quests (WoW Forever only):** shows the quests and quest chains of each dungeon, which of them you have done, are carrying or are still missing, and what they need first (prerequisite quests, level, quests that rule each other out). Which dungeon a quest belongs to comes from the quest database; where that was derived rather than listed, the tab marks it as an estimate. Quests of the other faction, race or class are hidden unless you ask for them.
+
+### Changes
+- **Level 60 forecast:** the forecast now uses the experience you still need and your pace over the last levels, leaving out the time you were AFK. Where the game version has no documented experience table, or the experience cannot be read, it says so instead of showing a number.
+- **Quest data updated to QuestieDB 1.0.11:** corrected quest names, levels and prerequisites, plus more German names for quests, creatures and items. The dungeon quest lists are unchanged by this update.
+
 ## 1.0.5
 
 ### Changes
