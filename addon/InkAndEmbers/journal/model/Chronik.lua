@@ -1684,7 +1684,9 @@ local function buildDiary(index, char, flowDur)
     add(r, "close", { hp = (hp and hp >= 0 and hp <= 100) and floor(hp + 0.5) or nil })
   end
   for _, r in ipairs(Idx.list(index, "DE")) do
-    add(r, "death", { zone = rawStr(Idx.str(r, "DE", "sub")) or zone(r, "DE") })
+    -- instance deaths have no map: the instance name (IE/IL visit), else the subzone
+    local inst = (not posId(Idx.str(r, "DE", "mapID"))) and Idx.deathInstance(index, r) or nil
+    add(r, "death", { zone = (inst and nameIn(instances, inst)) or rawStr(Idx.str(r, "DE", "sub")) or zone(r, "DE") })
   end
   local skipStartContinent = true -- the starting continent is no news (the medal still counts it)
   for _, r in ipairs(Idx.list(index, "MO")) do

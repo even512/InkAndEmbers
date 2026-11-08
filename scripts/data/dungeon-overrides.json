@@ -2,6 +2,8 @@
   "description": "Handtabelle der Dungeon-Zuordnung fuer scripts/build-quest-data.mjs (Dungeons.lua, Guete m). Nur Quests, die die automatische Zuordnung (Zone, Forever-Gebiet, Geber/Ziel/Gegenstand, Kette) nicht oder falsch trifft. dungeons = Haupt-Gebiets-IDs aus dungeons.lua der QuestieDB (z. B. 719 Blackfathom-Tiefe, 1584 Blackrocktiefen); leere Liste = Quest gehoert zu keinem Dungeon. Ein Eintrag hat Vorrang vor jeder automatischen Regel.",
   "quests": {
     "1442": { "dungeons": [719], "note": "Seeking the Kor Gem: Corrupted Kor Gem droppt von Blackfathom-Tiefe-Mobs, die auch vor dem Eingang (Ashenvale/Darkshore) stehen" },
+    "96395": { "dungeons": [16919], "note": "Ein uralter Groll: in der Halle der Thanen angenommen (Spiellog, 2026-11-07); QuestieDB kennt weder Zone noch Geber, die Quest steht in Kette 96393/96394/96403 des Dungeons" },
+    "98423": { "dungeons": [16919], "note": "Das Abkommen des Einvernehmens: in der Halle der Thanen angenommen (Spiellog, 2026-11-07); QuestieDB kennt weder Zone noch Geber" },
     "7737": { "dungeons": [1584], "note": "Gaining Acceptance: Dark Iron Residue droppt in den Blackrocktiefen; einzelne Dropper haben kein Instanz-Gebiet in den Spawns" }
   }
 }

@@ -430,7 +430,7 @@ end
 
 -- ---------------------------------------------------------------- row of a sheet
 
-local HINT_MARK = { unsure = "?", estimated = "~", giverInside = "^", giverNone = "i", notChecked = "i", raceUnsure = "i", foreverNew = "*" }
+local HINT_MARK = { unsure = "?", estimated = "~", giverInside = "^", giverNone = "i", notChecked = "i", raceUnsure = "i", foreverNew = "*", learned = "+" }
 
 local function hintMarks(notes)
   local seen, out = {}, {}

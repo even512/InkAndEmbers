@@ -272,6 +272,15 @@ end
 
 local revived -- forward declaration (way back, below)
 
+-- instanceID (8th return of GetInstanceInfo) or nil when unreadable; only asked while inside an instance
+local function instanceId()
+  if type(GetInstanceInfo) ~= "function" then return nil end
+  local ok, _, _, _, _, _, _, _, id = pcall(GetInstanceInfo)
+  if not ok then return nil end
+  id = num(id)
+  return id and floor(id) or nil
+end
+
 handlers.PLAYER_DEAD = function(self)
   local old = self.dead
   -- a duplicate event is detected by time only; an older open death (resurrection never reported) is closed
@@ -290,7 +299,9 @@ handlers.PLAYER_DEAD = function(self)
   self.spiritAt, self.corpseAt, self.resAt, self.spiritOffer, self.resOffer = nil, nil, nil, nil, nil
   self.gossipAt = nil
   local durMin, durAvg = durability()
-  Store.append("DE", playerLevel(), mapID, x, y, call(IsInInstance) == true and 1 or 0, combat and 1 or 0, ns.Zone.sub(), durMin, durAvg, dayFlag())
+  local inInstance = call(IsInInstance) == true
+  Store.append("DE", playerLevel(), mapID, x, y, inInstance and 1 or 0, combat and 1 or 0, ns.Zone.sub(), durMin, durAvg, dayFlag(),
+    inInstance and instanceId() or nil)
   Core.emit("FC_DEATH")
   Core.after(self, RECAP_DELAY, function(s) readRecap(s, d) end)
 end

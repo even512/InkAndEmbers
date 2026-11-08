@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.0.8
+
+### New
+- **Dungeons page in the Chronicle:** a new bookmark "Dungeons" lists every dungeon run, newest first: instance, date, duration, bosses defeated, deaths and your group as class symbols. Click a run to read it on the right-hand page: when and how long you were inside, your level, kills and experience, the bosses in the order of the fights with failed attempts and fight duration, your group (class, level), your deaths with the cause, the finds from green quality up (with the original item tooltip) and the quests you accepted or handed in inside. Visits to the same dungeon with short breaks in between (ghost run, disconnect, a trip to the vendor, up to 30 minutes) count as one run. A run is only marked "completed" when the game itself names the bosses of the dungeon; otherwise it just says how many bosses you defeated. Everything is read from your existing log, so it works for past runs as well.
+
+- **Dungeon finds of the whole group:** in a dungeon the book now also records the green-and-better items that your group mates receive (new log line type LG: item, amount, quality, recipient, class where the group units give it, and the kind of roll - Need, Greed, Disenchant, Transmog - where the game's win message for the same item and player was seen). The "Finds (green and better)" section of the Dungeons page lists them in order of time: the item in its quality colour with the original item tooltip, the recipient in class colour ("You" for your own finds) and the kind of roll small behind it. Older runs have no group finds and look as before. If the game hides the loot messages of others (it may in WoW Forever), nothing is recorded and nothing is guessed.
+
+### Changes
+- **Dungeon group = those who took part in a boss kill:** the group of a run (class symbols, "+N", tooltip and the Group section) now only lists people who were there for at least one successful boss fight. Short guests who left before the first boss, and people who were only present for a failed attempt, are no longer counted; a run without a boss kill has no group.
+- **Your own character in the group list:** the Group section of a dungeon run now starts with your own character (class colour, level or level range of the run). The class symbols and the tooltip in the run list still show only your companions.
+- **"Instance entries" instead of "visits":** the Dungeons page now says "N instance entries" (German "Instanzeintritte"), because the number counts how often you re-entered after a death or a trip out, not visits.
+- **"By the Fire" moved into "Companions" (WoW Forever):** the Chronicle bookmark "By the Fire" is gone; the same view now sits behind a switch "Group | By the Fire" at the top of the Companions page. Its content and behavior are unchanged. In Retail there is no switch, as before.
+
+### Fixes
+- **Deaths in instances show the instance:** a death inside a dungeon no longer reads "unknown place" in the Combat tab ("Where I fell", the death report) and the Chronicle diary. The place is now the instance (found from your visit, for old deaths too, nothing is rewritten); the sub-area of the death is added in the tooltip. New deaths also record the instance directly. Deaths in instances still leave no map marker, as the game gives no position there.
+- **Quests accepted inside a dungeon appear in the Dungeons tab:** quests you accept (or hand in) during a visit to a dungeon are now listed under that dungeon, marked "Accepted inside the instance", even if the quest database does not know where they belong. "An Ancient Grudge" and "The Treaty of Understanding" are now assigned to The Hall of Thanes in the data as well.
+- **Dungeon runs interrupted by a logout or crash:** when you left the game (or it crashed) while inside a dungeon, the run could be shown as lasting until your next login, hours of offline time included. Such a run now ends with the session it started in and no longer counts the time you were offline.
+
 ## 1.0.7
 
 ### New

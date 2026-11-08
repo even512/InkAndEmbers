@@ -78,6 +78,7 @@ Index.LISTS = {
   L = true, R = true, S = true, O = true, X = true, LV = true, PL = true, RS = true, DE = true, DR = true, DC = true,
   DB = true, QA = true, QT = true, QR = true, QX = true, BK = true, MO = true, SH = true, GW = true, ZN = true, SZ = true,
   EX = true, FP = true, HB = true, TF = true, TL = true, HS = true, IE = true, IL = true, IB = true, GU = true, DU = true,
+  LG = true, -- finds of other group members in instances (1.0.8)
   LF = true, -- VE is not here: H.VE keeps only the first line per to-do
 }
 
@@ -866,6 +867,93 @@ end
 function Index.list(index, code)
   local l = type(index) == "table" and type(index.lists) == "table" and index.lists[code]
   return l or {}
+end
+
+-- Instance visits from the IE/IL lines, derived at read time (nothing stored): { { id, t0, t1|nil }, ... } in log order.
+-- A visit starts at IE and ends at the matching IL (same instanceID) or at the next IE (never two instances at once);
+-- t1 = nil means it is still open (or was never closed).
+local visitCache = setmetatable({}, { __mode = "k" })
+
+function Index.visits(index)
+  if type(index) ~= "table" then return {} end
+  local cached = visitCache[index]
+  if cached then return cached end
+  local ev = {}
+  for _, r in ipairs(Index.list(index, "IE")) do
+    if finite(r.t) then ev[#ev + 1] = { r = r, open = true } end
+  end
+  for _, r in ipairs(Index.list(index, "IL")) do
+    if finite(r.t) then ev[#ev + 1] = { r = r, open = false } end
+  end
+  table.sort(ev, function(a, b)
+    if a.r.t ~= b.r.t then return a.r.t < b.r.t end
+    local la, lb = a.r.ln or 0, b.r.ln or 0
+    if la ~= lb then return la < lb end
+    return a.open and not b.open
+  end)
+  local out, cur = {}, nil
+  for _, e in ipairs(ev) do
+    if e.open then
+      if cur and not cur.t1 then cur.t1 = e.r.t end
+      cur = { id = Index.num(e.r, "IE", "instanceID"), t0 = e.r.t }
+      out[#out + 1] = cur
+    elseif cur and not cur.t1 then
+      local id = Index.num(e.r, "IL", "instanceID")
+      if id == nil or cur.id == nil or id == cur.id then
+        if Index.num(e.r, "IL", "seconds") == nil then
+          -- IL without duration = written at the next login for a visit that was open at logout/crash: its time is the
+          -- login, not the end of the visit. The visit ends with the session it started in (never offline time).
+          local sp = index.sessions
+          local k = type(sp) == "table" and type(sp.t0) == "table" and bsearch(sp.t0, cur.t0) or 0
+          local se = k > 0 and sp.t1[k] or nil
+          if se == nil or se == huge or se < cur.t0 then se = cur.t0 end
+          cur.t1 = min(se, e.r.t)
+        else
+          cur.t1 = e.r.t
+        end
+      end
+    end
+  end
+  visitCache[index] = out
+  return out
+end
+
+-- instanceID of the visit that encloses time t (nil: none, or the line carries no instanceID)
+function Index.instanceAt(index, t)
+  if not finite(t) then return nil end
+  local v = Index.visits(index)
+  local lo, hi = 1, #v
+  if hi == 0 or v[1].t0 > t then return nil end
+  while lo < hi do
+    local mid = floor((lo + hi + 1) / 2)
+    if v[mid].t0 <= t then lo = mid else hi = mid - 1 end
+  end
+  local e = v[lo]
+  if e.t1 == nil or t <= e.t1 then return e.id end
+  return nil
+end
+
+-- instanceID of a death line: DE.instanceID if present (since 1.0.8), else from the visit around its time. Only for
+-- deaths with DE.instance = 1; nil otherwise.
+function Index.deathInstance(index, rec)
+  if Index.str(rec, "DE", "instance") ~= "1" then return nil end
+  local id = Index.num(rec, "DE", "instanceID")
+  if id and id > 0 then return floor(id) end
+  return Index.instanceAt(index, rec.t)
+end
+
+-- raw name of an instance from snapshots.instances (a string, not yet sanitized) or nil
+function Index.instanceName(index, instanceID)
+  if not instanceID then return nil end
+  local char = type(index) == "table" and index.char
+  local snaps = type(char) == "table" and char.snapshots
+  local g = type(snaps) == "table" and snaps.instances
+  if type(g) ~= "table" then return nil end
+  local e = g[instanceID]
+  if e == nil then e = g[format("%.0f", instanceID)] end
+  local name = type(e) == "table" and e.name
+  if type(name) ~= "string" or name == "" or isSecret(name) then return nil end
+  return name
 end
 
 local base = nil      -- private state of the closed blocks

@@ -3,6 +3,10 @@
 -- Loot rolls (B5): START_LOOT_ROLL remembers the item, the RollOnLoot hook writes RL (choice) and counts counters.rolls[need|greed|pass|de|tmog];
 -- the system messages give RW (won, with our own roll number if it was seen) and counters.rolls.won.
 -- Unreadable source (Retail 12.x): a fresh kill nearby (KILL_TTL_*) gives source 'mob', srcID only if unambiguous and newer than KILL_SRC_MAX s; an approximation (a chest after a kill can count as an enemy).
+-- Finds of other group members (LG, 1.0.8): only inside an instance (visit open in the Instance collector) and only from green up, from the
+-- other-player loot messages (LOOT_ITEM_MULTIPLE, LOOT_ITEM, LOOT_ITEM_PUSHED). Recipient name from the message, class only when the group units
+-- give it readable; the roll type (need/greed/de/tmog) only when the matching "<player> won: <item> (<type> - n)" message (LOOT_ROLL_WON_NO_SPAM_*)
+-- was seen for the same item and player shortly before, else empty. Own messages stay LT (never LG). A secret message only counts as unreadable.
 local _, ns = ...
 local Core, Store, Patterns, Context = ns.Core, ns.Store, ns.Patterns, ns.Context
 
@@ -62,6 +66,21 @@ local MESSAGES = {
   { "LOOT_ITEM_CREATED_SELF_MULTIPLE", "craft" }, { "LOOT_ITEM_CREATED_SELF", "craft" },
   { "LOOT_ITEM_BONUS_ROLL_SELF_MULTIPLE", "bonus" }, { "LOOT_ITEM_BONUS_ROLL_SELF", "bonus" },
 }
+
+-- messages about other players' finds: GlobalString, has quantity (arguments: player, item[, quantity]); missing strings are skipped silently
+local OTHERS = {
+  { "LOOT_ITEM_MULTIPLE", true }, { "LOOT_ITEM", false },
+  { "LOOT_ITEM_PUSHED_MULTIPLE", true }, { "LOOT_ITEM_PUSHED", false },
+}
+-- win messages of other players with the roll type. Client format: "%1$s won: %3$s |cff818181(Need - %2$d)|r"; Patterns.compile returns the
+-- captures by argument position: (player, roll number, item)
+local WON = {
+  { "LOOT_ROLL_WON_NO_SPAM_NEED", "need" }, { "LOOT_ROLL_WON_NO_SPAM_GREED", "greed" },
+  { "LOOT_ROLL_WON_NO_SPAM_DE", "de" }, { "LOOT_ROLL_WON_NO_SPAM_TRANSMOG", "tmog" },
+}
+local WIN_TTL = 120          -- seconds: a win message stays valid for the loot message of the same item and player
+local GROUP_MAX_PARTY, GROUP_MAX_RAID = 4, 40
+local WHO_MAX = 64
 
 -- counter group per source
 local GROUP = { vendor = "bought", craft = "crafted", mail = "received", trade = "received", ah = "received", quest = "quest_items" }
@@ -124,6 +143,11 @@ local function isMe(who)
   return who == me or string.sub(who, 1, #me + 1) == me .. "-"
 end
 
+-- name without realm part ("Name-Realm" -> "Name")
+local function baseName(who)
+  return match(who, "^([^%-]+)") or who
+end
+
 -- roll messages of CHAT_MSG_LOOT: our own roll number (ROLLED) and the win (LOOT_ROLL_YOU_WON). true if the text was one of them.
 local function rollMessage(self, text)
   local link = Patterns.match("LOOT_ROLL_YOU_WON", text)
@@ -144,10 +168,23 @@ local function rollMessage(self, text)
       return true
     end
   end
+  -- win of another player with the roll type: remembered for the loot message that follows
+  for i = 1, #WON do
+    if type(_G[WON[i][1]]) == "string" then
+      local who, _, itemLink = Patterns.match(WON[i][1], text)
+      if itemLink ~= nil then
+        local id = Patterns.itemLink(itemLink)
+        who = str(who)
+        if id and who and not isMe(who) then remember(self.wins, id .. ":" .. baseName(who), { who = baseName(who), kind = WON[i][2], at = GetTime() }) end
+        return true
+      end
+    end
+  end
   return false
 end
 
 function Loot:init()
+  self.wins = {} -- itemID:player -> { who, kind, at }: win messages of other players with the roll type
   self.rolls, self.myRolls = {}, {} -- rollID -> { key, id } (open rolls); itemID -> our roll number
   if type(GetLootRollItemLink) == "function" then Core.hook(self, "RollOnLoot", onRoll) end
   self.slots = {} -- itemID -> { kind, srcID, quality, at }
@@ -285,6 +322,64 @@ local function gotItem(self, link, count, how)
   end
 end
 
+-- a visit in an instance is open (the Instance collector keeps it)
+local function inInstance()
+  local e = Core.collector and Core.collector("Instance")
+  local d = e and e.active and e.def
+  return d ~= nil and d.cur ~= nil
+end
+
+-- class file name of a group member by name; nil when the unit is not found or the values are not readable
+local function groupClass(who)
+  local want = baseName(who)
+  local raid = call(IsInRaid)
+  raid = not isSecret(raid) and raid == true
+  local prefix, max = raid and "raid" or "party", raid and GROUP_MAX_RAID or GROUP_MAX_PARTY
+  for i = 1, max do
+    local unit = prefix .. i
+    local name = str(call(UnitName, unit))
+    if name and baseName(name) == want then
+      local _, class = call(UnitClass, unit)
+      class = str(class)
+      if not class then return nil end
+      class = ns.Sanitize.field(class)
+      return class ~= "" and class or nil
+    end
+  end
+  return nil
+end
+
+-- find of another player (inside an instance, green and better): LG line. true if the text was such a message (written or not).
+local function otherLoot(self, text)
+  for i = 1, #OTHERS do
+    local name = OTHERS[i][1]
+    if type(_G[name]) == "string" then
+      local who, link, qty = Patterns.match(name, text)
+      if who ~= nil and link ~= nil then
+        who = str(who)
+        if not who or isMe(who) then return true end
+        if not inInstance() then return true end
+        local id, bonus, quality, itemName = Patterns.itemLink(link)
+        if not id then return true end
+        if quality == nil then quality = num(call(C_Item and C_Item.GetItemQualityByID, id)) end
+        if quality == nil or quality < GOOD then return true end
+        local count = (num(qty) and qty >= 1) and floor(qty) or 1
+        Store.noteItem(id, itemName, quality)
+        local roll
+        local winKey = id .. ":" .. baseName(who)
+        local win = self.wins[winKey]
+        if win then
+          self.wins[winKey] = nil
+          if GetTime() - win.at <= WIN_TTL then roll = win.kind end
+        end
+        Store.append("LG", Patterns.itemKey(id, bonus), count, quality, ns.Sanitize.cut(ns.Sanitize.field(who), WHO_MAX), groupClass(who), roll)
+        return true
+      end
+    end
+  end
+  return false
+end
+
 handlers.CHAT_MSG_LOOT = function(self, text)
   if isSecret(text) then
     Store.count("unreadable", "loot_msg")
@@ -302,6 +397,7 @@ handlers.CHAT_MSG_LOOT = function(self, text)
       end
     end
   end
+  if otherLoot(self, text) then return end
   rollMessage(self, text)
 end
 

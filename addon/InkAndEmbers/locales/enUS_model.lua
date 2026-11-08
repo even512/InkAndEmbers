@@ -1730,6 +1730,8 @@ L.add("enUS", "m.DungeonQuests", {
   tipGiverNone = "No giver on the map: the quest starts with an item (no to-do possible)",
   hintForeverNew = "New Forever quest",
   tipForeverNew = "Forever-only quest: data incomplete",
+  hintLearned = "Accepted inside the instance",
+  tipLearned = "Accepted by you inside the instance: the assignment to this dungeon comes from your journal",
   todoEntrance = "Enter dungeon: %s (quest: %s)",
   footerAssign = "Dungeon assignment: zone, quest type, derived",
   reasonRetail = "Dungeon quests do not exist in Retail",
@@ -1752,4 +1754,11 @@ L.add("enUS", "m.OpenQuestsRetail", {
   diagLine = "Open Quests: from the game's world map (%d zones loaded%s)",
   diagWaiting = ", %d pending",
   diagNoApi = "Open Quests: Retail, world map interface (C_QuestLine) missing",
+})
+
+-- journal/model/Dungeons.lua
+L.add("enUS", "m.Dungeons", {
+  diff_1 = "Normal", diff_2 = "Heroic", diff_3 = "10 Player", diff_4 = "25 Player", diff_5 = "10 Player (Heroic)",
+  diff_6 = "25 Player (Heroic)", diff_8 = "Mythic Keystone", diff_14 = "Normal", diff_15 = "Heroic",
+  diff_16 = "Mythic", diff_17 = "Raid Finder", diff_23 = "Mythic", diff_24 = "Timewalking",
 })

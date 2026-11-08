@@ -200,6 +200,7 @@ ns.Types = {
     { "durMin", "geringste Haltbarkeit aller getragenen Gegenstände (Plätze 1-18) in Prozent, leer wenn nichts Haltbares getragen wird oder nicht lesbar" },
     { "durAvg", "durchschnittliche Haltbarkeit der getragenen Gegenstände in Prozent (ganzzahlig), leer wie durMin" },
     { "day", "1 = Tag, 0 = Nacht laut Spiel (C_DateAndTime.IsDayTime), leer wenn nicht vorhanden" },
+    { "instanceID", "Instanz (instanceID laut GetInstanceInfo), nur wenn Ihr in einer Instanz gestorben seid und der Client sie nennt; ältere Zeilen ohne Feld bleiben gültig (Leser erschließen die Instanz dann aus dem Besuch IE/IL)" },
   } },
   DR = { order = 510, name = "Todesbericht-Treffer", desc = "Ein Eintrag des Todesberichts (C_DeathRecap), in der Reihenfolge des Clients.", fields = {
     { "ago", "Zehntelsekunden vor dem letzten Treffer (0 = Todesstoß)" },
@@ -596,6 +597,15 @@ ns.Types = {
   RW = { order = 1120, name = "Wurf gewonnen", desc = "Ihr habt einen Beutewurf gewonnen (Systemmeldung 'Ihr habt gewonnen'). Zählt zusätzlich in counters.rolls.won.", fields = {
     { "item", "Item-Schlüssel wie bei LT" },
     { "roll", "gewürfelte Augenzahl aus der eigenen Würfelmeldung, leer wenn keine zu sehen war" },
+  } },
+  -- Added with 1.0.8 (appended at the end; new code only): finds of other group members inside an instance.
+  LG = { order = 1130, name = "Fund eines Mitspielers", desc = "Ein anderes Gruppenmitglied hat in einer Instanz einen Gegenstand ab Qualität Grün erhalten (Beutemeldung der Gruppe). Eure eigenen Funde stehen weiter in LT. Gesperrte Meldungen werden nicht geschrieben, sondern nur in counters.unreadable gezählt. Der Name des Spielers ist Fremdtext (gesäubert).", fields = {
+    { "item", "Item-Schlüssel wie bei LT" },
+    { "count", "Menge" },
+    { "quality", "Qualität: 2 grün, 3 blau, 4 lila, 5 orange (darunter wird nichts geschrieben)" },
+    { "who", "Name des Spielers laut Meldung (mit Realm, wenn die Meldung ihn nennt)" },
+    { "class", "Klasse des Spielers (englischer Dateiname), leer wenn über die Gruppe nicht lesbar" },
+    { "roll", "Wurfart, wenn die Gewinn-Meldung mit Wurfart zum selben Gegenstand und Spieler gesehen wurde: need (Bedarf), greed (Gier), de (Entzaubern), tmog (Transmog); sonst leer" },
   } },
   PE = { order = 1620, name = "Begleiter", desc = "Ein Begleiter (Jäger-Tier, Hexenmeister-Dämon, Todesritter-Ghul u. ä.) ist erschienen, gewechselt oder verschwunden. Nur bei Wechsel der Kreatur (GUID), nie bei jedem Treffer.", fields = {
     { "how", "summon (erscheint), dismiss (verschwindet), new (zum ersten Mal gesehen), change (direkt gegen ein anderes getauscht), tame (frisch gezähmt)" },

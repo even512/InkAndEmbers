@@ -500,11 +500,32 @@ local function buildDeaths(index)
   return deaths
 end
 
+-- Place of a death: { key, mapID?, name?, sub?, instance? }.
+-- With a map: the zone. Without a map (instances give none): the instance, found via DE.instanceID or the IE/IL visit
+-- around the death time (works on old lines, nothing is stored), name from snapshots.instances; sub = subzone for the
+-- tooltip. Without the instance name: the subzone as the name; only then no name (key 0 = "unbekannter Ort").
+local function placeOf(st, index, rec)
+  local Idx = I()
+  local sub = display(Idx.str(rec, "DE", "sub"))
+  local m = posId(Idx.str(rec, "DE", "mapID"))
+  if m then return { key = m, mapID = m, name = zoneName(st, m), sub = sub } end
+  local inst = Idx.deathInstance(index, rec)
+  local iname = inst and display(Idx.instanceName(index, inst)) or nil
+  if iname then return { key = "i" .. format("%.0f", inst), name = iname, sub = sub, instance = inst } end
+  if sub then return { key = "s" .. sub, name = sub } end
+  return { key = 0 }
+end
+
 local function deathPlace(st, rec)
   local Idx = I()
   local sub = display(Idx.str(rec, "DE", "sub"))
-  if sub then return sub end
-  return zoneName(st, posId(Idx.str(rec, "DE", "mapID")))
+  if posId(Idx.str(rec, "DE", "mapID")) then
+    if sub then return sub end
+    return zoneName(st, posId(Idx.str(rec, "DE", "mapID")))
+  end
+  local p = placeOf(st, st.index, rec)
+  if p.instance and p.sub then return p.name .. " · " .. p.sub end
+  return p.name or sub
 end
 
 local function buildGraves(st, deaths, index)
@@ -512,11 +533,11 @@ local function buildGraves(st, deaths, index)
   local Idx = I()
   local by, order = {}, {}
   for i, d in ipairs(deaths) do
-    local m = posId(Idx.str(d.rec, "DE", "mapID")) or 0
-    local g = by[m]
+    local place = placeOf(st, index, d.rec)
+    local g = by[place.key]
     if not g then
-      g = { mapID = m, n = 0, first = d.t, last = d.t, idx = {}, tips = {} }
-      by[m] = g
+      g = { mapID = place.mapID or 0, name = place.name, n = 0, first = d.t, last = d.t, idx = {}, tips = {} }
+      by[place.key] = g
       order[#order + 1] = g
     end
     g.n, g.last = g.n + 1, d.t
@@ -524,6 +545,7 @@ local function buildGraves(st, deaths, index)
     local lv = Idx.num(d.rec, "DE", "level")
     local okW, when = pcall(stoneWhen, index, d.t)
     local tip = TEXT("deathNo", int(i)) .. ((okW and when) and (" · " .. when) or "") .. ((lv and lv >= 1) and (" · " .. TEXT("lv", int(lv))) or "")
+      .. ((place.instance and place.sub) and (" · " .. place.sub) or "")
     g.tips[#g.tips + 1] = tip
     if lv and lv >= 1 then
       if not g.lmin or lv < g.lmin then g.lmin = lv end
@@ -539,7 +561,7 @@ local function buildGraves(st, deaths, index)
   table.sort(pick, function(a, b) return a.first < b.first end)
   local list = {}
   for i, g in ipairs(pick) do
-    local name = g.mapID > 0 and zoneName(st, g.mapID) or TEXT.unknownPlace
+    local name = g.name or TEXT.unknownPlace
     local levels = levelsText(g.lmin, g.lmax)
     local nText = plural(g.n, "deaths")
     list[i] = { mapID = g.mapID > 0 and g.mapID or nil, name = name, n = g.n, nText = nText,

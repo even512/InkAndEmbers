@@ -242,6 +242,9 @@ function CampfireTalk.facts(index, now)
   local r = de[#de]
   if inAge(r, "death") then
     local f = { zone = mapName(index, Index.num(r, "DE", "mapID")) }
+    if not f.zone and Index.deathInstance then
+      f.zone = safeText(Index.instanceName(index, Index.deathInstance(index, r))) -- instance death: no map
+    end
     local dc = Index.list(index, "DC")
     for i = #dc, 1, -1 do
       local c = dc[i]

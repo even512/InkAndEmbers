@@ -122,11 +122,11 @@ Frame.TEXT = ns.Locale.ns("Frame", {
   row_quests = "Quests",
   row_moments = "Momente",
   tabTip_reise = "Karte mit Eurer Route, Kapitel für Kapitel, und Eure To Dos.",
-  tabTip_chronik = "Steckbrief, Stufenfluss, Tagebuch, Weggefährten und Lagerfeuer-Gäste.",
+  tabTip_chronik = "Steckbrief, Stufenfluss, Tagebuch, Weggefährten samt Lagerfeuer-Gästen und Dungeons.",
   tabTip_kampf = "Kills, Gegner, knappe Siege und Tode.",
   tabTip_quests = "Abgeschlossene Quests mit Questtext und Belohnung, offene Quests der Zone und der Lehrplan.",
   tabTip_questsRetail = "Abgeschlossene Quests mit Questtext und Belohnung und die offenen Quests der Zone.",
-  tabTip_chronikRetail = "Steckbrief, Stufenfluss, Tagebuch und Weggefährten.",
+  tabTip_chronikRetail = "Steckbrief, Stufenfluss, Tagebuch, Weggefährten und Dungeons.",
   tabTip_notizen = "Eure eigenen Notizen, gern mit einem Pin auf der Karte.",
   tabTip_schaetze = "Gold im Beutel, Haushaltsbuch, Goldfluss und Ausrüstung.",
   tabTip_momente = "Album der besonderen Augenblicke, Spielzeit-Uhr und Bibliothek.",
@@ -522,7 +522,7 @@ end
 
 Frame.TAB_TIP = setmetatable({}, { __index = function(_, id)
   if id == "reise" or id == "chronik" or id == "kampf" or id == "quests" or id == "schaetze" or id == "momente" or id == "notizen" then
-    -- Retail: no campfire guests (bookmark "Am Feuer" hidden) and no Lehrplan
+    -- Retail: no campfire guests (switch "Am Feuer" hidden) and no Lehrplan
     local ms, lp = Journal.MapSpace, Journal.Lehrplan
     local noFire = id == "chronik" and ms ~= nil and type(ms.fireTalkHidden) == "function" and ms.fireTalkHidden() == true
     local noPlan = id == "quests" and lp ~= nil and type(lp.active) == "function" and lp.active() == false

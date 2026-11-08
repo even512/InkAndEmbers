@@ -51,6 +51,10 @@
 --                                                  PLAYER_LEVEL_UP, names arrived, live source): bundled to one call per 0.5 s
 --   DungeonQuests.footer()             -> "Daten: QuestieDB x.y.z (...) · Dungeon-Zuordnung: Zone, Quest-Typ, abgeleitet"
 --   DungeonQuests.diagInfo() / diagLine()  data counts, missing quest IDs, build times (ms)
+-- LEARNED QUESTS: a quest the character accepted (QA) or turned in without a map (QT, instances give none) during a visit to
+--   an instance (IE ... IL of the same visit, from the log via Journal.Index, nothing is stored) belongs to that dungeon on screen,
+--   even when the data has no assignment (grade "l", note "learned"). instanceID -> dungeon key via DQ.INSTANCE_KEY, else the
+--   snapshot name (German/English) of the instance. Never twice: quests the dungeon already lists stay as they are.
 -- Texts of the page (labels of the states, "Beta-Daten unsicher") come from the UI / OpenQuests.TEXT; this file only carries the
 -- texts of its own notes. Retail client: everything answers empty (unavailable, reason RETAIL), nothing is loaded.
 local _, ns = ...
@@ -84,6 +88,8 @@ local T = ns.Locale.ns("m.DungeonQuests", {
   tipGiverNone = "Kein Geber auf der Karte: die Quest beginnt mit einem Gegenstand (kein To Do möglich)",
   hintForeverNew = "Neue Forever-Quest",
   tipForeverNew = "Forever-neue Quest: Daten lückenhaft",
+  hintLearned = "In der Instanz angenommen",
+  tipLearned = "Von Euch in der Instanz angenommen: die Zuordnung zu diesem Dungeon stammt aus Eurem Tagebuch",
   todoEntrance = "Dungeon betreten: %s (Quest: %s)",
   footerAssign = "Dungeon-Zuordnung: Zone, Quest-Typ, abgeleitet",
   reasonRetail = "In Retail gibt es die Dungeon-Quests nicht",
@@ -95,6 +101,14 @@ local T = ns.Locale.ns("m.DungeonQuests", {
 DQ.TEXT = T
 
 local EMPTY = {}
+
+-- instanceID (GetInstanceInfo, 8th value) -> dungeon key (area ID of the data, see Dungeons.lua). Classic instance IDs plus
+-- 3065 (The Hall of Thanes, seen in the log of a real visit). Without an entry the instance name is compared (see keyOfInstance).
+DQ.INSTANCE_KEY = {
+  [33] = "209", [47] = "491", [34] = "717", [43] = "718", [48] = "719", [90] = "721", [129] = "722", [189] = "796",
+  [209] = "1176", [70] = "1337", [109] = "1477", [36] = "1581", [229] = "1583", [230] = "1584", [329] = "2017",
+  [289] = "2057", [349] = "2100", [389] = "2437", [429] = "2557", [3065] = "16919",
+}
 
 local function isSecret(v)
   return type(issecretvalue) == "function" and issecretvalue(v) == true
@@ -188,6 +202,80 @@ local function parse(blob)
   return D
 end
 
+-- ---------------------------------------------------------------- learned quests (from the log, nothing stored)
+
+-- accepted quests (QA) and unmapped turned-in quests (QT) inside an instance visit -> list { id, inst, name }, plus a
+-- signature that changes with the list. Recomputed only when the index is a new one; without an index (still building,
+-- no data) the last known list stays.
+local function scanLearned()
+  local Idx = Journal.Index
+  if type(Idx) ~= "table" or type(Idx.get) ~= "function" or type(Idx.instanceAt) ~= "function" then return M.lraw or EMPTY, M.lsigRaw or "" end
+  local ok, index = pcall(Idx.get, { noRebuild = inCombat() })
+  if not ok or type(index) ~= "table" or isSecret(index) then return M.lraw or EMPTY, M.lsigRaw or "" end
+  if M.lidx == index then return M.lraw or EMPTY, M.lsigRaw or "" end
+  local out, seen, parts = {}, {}, {}
+  local function take(code, unmappedOnly)
+    for _, r in ipairs(Idx.list(index, code)) do
+      local id = Idx.num(r, code, "questID")
+      if id and id > 0 and id <= 2147483647 and not (unmappedOnly and Idx.num(r, code, "mapID")) then
+        id = floor(id)
+        local inst = Idx.instanceAt(index, r.t)
+        local k = inst and (floor(inst) .. ":" .. id)
+        if k and not seen[k] and #out < DQ.QUESTS_MAX then
+          seen[k] = true
+          out[#out + 1] = { id = id, inst = floor(inst), name = Idx.instanceName(index, inst) }
+          parts[#parts + 1] = k
+        end
+      end
+    end
+  end
+  take("QA", false)
+  take("QT", true)
+  sort(parts)
+  M.lidx, M.lraw, M.lsigRaw = index, out, table.concat(parts, ",")
+  return out, M.lsigRaw
+end
+
+-- dungeon key of an instance: the (client language) name against the German/English dungeon names first, so a wrong table
+-- entry cannot override a name hit; DQ.INSTANCE_KEY only as fallback
+local function keyOfInstance(D, inst, name)
+  local n = name and display(name)
+  if n then
+    n = lower(n)
+    for _, dg in ipairs(D.list) do
+      if lower(dg.nameDE) == n or lower(dg.nameEN) == n then return dg.key end
+    end
+  end
+  local k = DQ.INSTANCE_KEY[inst]
+  if k and D.byKey[k] then return k end
+  return nil
+end
+
+-- adds the learned quests to their dungeons (grade "l"); quests a dungeon already lists stay untouched (no duplicates)
+local function applyLearned(D, learned)
+  local touched = {}
+  for _, e in ipairs(learned) do
+    local key = keyOfInstance(D, e.inst, e.name)
+    local dg = key and D.byKey[key]
+    if dg and not dg.set[e.id] then
+      dg.set[e.id] = true
+      dg.quests[#dg.quests + 1] = e.id
+      dg.grade[e.id] = "l"
+      dg.learned = dg.learned or {}
+      dg.learned[e.id] = true
+      local keys = D.byQuest[e.id]
+      if not keys then
+        keys = {}
+        D.byQuest[e.id] = keys
+      end
+      keys[#keys + 1] = key
+      D.quests = D.quests + 1
+      touched[dg] = true
+    end
+  end
+  for dg in pairs(touched) do sort(dg.quests) end
+end
+
 -- Retail client: no data addon, no QuestieDB; the tests of the retail map space (ALLOW_RETAIL) and the test mode keep the data
 local function retail()
   return OQ ~= nil and OQ.retailClient() and not (OQ.test() ~= nil or OQ.ALLOW_RETAIL)
@@ -204,14 +292,16 @@ local function ensure()
   end
   local blob, data = OQ.dungeonBlob()
   if not blob then return nil, "NO_DUNGEON_DATA" end
-  if M.D and M.blob == blob and M.data == data then return M.D end
+  local learned, lsig = scanLearned()
+  if M.D and M.blob == blob and M.data == data and M.lsig == lsig then return M.D end
   local t0 = clock()
   local ok, D = pcall(parse, blob)
   if not ok or type(D) ~= "table" or #D.list == 0 then
     M.D, M.blob, M.data = nil, nil, nil
     return nil, "NO_DUNGEON_DATA"
   end
-  M.D, M.blob, M.data, M.exp, M.c = D, blob, data, {}, nil
+  if #learned > 0 then pcall(applyLearned, D, learned) end -- a failure here only loses the learned quests
+  M.D, M.blob, M.data, M.exp, M.c, M.lsig = D, blob, data, {}, nil, lsig
   M.diag = { parseMs = clock() - t0, expandMs = 0, missing = 0, maxNodes = 0 }
   return D
 end
@@ -618,6 +708,9 @@ local function hintsFor(c, D, id, dg, r, st, giverKind)
       tip = T("tipAmbiguous", table.concat(names, ", "))
     end
     out[#out + 1] = { kind = "estimated", text = T.hintEstimated, tip = tip }
+  end
+  if dg and dg.learned and dg.learned[id] then
+    out[#out + 1] = { kind = "learned", text = T.hintLearned, tip = T.tipLearned }
   end
   if giverKind == "inside" then
     out[#out + 1] = { kind = "giverInside", text = T.hintGiverInside, tip = T.tipGiverInside }
@@ -1121,6 +1214,17 @@ function DQ.onChange(fn)
     OQ.listen(function()
       for _, f in ipairs(M.listeners) do pcall(f) end
     end)
+    -- the index arrives or grows later than the first draw: a changed learned list redraws the page
+    local Idx = Journal.Index
+    if type(Idx) == "table" and type(Idx.onReady) == "function" then
+      Idx.onReady(function()
+        if not M.D then return end
+        local _, sig = scanLearned()
+        if sig ~= M.lsig then
+          for _, f in ipairs(M.listeners) do pcall(f) end
+        end
+      end)
+    end
   end
   return true
 end

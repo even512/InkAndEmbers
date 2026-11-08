@@ -4,7 +4,7 @@
 -- Sources: QuestieDB 1.0.12; faction corrections horde+alliance; Forever database (data.morthen.net, zones/deDE/type); dungeon areas QuestieDB support/Forever/Zones/dungeons.lua
 -- Loaded on demand only (LoadOnDemand) by journal/model/OpenQuests.lua of the main addon; format: see the open-quests data format in the development notes.
 EveNChronicleQuestData = EveNChronicleQuestData or {}
--- Dungeons: 21, quest entries: 467 (by grade z 308, t 0, a 99, k 4, m 2; ambiguous 48; unassigned 11)
+-- Dungeons: 21, quest entries: 469 (by grade z 308, t 0, a 99, k 4, m 4; ambiguous 48; unassigned 11)
 -- dungeon = per dungeon "\n<areaId>\t<name de>\t<name en>\t<levelMin>\t<levelMax>\t<uiMapID>:<x>,<y>;...\t<questId><grade>[*],..."; entrance points as in the givers file
 -- grade: z zone of the quest, t Forever-database zone, a derived (strict), k only via quest chain, m hand table (scripts/data/dungeon-overrides.json); * = ambiguous (listed under several dungeons)
 EveNChronicleQuestData.dungeon = [=[
@@ -29,5 +29,5 @@ EveNChronicleQuestData.dungeon = [=[
 2437	Ragefireabgrund	Ragefire Chasm	9	9	1454:52.6,49.0	5722z,5723z,5724z,5725z,5728z,5761z
 2557	Düsterbruch	Dire Maul	54	60	1444:59.2,45.1;1444:62.5,24.9;1444:60.3,30.2;1444:64.8,30.2	1193z,1318z,5518z,5519z,5525z,5528z,7429z,7441z,7461z,7462z,7463a,7481z,7482z,7483z,7484z,7485z,7488z,7489z,7492z,7494z,7498z,7499z,7500z,7501z,7502z,7503z,7504z,7505z,7506z,7507z,7508z,7581a,7631a,7643a,7649a,7650a,7651a,7703z,7877z,8948z,8949z,8950z,8967z,8990z
 16611	Ruins of Lordaeron	Ruins of Lordaeron	15	15	1458:72.4,11.4	92401z,92415z,92421z,92422z,95189z,95195z,95204z,95216z,95250z,97288z,97289z,97291z,97292z
-16919	The Hall of Thanes	The Hall of Thanes	9	10	1455:27.6,47.8	96393z,96394z,96403z
+16919	The Hall of Thanes	The Hall of Thanes	9	15	1455:27.6,47.8	96393z,96394z,96395m,96403z,98423m
 ]=]

@@ -13,7 +13,7 @@ L.add("enUS", "p.Chronik", {
   diaryNone = "From the journal", ofMax = "OF %s", ringStart = "Off we go!", prevTip = "Previous day", nextTip = "Next day",
   toDiary = "Journal", toDiaryTip = "Read the journal", toDiaryTip2 = "Every play day as an entry, day by day",
   toMates = "Companions", toMatesTip = "View companions", toMatesTip2 = "Who traveled with you",
-  toFire = "By the Fire", toFireTip = "Companions by the fire", toFireTip2 = "Who sat with you at the campfire",
+  toDungeons = "Dungeons", toDungeonsTip = "View dungeons", toDungeonsTip2 = "Every run: when, how long, with whom, bosses, deaths and loot",
   toProfile = "Profile", toProfileTip = "Profile, level flow and journal excerpt",
 })
 
@@ -23,6 +23,9 @@ L.add("enUS", "p.ChronikViews.Diary", {
   empty = "No entry yet", emptyBody = "As soon as you set out, an entry writes itself here every day.",
   blank = "The next page is still blank.", blankBody = "What happens tomorrow will appear here once it has happened.",
   dayPair = "Days %s and %s of %s", dayOne = "Day 1 of 1",
+})
+L.add("enUS", "p.ChronikViews.Switch", {
+  group = "Group", fire = "By the Fire", groupTip = "Companions from your group", fireTip = "Who sat with you at the campfire",
 })
 L.add("enUS", "p.ChronikViews.Mates", {
   levelRange = "Level %s to %s", level = "Level %s", date = "{m}/{d}/{y}", togetherFmt = "%s together",
@@ -59,6 +62,32 @@ L.add("enUS", "p.ChronikViews.Fire", {
   unknownZone = "an unknown place", tipMore = "and %s more", oneFire = "1 fire", manyFires = "%s fires",
   level = "Level %s", lastIn = "last in %s on %s", lastAt = "last on %s",
   probe = " (test)", live = "happening now", liveIn = "happening now in %s", liveRound = "Round in progress",
+})
+
+-- journal/pages/ChronikDungeons.lua
+L.add("enUS", "p.ChronikDungeons", {
+  page = "DUNGEONS", brand = "INK & EMBERS", title = "Dungeons", empty = "No dungeon visited yet.",
+  emptyBody = "As soon as you enter a dungeon, the book records every run: when, how long, with whom, the bosses, deaths and loot.",
+  pick = "Click a run for details.", prevTip = "Previous page", nextTip = "Next page", pageOf = "Page %s of %s",
+  runs_one = "%s run", runs_other = "%s runs", truncated = "Very many runs: older ones are not listed.",
+  date = "{m}/{d}/{y}", dateShort = "{m}/{d}",
+  bosses_one = "%s boss defeated", bosses_other = "%s bosses defeated", complete = "completed", live = "in progress",
+  endUnknown = "end unknown", deaths_one = "%s death", deaths_other = "%s deaths", noDeaths = "no deaths",
+  unknownInstance = "Unknown dungeon", unknownBoss = "Unknown boss",
+  when = "When", duration = "Duration", level = "Level", kills = "Kills", xp = "Experience",
+  visits_one = "%s instance entry", visits_other = "%s instance entries", lv = "Level %s", levelRange = "Level %s to %s",
+  you = "You", roll_need = "Need", roll_greed = "Greed", roll_de = "Disenchant", roll_tmog = "Transmog",
+  whenSame = "{date}, {from}–{to}", whenOther = "{from} – {to}", whenLive = "{date}, since {from}",
+  secBosses = "Bosses", secBossesN = "Bosses · %s defeated", secBossesOf = "Bosses · %s of %s defeated",
+  secGroup = "Group", secDeaths = "Deaths", secLoot = "Finds (green and better)", secQuests = "Quests",
+  tries_one = "%s failed attempt", tries_other = "%s failed attempts", bossWon = "defeated", bossNot = "not defeated",
+  bossCountOnly = "The client did not report the boss fights, only the number is known.",
+  noGroup = "No group members recorded.",
+  cause_enemy = "to an enemy", cause_fall = "from a fall", cause_drown = "by drowning", cause_fatigue = "of exhaustion",
+  cause_lava = "in lava", cause_fire = "in fire", cause_slime = "in slime", cause_environment = "to the environment",
+  byFoe = "to %s", guess = "%s (assumed)", died = "died", more = "… and %s more",
+  questDone = "turned in", questTaken = "accepted", questFallback = "Quest #%s", itemFallback = "Item #%s",
+  xpUnit = "%s experience", reward = "Reward: %s", groupTip = "Group",
 })
 
 -- journal/pages/Kampf.lua

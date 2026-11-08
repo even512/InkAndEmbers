@@ -1,5 +1,6 @@
--- Chronik sub-views "Tagebuch", "Weggefährten" and "Am Feuer", opened via the sub-bookmarks (pages/Chronik.lua
--- Page.subs); Esc leads back to the overview.
+-- Chronik sub-views "Tagebuch" and "Weggefährten", opened via the sub-bookmarks (pages/Chronik.lua Page.subs); Esc leads back
+-- to the overview. "Weggefährten" holds two views behind a switch "Gruppe | Am Feuer" (top right of the left page, not in
+-- Retail): the group (Mates) and the people at the campfire (Fire). The page "Dungeons" is in pages/ChronikDungeons.lua.
 -- Data: model/Days.lua + DiaryTexts.lua, model/Companions.lua, model/FireMates.lua. All foreign text goes through
 -- Sanitize.display. No ticker, no OnUpdate; frames are built on first open.
 local _, ns = ...
@@ -53,6 +54,42 @@ local function font(parent, kind, size, color, justify)
   local fs = W.font(parent, kind, size, color)
   if justify then fs:SetJustifyH(justify) end
   return fs
+end
+
+-- Switch "Gruppe | Am Feuer" inside the bookmark "Weggefährten": top left of the left page, in the page head row in place of the
+-- brand "INK & EMBERS" (the page name stays on both pages). Retail has no campfire talk (MapSpace.fireTalkHidden): no switch
+-- there, the brand stays. Labels are read when the view is built (the language is fixed by then).
+local Switch = {}
+Switch.TEXT = ns.Locale.ns("p.ChronikViews.Switch", {
+  group = "Gruppe", fire = "Am Feuer", groupTip = "Weggefährten aus Eurer Gruppe", fireTip = "Wer mit Euch am Lagerfeuer gesessen hat",
+})
+
+local function fireShown()
+  local ms = Journal.MapSpace
+  local ok, hidden = pcall(function() return ms ~= nil and ms.fireTalkHidden() == true end)
+  return not (ok and hidden)
+end
+
+-- self.switch / self.headL on the view; key = "group" | "fire" (the value of the view itself)
+local function addSwitch(self, parent, key, head)
+  local S = Switch.TEXT
+  self.headL = head
+  self.switch = D.NewToggle(parent, { size = SZ.xs, gap = 10, value = key,
+    items = { { key = "group", label = S.group, tip = { S.groupTip } }, { key = "fire", label = S.fire, tip = { S.fireTip } } },
+    onChange = function(k)
+      if k == key then return end
+      local page = self.page
+      if k == "fire" then page:OpenFire() else page:OpenCompanions() end
+    end })
+  self.switch.frame:SetPoint("LEFT", parent, "TOPLEFT", SL.x - 3, -(G.head.y + 4)) -- ring ends above the head rule (y 52)
+end
+
+-- on open: show the switch (not in Retail), value = this view, the brand only where there is no switch
+local function syncSwitch(self, key, T)
+  local show = fireShown()
+  self.switch.frame:SetShown(show)
+  self.switch:SetValue(key)
+  self.headL:SetTexts(show and "" or T.brand, T.page)
 end
 
 local Diary = {}
@@ -374,7 +411,9 @@ function Mates.new(page, left, right)
   l:SetAllPoints(left)
   r:SetAllPoints(right)
   self.l, self.r = l, r
-  W.NewPageHead(l, { side = "L" }):SetTexts(T.brand, T.page)
+  local headL = W.NewPageHead(l, { side = "L" })
+  headL:SetTexts(T.brand, T.page)
+  addSwitch(self, l, "group", headL)
   W.NewPageHead(r, { side = "R" }):SetTexts("", T.page)
   D.escKeys(l, function() page:CloseSub() end) -- Esc -> overview
   local head = D.NewSectionHead(l, T.title, { size = SZ.xl })
@@ -597,6 +636,7 @@ end
 
 function Mates:Open(index, now)
   self.open = true
+  syncSwitch(self, "group", Mates.TEXT)
   self.index = index
   self.res = Journal.Companions.aggregate(index, { now = now }) or { list = {}, count = 0 }
   self.l:Show()
@@ -617,6 +657,7 @@ function Mates:Close()
   self.r:Hide()
   for _, row in ipairs(self.list.rows) do W.hideTip(row) end
   for _, b in ipairs(self.toggle.buttons) do W.hideTip(b) end
+  for _, b in ipairs(self.switch.buttons) do W.hideTip(b) end
   W.hideTip(self.nav.prev)
   W.hideTip(self.nav.next)
 end
@@ -770,7 +811,9 @@ function Fire.new(page, left, right)
   l:SetAllPoints(left)
   r:SetAllPoints(right)
   self.l, self.r = l, r
-  W.NewPageHead(l, { side = "L" }):SetTexts(T.brand, T.page)
+  local headL = W.NewPageHead(l, { side = "L" })
+  headL:SetTexts(T.brand, T.page)
+  addSwitch(self, l, "fire", headL)
   W.NewPageHead(r, { side = "R" }):SetTexts("", T.page)
   D.escKeys(l, function() page:CloseSub() end) -- Esc -> overview
   local head = D.NewSectionHead(l, T.title, { size = SZ.xl })
@@ -971,6 +1014,7 @@ end
 
 function Fire:Open(index)
   self.open = true
+  syncSwitch(self, "fire", Fire.TEXT)
   self:Load(index)
   self.l:Show()
   self.r:Show()
@@ -1008,12 +1052,7 @@ function Fire:Close()
   self.r:Hide()
   for _, row in ipairs(self.list.rows) do W.hideTip(row) end
   for _, b in ipairs(self.toggle.buttons) do W.hideTip(b) end
+  for _, b in ipairs(self.switch.buttons) do W.hideTip(b) end
   W.hideTip(self.nav.prev)
   W.hideTip(self.nav.next)
 end
-
--- Retail: the campfire talk never starts there (MapSpace.fireTalkHidden), so the bookmark "Am Feuer" stays out of the Chronik tab
-Pages.hideSub("chronik", "feuer", function()
-  local ms = Journal.MapSpace
-  return ms ~= nil and ms.fireTalkHidden() == true
-end)

@@ -1,6 +1,7 @@
 -- Chronik page: profile, level flow, diary by day, XP sources and forecast. Data from journal/model/Chronik.lua
 -- (display-ready texts); only frames and layout here.
--- The sub-views "Tagebuch", "Weggefährten" and "Am Feuer" (pages/ChronikViews.lua) open via Page.subs; the overview
+-- The sub-views "Tagebuch", "Weggefährten" (with the switch "Gruppe | Am Feuer") and "Dungeons" (pages/ChronikViews.lua,
+-- pages/ChronikDungeons.lua) open via Page.subs; the overview
 -- sits in its own holders (mainL/mainR), which get hidden. No ticker, no OnUpdate; frames are created in Build, pools
 -- are bounded.
 local _, ns = ...
@@ -71,7 +72,7 @@ Page.TEXT = ns.Locale.ns("p.Chronik", {
   diaryNone = "Aus dem Tagebuch", ofMax = "VON %s", ringStart = "Auf geht's!", prevTip = "Tag davor", nextTip = "Tag danach",
   toDiary = "Tagebuch", toDiaryTip = "Das Tagebuch lesen", toDiaryTip2 = "Jeder Spieltag als Eintrag, Tag für Tag",
   toMates = "Weggefährten", toMatesTip = "Weggefährten ansehen", toMatesTip2 = "Wer mit Euch gereist ist",
-  toFire = "Am Feuer", toFireTip = "Weggefährten am Feuer", toFireTip2 = "Wer mit Euch am Lagerfeuer gesessen hat",
+  toDungeons = "Dungeons", toDungeonsTip = "Dungeons ansehen", toDungeonsTip2 = "Jeder Durchlauf: wann, wie lange, mit wem, Bosse, Tode und Beute",
   toProfile = "Steckbrief", toProfileTip = "Steckbrief, Stufenfluss und Tagebuch-Auszug",
 })
 
@@ -767,7 +768,8 @@ end
 
 function Page.OpenDiary(self) openSub(self, "diaryView", "DiaryView") end
 function Page.OpenCompanions(self) openSub(self, "matesView", "CompanionsView") end
-function Page.OpenFire(self) openSub(self, "fireView", "FireMatesView") end
+function Page.OpenFire(self) openSub(self, "fireView", "FireMatesView") end -- inside "Weggefährten" (switch "Am Feuer")
+function Page.OpenDungeons(self) openSub(self, "dungeonsView", "DungeonsView") end
 
 function Page:CloseSub()
   local was = self.sub
@@ -780,7 +782,7 @@ function Page:CloseSub()
   if was then Pages.subChanged("chronik") end
 end
 
--- sub-bookmarks (contract journal/Pages.lua): overview · diary · companions. Labels are read late (the language is not
+-- sub-bookmarks (contract journal/Pages.lua): overview · diary · companions · dungeons. Labels are read late (the language is not
 -- yet fixed when the file loads)
 local function subTab(key, label, tip1, tip2)
   return setmetatable({ key = key }, { __index = function(_, k)
@@ -792,13 +794,14 @@ Page.subs = {
   subTab("steckbrief", "toProfile", "toProfile", "toProfileTip"),
   subTab("tagebuch", "toDiary", "toDiaryTip", "toDiaryTip2"),
   subTab("weggefaehrten", "toMates", "toMatesTip", "toMatesTip2"),
-  subTab("feuer", "toFire", "toFireTip", "toFireTip2"),
+  subTab("dungeons", "toDungeons", "toDungeonsTip", "toDungeonsTip2"),
 }
 
 function Page:GetSub()
   if self.sub and self.sub == self.diaryView then return "tagebuch" end
-  if self.sub and self.sub == self.matesView then return "weggefaehrten" end
-  if self.sub and self.sub == self.fireView then return "feuer" end
+  -- the companions bookmark holds two views: the group (matesView) and the people at the fire (fireView)
+  if self.sub and (self.sub == self.matesView or self.sub == self.fireView) then return "weggefaehrten" end
+  if self.sub and self.sub == self.dungeonsView then return "dungeons" end
   return "steckbrief"
 end
 
@@ -808,8 +811,8 @@ function Page:ShowSub(key)
     Page.OpenDiary(self)
   elseif key == "weggefaehrten" then
     Page.OpenCompanions(self)
-  elseif key == "feuer" then
-    Page.OpenFire(self)
+  elseif key == "dungeons" then
+    Page.OpenDungeons(self)
   else
     self:CloseSub()
   end

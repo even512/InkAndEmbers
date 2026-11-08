@@ -74,6 +74,7 @@ journal\model\Kampf.lua
 journal\model\Funde.lua
 journal\model\Companions.lua
 journal\model\FireMates.lua
+journal\model\Dungeons.lua
 journal\model\Rest.lua
 journal\model\CampfireTexts.lua
 journal\model\CampfireTalk.lua
@@ -104,6 +105,7 @@ journal\Spoken.lua
 journal\Pages.lua
 journal\pages\Chronik.lua
 journal\pages\ChronikViews.lua
+journal\pages\ChronikDungeons.lua
 journal\pages\Quests.lua
 journal\pages\QuestsOffen.lua
 journal\pages\QuestsDungeons.lua
