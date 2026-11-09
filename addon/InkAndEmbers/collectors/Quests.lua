@@ -184,7 +184,7 @@ local Quests = {
   requires = { "UnitLevel" },
   events = {
     "QUEST_ACCEPTED", "QUEST_TURNED_IN", "QUEST_REMOVED", "QUEST_DETAIL", "QUEST_PROGRESS", "QUEST_COMPLETE",
-    "PLAYER_LOGOUT", "QUEST_LOG_UPDATE", "QUEST_WATCH_UPDATE", "QUEST_FINISHED",
+    "PLAYER_LOGOUT", "QUEST_LOG_UPDATE", "QUEST_WATCH_UPDATE", "QUEST_FINISHED", "ITEM_DATA_LOAD_RESULT",
   },
   unitEvents = { UNIT_QUEST_LOG_CHANGED = { "player" } },
   signals = { "FC_LOOT" },
@@ -265,6 +265,15 @@ end
 -- rewards in full: all items of one kind ('choice' = pick, 'reward' = fixed) from the open turn-in window as
 -- a list { { id = itemID, n = count|nil }, ... } (at most REWARD_MAX); name and quality go into snapshots.items.
 -- Secret or missing values are dropped; no entry without a readable itemID (no guessing).
+-- Items whose name the client had not loaded at the turn-in: asked for once, the name is added at ITEM_DATA_LOAD_RESULT.
+local nameWait, nameWaitN = {}, 0
+local NAME_WAIT_MAX = 40
+
+local function clientItemName(id)
+  if type(C_Item) ~= "table" then return nil end
+  return str(call(C_Item.GetItemNameByID, id))
+end
+
 local function rewardList(kind, n)
   n = num(n)
   if not n or n < 1 then return nil end
@@ -275,13 +284,30 @@ local function rewardList(kind, n)
     if id and id > 0 and id == floor(id) then
       count = num(count)
       out[#out + 1] = { id = id, n = (count and count > 1) and floor(count) or nil }
-      Store.noteItem(id, str(name), num(quality))
+      name = str(name) or clientItemName(id)
+      Store.noteItem(id, name, num(quality))
+      if not name and not nameWait[id] and nameWaitN < NAME_WAIT_MAX and type(C_Item) == "table" then
+        nameWait[id] = true
+        nameWaitN = nameWaitN + 1
+        call(C_Item.RequestLoadItemDataByID, id)
+      end
     end
   end
   return #out > 0 and out or nil
 end
 
 -- Dialog and text archive
+
+-- late item name for a reward whose name was missing at the turn-in (only items asked for in rewardList)
+handlers.ITEM_DATA_LOAD_RESULT = function(_, itemID, success)
+  local id = num(itemID)
+  if not id or not nameWait[id] then return end
+  nameWait[id] = nil
+  nameWaitN = math.max(0, nameWaitN - 1)
+  if success == false then return end
+  local name = clientItemName(id)
+  if name then Store.noteItem(id, name) end
+end
 
 handlers.QUEST_DETAIL = function(self)
   local questID = questIdFromFrame()

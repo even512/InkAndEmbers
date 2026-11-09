@@ -378,10 +378,17 @@ local function pick(seed, kind, vars)
   return nil
 end
 
--- name for lists (display; companions without realm); nil if nothing readable remains
+-- name for lists (display; companions as "Vorname Nachname" on Forever, else without realm, Names.mateName); nil if nothing
+-- readable remains
+local function mateRaw(v)
+  local N = ns.Names
+  if N then return N.mateName(v) end
+  return match(v, "^([^%-]+)") or v
+end
+
 local function shown(v, dropRealm)
   if type(v) ~= "string" then return nil end
-  if dropRealm then v = match(v, "^([^%-]+)") or v end
+  if dropRealm then v = mateRaw(v) or v end
   local S = ns.Sanitize
   return S and S.display(v, DiaryTexts.NAME_MAX) or nil
 end
@@ -551,7 +558,7 @@ function DiaryTexts.entry(f, opts)
     if s then names[#names + 1] = s end
   end
   if #names == 1 then
-    add(pick(seed, "mate", { mate = match(mates[1].name or "", "^([^%-]+)") or mates[1].name }))
+    add(pick(seed, "mate", { mate = mateRaw(mates[1].name or "") or mates[1].name }))
   elseif #names > 1 then
     add(pick(seed, "mates", { mates = joinList(names) }))
   end

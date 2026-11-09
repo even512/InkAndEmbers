@@ -84,6 +84,75 @@ function Live.itemIcon(itemID)
   return nil -- string paths are rejected: texture paths must be literals
 end
 
+-- client name of an item (raw text, nil while the client has not loaded it): GetItemNameByID, else GetItemInfo
+function Live.itemName(itemID)
+  itemID = validID(itemID)
+  if not itemID then return nil end
+  local n = call("C_Item.GetItemNameByID", itemID)
+  if isSecret(n) or type(n) ~= "string" or n == "" then
+    if resolve("GetItemInfo") then n = call("GetItemInfo", itemID) else n = call("C_Item.GetItemInfo", itemID) end
+  end
+  if isSecret(n) or type(n) ~= "string" or n == "" then return nil end
+  return n
+end
+
+-- Name resolver for pages that show item names from snapshots.items. A missing name comes from the client; if that has not loaded
+-- the item either, it is asked for ONCE (C_Item.RequestLoadItemDataByID) and redraw() runs once, bundled, when ITEM_DATA_LOAD_RESULT
+-- arrives. Until then the caller shows its placeholder. A name found this way is added to snapshots.items (Store.noteItem).
+-- Event only registered while something is pending; no ticker; stop() when the page is left.
+function Live.itemNames(parent, redraw, maxLen)
+  local w = { pending = {}, asked = {}, dirty = false }
+  local ev = type(CreateFrame) == "function" and CreateFrame("Frame", nil, parent) or nil
+  w.events = ev
+  local function listen(on)
+    if not (ev and ev.RegisterEvent and ev.UnregisterEvent) then return end
+    pcall(on and ev.RegisterEvent or ev.UnregisterEvent, ev, "ITEM_DATA_LOAD_RESULT")
+  end
+  local function fire()
+    if not w.dirty then return end -- stop() ran in between
+    w.dirty = false
+    if type(redraw) == "function" then pcall(redraw) end
+  end
+  if ev and ev.SetScript then
+    ev:SetScript("OnEvent", function(_, event, itemID, success)
+      if event ~= "ITEM_DATA_LOAD_RESULT" then return end
+      itemID = validID(itemID)
+      if not itemID or not w.pending[itemID] then return end
+      w.pending[itemID] = nil
+      if next(w.pending) == nil then listen(false) end
+      if success == false or w.dirty then return end
+      w.dirty = true
+      if type(C_Timer) == "table" and type(C_Timer.After) == "function" then C_Timer.After(0.15, fire) else fire() end
+    end)
+  end
+  -- display name of the item, nil if unknown (then loading has been requested)
+  function w.name(itemID)
+    itemID = validID(itemID)
+    if not itemID then return nil end
+    local raw = Live.itemName(itemID)
+    local S = ns.Sanitize
+    local name = raw and S and S.display(raw, maxLen or 80) or nil
+    if name and name ~= "" then
+      if ns.Store and ns.Store.noteItem then pcall(ns.Store.noteItem, itemID, raw) end
+      return name
+    end
+    if not w.asked[itemID] then
+      w.asked[itemID] = true
+      if resolve("C_Item.RequestLoadItemDataByID") then
+        call("C_Item.RequestLoadItemDataByID", itemID)
+        w.pending[itemID] = true
+        listen(true)
+      end
+    end
+    return nil
+  end
+  function w.stop()
+    w.pending, w.asked, w.dirty = {}, {}, false
+    listen(false)
+  end
+  return w
+end
+
 function Live.spellName(spellID)
   spellID = validID(spellID)
   if not spellID then return nil end

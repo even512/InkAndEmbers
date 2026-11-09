@@ -1,7 +1,7 @@
 -- Chronik page: profile, level flow, diary by day, XP sources and forecast. Data from journal/model/Chronik.lua
 -- (display-ready texts); only frames and layout here.
--- The sub-views "Tagebuch", "Weggefährten" (with the switch "Gruppe | Am Feuer") and "Dungeons" (pages/ChronikViews.lua,
--- pages/ChronikDungeons.lua) open via Page.subs; the overview
+-- The sub-views "Tagebuch", "Weggefährten" (with the switch "Gruppe | Am Feuer"), "Dungeons" and "Meilensteine" (pages/ChronikViews.lua,
+-- pages/ChronikDungeons.lua, pages/ChronikMeilensteine.lua; Meilensteine only in WoW Forever) open via Page.subs; the overview
 -- sits in its own holders (mainL/mainR), which get hidden. No ticker, no OnUpdate; frames are created in Build, pools
 -- are bounded.
 local _, ns = ...
@@ -68,12 +68,14 @@ Page.TEXT = ns.Locale.ns("p.Chronik", {
   since = "Unterwegs seit", played = "Gesamte Spielzeit", perDay = "Ø pro Spieltag", sessions = "Sitzungen", entries = "Festgehaltene Ereignisse",
   seals = "MEDAILLEN DER REISE", flow = "Stufenfluss", flowSub = "Wie lange jede Stufe dauerte",
   legend = "rote Punkte = gestorben", xpTotal = "EP GESAMT", sources = "WOHER DIE ERFAHRUNG KAM",
+  standDate = "Stand: %s", standXp = "Stand: %s · %s", standFmt = "%d.%m.%Y",
   noXp = "Noch keine Erfahrung gesammelt.", diaryEmpty = "Noch nichts erlebt – das Tagebuch wartet.",
   diaryNone = "Aus dem Tagebuch", ofMax = "VON %s", ringStart = "Auf geht's!", prevTip = "Tag davor", nextTip = "Tag danach",
   toDiary = "Tagebuch", toDiaryTip = "Das Tagebuch lesen", toDiaryTip2 = "Jeder Spieltag als Eintrag, Tag für Tag",
   toMates = "Weggefährten", toMatesTip = "Weggefährten ansehen", toMatesTip2 = "Wer mit Euch gereist ist",
   toDungeons = "Dungeons", toDungeonsTip = "Dungeons ansehen", toDungeonsTip2 = "Jeder Durchlauf: wann, wie lange, mit wem, Bosse, Tode und Beute",
   toProfile = "Steckbrief", toProfileTip = "Steckbrief, Stufenfluss und Tagebuch-Auszug",
+  toMilestones = "Meilensteine", toMilestonesTip = "Meilensteine ansehen", toMilestonesTip2 = "Alle zehn Stufen eine Bilanz der Reise, bei Stufe 60 der Abschluss",
 })
 
 local function font(parent, kind, size, color, justify)
@@ -544,13 +546,29 @@ function Page:Build(left, right)
 end
 
 -- "Reisender" / "Reisende" by the character's sex (UnitSex: 2 male, 3 female), else "Reisende/r"
-function Page.travellerLabel()
+function Page.travellerLabel(guest)
   local T = Page.TEXT
+  if guest then return T.traveller end -- another character's book: not the logged-in character's sex
   local ok, sex = false, nil
   if type(UnitSex) == "function" then ok, sex = pcall(UnitSex, "player") end
   if ok and sex == 2 then return T.travellerM end
   if ok and sex == 3 then return T.travellerF end
   return T.traveller
+end
+
+-- Guest book: the experience bar is the stand of the last login, marked with its date ("Stand: 07.11.2026 · <rested note>").
+-- Own book / no bar / no date: the model's own text.
+function Page.xpNote(guest, xp)
+  if not guest or not xp or xp.maxed or not xp.max then return xp and xp.restText end
+  local seen = guest.lastSeen
+  local okd, d = false, nil
+  if type(seen) == "number" then okd, d = pcall(date, Page.TEXT.standFmt, seen) end
+  if not okd or type(d) ~= "string" or d == "" then return xp.restText end
+  local CT = Journal.Chronik and Journal.Chronik.TEXT
+  local rest
+  if CT and xp.rested then rest = CT("restLeft", Journal.Texts.int(xp.rested)) elseif CT then rest = CT.restNone end
+  if rest then return Page.TEXT("standXp", d, rest) end
+  return Page.TEXT("standDate", d)
 end
 
 local function drawLeft(self, view)
@@ -566,7 +584,7 @@ local function drawLeft(self, view)
   end)
   set(u.ring.center, Journal.Texts.int(p.level))
   set(u.ringStart, lvl <= 1 and Page.TEXT.ringStart or "")
-  set(u.who, Page.travellerLabel())
+  set(u.who, Page.travellerLabel(self.guest))
   set(u.name, p.name)
   set(u.sub, p.subtitle)
   set(u.motto, p.motto)
@@ -580,7 +598,7 @@ local function drawLeft(self, view)
 
   set(u.xpLabel, xp.label)
   set(u.xpPct, xp.pctText)
-  set(u.xpRestText, xp.restText)
+  set(u.xpRestText, Page.xpNote(self.guest, xp))
   local pct = tonumber(xp.pct)
   if pct and pct > 0 then
     u.xpFill:SetWidth(max(1, SL.w * pct))
@@ -770,6 +788,7 @@ function Page.OpenDiary(self) openSub(self, "diaryView", "DiaryView") end
 function Page.OpenCompanions(self) openSub(self, "matesView", "CompanionsView") end
 function Page.OpenFire(self) openSub(self, "fireView", "FireMatesView") end -- inside "Weggefährten" (switch "Am Feuer")
 function Page.OpenDungeons(self) openSub(self, "dungeonsView", "DungeonsView") end
+function Page.OpenMilestones(self) openSub(self, "milestonesView", "MilestonesView") end
 
 function Page:CloseSub()
   local was = self.sub
@@ -782,7 +801,7 @@ function Page:CloseSub()
   if was then Pages.subChanged("chronik") end
 end
 
--- sub-bookmarks (contract journal/Pages.lua): overview · diary · companions · dungeons. Labels are read late (the language is not
+-- sub-bookmarks (contract journal/Pages.lua): overview · diary · companions · dungeons · milestones. Labels are read late (the language is not
 -- yet fixed when the file loads)
 local function subTab(key, label, tip1, tip2)
   return setmetatable({ key = key }, { __index = function(_, k)
@@ -795,13 +814,21 @@ Page.subs = {
   subTab("tagebuch", "toDiary", "toDiaryTip", "toDiaryTip2"),
   subTab("weggefaehrten", "toMates", "toMatesTip", "toMatesTip2"),
   subTab("dungeons", "toDungeons", "toDungeonsTip", "toDungeonsTip2"),
+  subTab("meilensteine", "toMilestones", "toMilestonesTip", "toMilestonesTip2"),
 }
+
+-- Retail: the milestones belong to WoW Forever (as the level-up note), so their bookmark stays out there
+Pages.hideSub("chronik", "meilensteine", function()
+  local L = Journal.Lehrplan
+  return L ~= nil and type(L.active) == "function" and L.active() == false
+end)
 
 function Page:GetSub()
   if self.sub and self.sub == self.diaryView then return "tagebuch" end
   -- the companions bookmark holds two views: the group (matesView) and the people at the fire (fireView)
   if self.sub and (self.sub == self.matesView or self.sub == self.fireView) then return "weggefaehrten" end
   if self.sub and self.sub == self.dungeonsView then return "dungeons" end
+  if self.sub and self.sub == self.milestonesView then return "meilensteine" end
   return "steckbrief"
 end
 
@@ -813,6 +840,8 @@ function Page:ShowSub(key)
     Page.OpenCompanions(self)
   elseif key == "dungeons" then
     Page.OpenDungeons(self)
+  elseif key == "meilensteine" then
+    Page.OpenMilestones(self)
   else
     self:CloseSub()
   end
@@ -821,6 +850,7 @@ end
 function Page:Refresh(data)
   if not self.built then return end
   self.index, self.now = data.index, data.now
+  self.guest = data.guest -- another character's book (read only) or nil
   if self.sub then self.sub:Refresh(data.index, data.now) end
   local view = Chronik.evaluate(data.index, { live = data.live, now = data.now })
   if not view then error("Chronik: keine Auswertung") end

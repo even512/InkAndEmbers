@@ -184,11 +184,17 @@ local function kv(k, v) return { kind = "kv", k = k, v = v } end
 local function line(left, right, color) return { kind = "line", left = left, right = right, color = color } end
 local function note(text) return { kind = "note", text = text } end
 
+-- display name of a group member/recipient ("Vorname-Nachname" key): Forever "Vorname Nachname" (never a shard), Retail unchanged
+local function mateText(raw)
+  local N = ns.Names
+  return disp(N and N.mateName(raw, nil, true) or raw, 48) or "?"
+end
+
 -- own character from the saved character data: name, class file, class/race text and the level range of the run; nil without a name
 local function ownEntry(index, run, level1)
   local info = type(index) == "table" and type(index.char) == "table" and index.char.info
   if type(info) ~= "table" then return nil end
-  local name = disp(info.name, 48)
+  local name = disp(ns.Names and ns.Names.fullName(info) or info.name, 48) -- "Vorname Nachname" on Forever (Names.lua)
   if not name or name == "" then return nil end
   local class = type(info.classFile) == "string" and info.classFile ~= "" and info.classFile or nil
   local cls = class and Mates.className(class) or disp(info.class, 24)
@@ -247,8 +253,9 @@ function View:Items(run)
     out[#out + 1] = note(T.noGroup)
   end
   for _, m in ipairs(group) do
-    local it = line(disp(m.name, 48) or "?", personKind(m), Mates.classColor(m.class))
-    it.tip = { disp(m.name, 48) or "?", personKind(m), duration(m.seconds) }
+    local mname = mateText(m.name)
+    local it = line(mname, personKind(m), Mates.classColor(m.class))
+    it.tip = { mname, personKind(m), duration(m.seconds) }
     it.tipColors = { Mates.classColor(m.class) }
     out[#out + 1] = it
   end
@@ -272,7 +279,7 @@ function View:Items(run)
     local hasGroup = false
     for _, l in ipairs(d.loot) do if l.who then hasGroup = true end end
     for _, l in ipairs(d.loot) do
-      local name = disp(l.name, 48) or T("itemFallback", format("%.0f", l.itemID))
+      local name = disp(l.name, 48) or (self.names and self.names.name(l.itemID)) or T("itemFallback", format("%.0f", l.itemID))
       if l.count > 1 then name = name .. " ×" .. int(l.count) end
       local r, g, b
       if l.quality and F and F.qualityRGB then r, g, b = F.qualityRGB(l.quality) end
@@ -280,7 +287,7 @@ function View:Items(run)
       local recipient
       if hasGroup then
         -- between item and time: recipient (class colour; our own finds "Ihr") and, small behind it, the kind of roll when known
-        local who = l.who and (disp(l.who, 48) or "?") or T.you
+        local who = l.who and mateText(l.who) or T.you
         local rollWord = l.roll and T["roll_" .. l.roll]
         if type(rollWord) ~= "string" or rollWord == "roll_" .. tostring(l.roll) then rollWord = nil end
         it.who, it.roll = who, rollWord or ""
@@ -346,7 +353,7 @@ function View:RunTip(run)
   if #group > 0 then
     lines[#lines + 1] = T.groupTip .. ":"
     for i = 1, min(#group, View.TIP_PEOPLE) do
-      lines[#lines + 1] = (disp(group[i].name, 48) or "?") .. " · " .. personKind(group[i])
+      lines[#lines + 1] = mateText(group[i].name) .. " · " .. personKind(group[i])
       colors[#lines] = Mates.classColor(group[i].class)
     end
     if #group > View.TIP_PEOPLE then lines[#lines + 1] = T("more", int(#group - View.TIP_PEOPLE)) end
@@ -447,6 +454,10 @@ function View.new(page, left, right)
   l:SetAllPoints(left)
   r:SetAllPoints(right)
   self.l, self.r = l, r
+  -- finds without a stored name: name from the client, loaded later and the card redrawn once (Live.itemNames)
+  if Journal.Live and Journal.Live.itemNames then
+    self.names = Journal.Live.itemNames(r, function() if self.open then self:RenderCard(false) end end, 48)
+  end
   W.NewPageHead(l, { side = "L" }):SetTexts(T.brand, T.page)
   W.NewPageHead(r, { side = "R" }):SetTexts("", T.page)
   D.escKeys(l, function() page:CloseSub() end) -- Esc -> overview
@@ -654,6 +665,7 @@ end
 
 function View:Close()
   self.open = false
+  if self.names then self.names.stop() end
   self.l:Hide()
   self.r:Hide()
   for _, row in ipairs(self.list.rows) do W.hideTip(row) end

@@ -210,17 +210,23 @@ function Theme.sealFrameCoords(tier)
   return col / a.cols, (col + 1) / a.cols, row / a.rows, (row + 1) / a.rows
 end
 
+-- motif cell = catalogue field cell (Chronik.SEALS: appended medals keep the cells of the others), else the position
+-- placeholder (motif not in the atlas yet): the icon of its family (Chronik.FAMILIES) inside the tier ring
+Theme.SEAL_PLACEHOLDER_SCALE = 0.5
 function Theme.sealLayers(seal, tier)
   if type(seal) ~= "table" then return { tex = Theme.TEX.disc, color = Theme.SEAL_METAL.none }, nil end
   local shown = tier or seal.tier or "bronze"
-  if Theme.SEAL_LAYERED then
-    return { tex = Theme.TEX.seals, coords = { Theme.sealCoords(seal.index) }, scale = Theme.SEAL_MOTIF_SCALE },
-      { tex = Theme.TEX.sealFrames, coords = { Theme.sealFrameCoords(shown) } }
-  end
   local icon = "memory"
   local C = ns.Journal and ns.Journal.Chronik
   for _, f in ipairs(C and C.FAMILIES or {}) do
     if f.id == seal.family then icon = f.icon end
+  end
+  if Theme.SEAL_LAYERED then
+    local frame = { tex = Theme.TEX.sealFrames, coords = { Theme.sealFrameCoords(shown) } }
+    if seal.placeholder then
+      return { tex = Theme.TEX.momentIcons, coords = { Theme.momentIconCoords(icon) }, scale = Theme.SEAL_PLACEHOLDER_SCALE }, frame
+    end
+    return { tex = Theme.TEX.seals, coords = { Theme.sealCoords(seal.cell or seal.index) }, scale = Theme.SEAL_MOTIF_SCALE }, frame
   end
   return { tex = Theme.TEX.disc, color = Theme.SEAL_METAL[tier or "none"] or Theme.SEAL_METAL.none },
     { tex = Theme.TEX.momentIcons, coords = { Theme.momentIconCoords(icon) }, scale = Theme.SEAL_ICON_SCALE }

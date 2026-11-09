@@ -79,7 +79,7 @@ function Widgets.playerLine(data)
   local S = ns.Sanitize
   local function d(v) return S and S.display(v, 32) or nil end
   local parts = {}
-  local who = d(info.name)
+  local who = d(ns.Names and ns.Names.fullName(info) or info.name) -- "Vorname Nachname" on Forever (Names.lua)
   if who then parts[#parts + 1] = who end
   local rc = {}
   local race, class = d(info.race), d(info.class)

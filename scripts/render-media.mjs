@@ -441,9 +441,15 @@ export const SEAL_MOTIF_IDS = [
   "explorer", "pathfinder", "continent", "flightmaster", "frequent_flyer", "hunter", "elite_hunter", "rare_hunter",
   "close_win", "duel", "quests", "reputation", "books", "profession", "fortune", "blue", "epic", "angler", "gatherer",
   "guild", "companions", "social", "regular", "campfire", "rested", "hearth", "tough", "flawless", "unscathed", "dungeon",
-  "boss", "raid", "mount", "plans", "level60",
+  "boss", "raid", "mount", "plans", "level60", "zone_master",
 ];
 export const SEAL_MOTIF_ATLAS = { cols: 8, rows: 8, cell: 128 };
+// Medaillen, deren Motiv noch nicht im Atlas ist (Katalogfeld placeholder = true, im Spiel das Familienzeichen): Zielzelle und
+// Quelle. Spaeter hinzugekommene Medaillen werden HINTEN angehaengt (Katalogfeld cell), die Zellen der anderen bleiben.
+// Einbau nach Freigabe des Bildes: id an SEAL_MOTIF_IDS anhaengen (Position = cell), Quelle in SEAL_MOTIF_SRC, Kreis in
+// SEAL_V2_BOX messen, Media/Seals.tga neu rendern, placeholder im Katalog (Chronik.lua) entfernen.
+// zone_master ("Zonenkenner", Zelle 36) ist eingebaut (Motiv freigegeben 08.11.2026).
+export const SEAL_MOTIF_PENDING = {};
 export const SEAL_FRAME_IDS = ["bronze", "silver", "gold", "legendary"];
 export const SEAL_FRAME_ATLAS = { cols: 2, rows: 2, cell: 256 };
 // Quelle je Medaille: neues Motiv (v2/motif_<name>.jpg) oder Altbild (Katalogfeld art = <id>.jpg). "Ohne Fehltritt" hat ein eigenes
@@ -457,7 +463,7 @@ export const SEAL_MOTIF_SRC = {
   companions: "v2/motif_companions", social: "v2/motif_sociable", regular: "v2/motif_regular", campfire: "v2/motif_campfire",
   rested: "v2/motif_rested", hearth: "hearth", tough: "v2/motif_unbreakable", flawless: "v2/motif_flawless",
   unscathed: "v2/motif_unscarred", dungeon: "first_dungeon", boss: "boss", raid: "first_raid", mount: "mount",
-  plans: "v2/motif_ownways", level60: "level60",
+  plans: "v2/motif_ownways", level60: "level60", zone_master: "v2/motif_zonemaster",
 };
 // Kreis der neuen Motive, gemessen (30.10.2026, Quellpixel: Bounding-Box aller Pixel mit Farbsumme < 690, mindestens 7 je Zeile
 // bzw. Spalte) [x0, y0, Breite, Hoehe]; geschnitten wird SEAL_MOTIF_INSET innerhalb des Kreises (die dunkle Kante bleibt draussen).
@@ -467,6 +473,7 @@ export const SEAL_V2_BOX = {
   flawless: [203, 202, 1643, 1642], hunter: [204, 204, 1640, 1640], ownways: [204, 204, 1640, 1640], pathfinder: [204, 204, 1640, 1640],
   questbook: [205, 204, 1639, 1640], regular: [204, 204, 1640, 1640], rested: [204, 204, 1640, 1640],
   sociable: [204, 204, 1640, 1640], unbreakable: [204, 204, 1640, 1640], unscarred: [205, 204, 1639, 1640],
+  zonemaster: [204, 204, 1640, 1640], // gemessen 08.11.2026 (gleiches Verfahren, Kontrolle: questbook ergibt wieder [205, 204, 1639, 1640])
 };
 export const SEAL_MOTIF_INSET = 0.015;
 // Mittelfeld der Altbilder: Radius in Prozent des Medaillon-Radius (SEAL_BOX), gemessen als dunkelste Ringlinie (innere Kante des

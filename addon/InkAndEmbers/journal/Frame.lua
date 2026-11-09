@@ -76,10 +76,22 @@ Frame.TAB_LEVEL, Frame.SPREAD_LEVEL = 2, 4
 -- Sub-bookmarks: subpages of the active tab as ribbons hanging out at the bottom (none for a single view). Texture of the tabs
 -- (Media/Bookmarks.tga, cell of the active tab), rotated 90 degrees: body = plain section (u body0..body1), end = swallowtail
 -- (u tip0..tip1); trim = texture pixels cut at top/bottom. The top end is tucked under the parchment.
-Frame.SUBTAB = { x0 = 122, gap = 6, edge = 40, under = 66, out = 14, pull = 9, hover = 3, tip = 20, pad = 11, minW = 58, size = 17,
+Frame.SUBTAB = { x0 = 56, gap = 6, edge = 40, under = 66, out = 14, pull = 9, hover = 3, tip = 20, pad = 11, minW = 58, size = 17,
   dim = 0.62, body0 = 0.02, body1 = 0.32, tip0 = 0.90, tip1 = 0.996, trim = 8, sx = 1, sy = 2, sa = 0.35 }
+-- The ribbons hang only on the LEFT page and end before the fold (Frame.W / 2) with a small gap (foldGap), however many there
+-- are and in whatever language: if they do not fit, updateSubTabs tries these steps (scale of the font, padding, gap, minimum
+-- width) in turn and takes the first that fits; the last step is the tightest.
+Frame.SUBTAB.foldGap = 18
+Frame.SUBTAB.fit = {
+  { scale = 1, pad = 11, gap = 6, minW = 58 },
+  { scale = 1, pad = 7, gap = 4, minW = 44 },
+  { scale = 0.9, pad = 6, gap = 4, minW = 38 },
+  { scale = 0.82, pad = 5, gap = 3, minW = 34 },
+  { scale = 0.74, pad = 4, gap = 3, minW = 30 },
+}
 Frame.SUBTABS_OUT = Frame.SUBTAB.out + Frame.SUBTAB.pull + Frame.SUBTAB.hover
-Frame.SUBTABS_MAX = 4
+-- most sub-bookmarks of one tab: Chronik has five (Steckbrief, Tagebuch, Weggefährten, Dungeons, Meilensteine)
+Frame.SUBTABS_MAX = 5
 -- Journey subpages from left to right: total journey · chapter journey (= zone map, key "karte", the default view on open
 -- even though it sits in the middle) · to-do (key "vorhaben"). The other tabs register theirs via Pages.subs. Label and
 -- tooltip come from Frame.TEXT when read (sub_<key>, subTip_<key>; the language is only known at ADDON_LOADED).
@@ -121,10 +133,20 @@ Frame.TEXT = ns.Locale.ns("Frame", {
   row_deaths = "Tode",
   row_quests = "Quests",
   row_moments = "Momente",
+  -- zone progress (change "zone-abgeschlossen", journal/model/ZoneProgress.lua)
+  row_zone = "Zone erledigt",
+  row_zonesDone = "Zonen abgeschlossen",
+  zonePct = "%s %% (%s/%s)",
+  zoneComplete = "100 % · abgeschlossen",
+  zonePartial = "%s …",
+  zonesDoneValue = "%s / %s",
+  zonesTipTitle = "Abgeschlossene Zonen",
+  zonesTipLine = "In %s von %s Zonen sind alle zählbaren Quests erledigt.",
+  zonesTipRule = "Gezählt werden Zonen mit mindestens %s zählbaren Quests.",
   tabTip_reise = "Karte mit Eurer Route, Kapitel für Kapitel, und Eure To Dos.",
   tabTip_chronik = "Steckbrief, Stufenfluss, Tagebuch, Weggefährten samt Lagerfeuer-Gästen und Dungeons.",
   tabTip_kampf = "Kills, Gegner, knappe Siege und Tode.",
-  tabTip_quests = "Abgeschlossene Quests mit Questtext und Belohnung, offene Quests der Zone und der Lehrplan.",
+  tabTip_quests = "Abgeschlossene Quests mit Questtext und Belohnung, offene Quests der Zone, der Lehrplan und die Zonenübersicht.",
   tabTip_questsRetail = "Abgeschlossene Quests mit Questtext und Belohnung und die offenen Quests der Zone.",
   tabTip_chronikRetail = "Steckbrief, Stufenfluss, Tagebuch, Weggefährten und Dungeons.",
   tabTip_notizen = "Eure eigenen Notizen, gern mit einem Pin auf der Karte.",
@@ -289,6 +311,38 @@ local function buildCard(parent)
     ln:SetSize(Frame.TABLE_W, 1)
     rows[i] = { frame = row, label = l, value = v, key = def.key }
     anchor = row
+  end
+  -- "Zone erledigt" (change "zone-abgeschlossen"): an own row under the values, hidden unless there is a share (Frame.updateZoneRow);
+  -- while it shows, all rows shrink to Frame.ROW_H_TIGHT so the table keeps its height (margin notes and grid stay in place)
+  do
+    local zr = CreateFrame("Frame", nil, card)
+    zr:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, 0)
+    zr:SetSize(Frame.TABLE_W, Frame.ROW_H)
+    local l = Theme.fontString(zr, "text", S.m or 14, Theme.C.sepia, "OVERLAY", "LEFT")
+    l:SetPoint("LEFT", zr, "LEFT", 0, 0)
+    local v = Theme.fontString(zr, "text", S.m or 14, Theme.C.ink, "OVERLAY", "RIGHT")
+    v:SetPoint("RIGHT", zr, "RIGHT", 0, 0)
+    v:SetWidth(Frame.TABLE_W - 120)
+    v:SetWordWrap(false)
+    local ln = zr:CreateTexture(nil, "ARTWORK")
+    ln:SetColorTexture(Theme.C.sepia[1], Theme.C.sepia[2], Theme.C.sepia[3], 0.2)
+    ln:SetPoint("BOTTOMLEFT", zr, "BOTTOMLEFT", 0, 0)
+    ln:SetSize(Frame.TABLE_W, 1)
+    -- stamp at 100 %: the medal "Zonenkenner" (motif + ring of the earned tier) left of the value
+    local motif = zr:CreateTexture(nil, "ARTWORK")
+    local ring = zr:CreateTexture(nil, "OVERLAY")
+    ring:SetSize(Frame.ZONE_STAMP, Frame.ZONE_STAMP)
+    motif:SetPoint("CENTER", ring, "CENTER", 0, 0)
+    motif:Hide()
+    ring:Hide()
+    zr:EnableMouse(true)
+    zr:SetScript("OnEnter", function(self)
+      local lines, colors = Frame.zoneTip(card.zoneInfo)
+      if lines and Journal.Widgets then Journal.Widgets.tip(self, lines, colors) end
+    end)
+    zr:SetScript("OnLeave", function(self) if Journal.Widgets then Journal.Widgets.hideTip(self) end end)
+    zr:Hide()
+    card.zoneRow = { frame = zr, label = l, value = v, line = ln, motif = motif, ring = ring }
   end
   card.label, card.title, card.sub, card.story, card.rule, card.rows = label, title, sub, story, rule, rows
   card.detour = detour
@@ -474,6 +528,8 @@ function Frame.setCard(c)
     card.label:SetWidth(lw > 0 and (lw + 2) or Frame.LEFT.w)
     Frame.setCardTitle(card, c.zoneName or Frame.TEXT.unknownArea)
     card.shown = c.index
+    card.chapter = c
+    Frame.updateZoneRow()
     card:Show()
     return
   end
@@ -488,13 +544,123 @@ function Frame.setCard(c)
   }
   for _, r in ipairs(card.rows) do r.value:SetText(values[r.key] or "") end
   card.shown = c.index
+  card.chapter = c
+  Frame.updateZoneRow()
   card:Show()
 end
 
 local function tabAvailable(id)
-  if id == Frame.HOME then return true end
   local P = Journal.Pages
+  -- another character's book (read only) leaves out what belongs to the logged-in character (Pages.guestAllows)
+  if P and P.guestAllows and not P.guestAllows(id) then return false end
+  if id == Frame.HOME then return true end
   return P ~= nil and P.isAvailable(id) == true
+end
+
+-- the open guest book ({ guid, name, lastSeen }) or nil in the own book
+local function guestNow()
+  local P = Journal.Pages
+  return P and type(P.guest) == "function" and P.guest() or nil
+end
+
+-- ---------------------------------------------------------------- "Zone erledigt" (change "zone-abgeschlossen")
+
+Frame.ROW_H_TIGHT = 18 -- row height while the zone row shows: 7 x 18 <= 6 x 22, the table does not grow
+Frame.ZONE_STAMP = 18  -- stamp (medal "Zonenkenner") in the zone row
+
+-- what the zone row shows for a card: nil (no row) or { kind = "zone"|"total", label, value, complete, partial, mapID, res|summary }.
+-- No row: unexplored zone, another character's book (the quest state is the logged-in character's), Retail / no data /
+-- not loaded yet / in combat without a cached value (ZoneProgress answers nil), zones with fewer than ZoneProgress.MIN_QUESTS
+-- countable quests; total journey: only after a sweep with at least one zone (decision F8).
+function Frame.zoneRowInfo(c)
+  local ZP = Journal.ZoneProgress
+  if type(c) ~= "table" or c.unexplored or not ZP or guestNow() then return nil end
+  local T = Frame.TEXT
+  if c.total then
+    local s = ZP.summary()
+    if type(s) ~= "table" or (s.zones or 0) < 1 then return nil end
+    return { kind = "total", label = T.row_zonesDone, value = T("zonesDoneValue", int(s.complete), int(s.zones)),
+      complete = s.complete > 0 and s.complete == s.zones, summary = s }
+  end
+  local ok, res = pcall(ZP.of, c.zoneID)
+  if not ok or type(res) ~= "table" or res.small or not res.pct then return nil end
+  local value = res.complete and T.zoneComplete or T("zonePct", int(res.pct), int(res.done), int(res.total))
+  if res.partial then value = T("zonePartial", value) end
+  return { kind = "zone", label = T.row_zone, value = value, complete = res.complete, partial = res.partial, mapID = res.mapID, res = res }
+end
+
+-- tooltip of the zone row (display-ready lines from ZoneProgress; total journey: count and rule)
+function Frame.zoneTip(info)
+  local ZP = Journal.ZoneProgress
+  if type(info) ~= "table" or not ZP then return nil end
+  if info.kind == "zone" then return ZP.tooltip(info.mapID) end
+  local T, s = Frame.TEXT, info.summary
+  local label = ZP.TIP_COLOR and ZP.TIP_COLOR.label or nil
+  return { T.zonesTipTitle, T("zonesTipLine", int(s.complete), int(s.zones)), T("zonesTipRule", int(ZP.MIN_QUESTS)) },
+    { [3] = label }
+end
+
+-- tier of the medal "Zonenkenner" for the stamp (earned tier, else bronze)
+local function zoneStampTier()
+  local C = Journal.Chronik
+  local char = ns.Store and ns.Store.current or nil
+  local v = C and C.counterValue and C.counterValue("zone_master", char) or 0
+  local n = C and C.stepsFor and C.stepsFor("zone_master", v) or 0
+  return (C and C.TIER_ORDER and C.TIER_ORDER[n]) or "bronze"
+end
+
+-- rows of the values table at their height: tight while the zone row shows
+local function layoutRows(card, tight)
+  local h = tight and Frame.ROW_H_TIGHT or Frame.ROW_H
+  for _, r in ipairs(card.rows) do r.frame:SetHeight(h) end
+  card.zoneRow.frame:SetHeight(h)
+end
+
+-- (re)draws the zone row of the shown card; called by setCard and on every change of the quest state (ZoneProgress.onChange)
+function Frame.updateZoneRow()
+  local card = J.card
+  local zr = card and card.zoneRow
+  if not zr then return end
+  local c = card.chapter
+  local info = Frame.zoneRowInfo(c)
+  card.zoneInfo = info
+  local show = info ~= nil and card.rows[1] ~= nil and card.rows[1].frame:IsShown()
+  layoutRows(card, show)
+  if not show then
+    zr.frame:Hide()
+    return
+  end
+  zr.label:SetText(info.label)
+  zr.value:SetText(info.value)
+  zr.value:SetTextColor(Journal.Widgets.color(info.complete and "gold" or "ink"))
+  local stamp = info.complete and info.kind == "zone"
+  if stamp then
+    local Chronik = Journal.Chronik
+    local seal = Chronik and Chronik.SEAL_BY_ID and Chronik.SEAL_BY_ID.zone_master
+    local motif, ring = Theme.sealLayers(seal, zoneStampTier())
+    local w = strWidth(zr.value, info.value) -- right-aligned value: the stamp sits just left of its text
+    zr.ring:ClearAllPoints()
+    zr.ring:SetPoint("RIGHT", zr.frame, "RIGHT", -(w + 6), 0)
+    for _, pair in ipairs({ { zr.motif, motif }, { zr.ring, ring } }) do
+      local t, layer = pair[1], pair[2]
+      if layer and layer.tex then
+        t:SetTexture(layer.tex)
+        local co = layer.coords
+        if co then t:SetTexCoord(co[1], co[2], co[3], co[4]) else t:SetTexCoord(0, 1, 0, 1) end
+        local px = floor(Frame.ZONE_STAMP * (layer.scale or 1) + 0.5)
+        t:SetSize(px, px)
+        local col = layer.color or { 1, 1, 1 }
+        t:SetVertexColor(col[1], col[2], col[3], 1)
+        t:Show()
+      else
+        t:Hide()
+      end
+    end
+  else
+    zr.motif:Hide()
+    zr.ring:Hide()
+  end
+  zr.frame:Show()
 end
 
 function Frame.updateTabs()
@@ -502,6 +668,9 @@ function Frame.updateTabs()
   for _, b in ipairs(J.tabs) do
     local current = J.page == b.tabId
     local available = tabAvailable(b.tabId)
+    local P = Journal.Pages
+    local gone = P ~= nil and P.guestAllows ~= nil and not P.guestAllows(b.tabId) -- guest book: the bookmark is gone, not dimmed
+    b:SetShown(not gone)
     -- Bookmark: fixed size, only the position on the book frame changes: active sticks out further by pull and fully bright,
     -- inactive by the small spread dx and clearly darkened, minimally raised under the mouse. The left end stays under the cover.
     local k = Frame.TAB
@@ -637,6 +806,15 @@ end
 
 function Frame.subList(id)
   if id == Frame.HOME then
+    if guestNow() then -- another character's book: no To Do (it belongs to the logged-in character)
+      local P, out = Journal.Pages, {}
+      for _, s in ipairs(Frame.SUBTABS_REISE) do
+        if s.key ~= "vorhaben" or Journal.Vorhaben then
+          if not P or P.guestAllows(Frame.HOME, s.key) then out[#out + 1] = s end
+        end
+      end
+      return out
+    end
     if Journal.Vorhaben then return Frame.SUBTABS_REISE end
     return { Frame.SUBTABS_REISE[1], Frame.SUBTABS_REISE[2] }
   end
@@ -721,13 +899,27 @@ end
 
 local SUB_LABEL = { 0.97, 0.86, 0.55 }
 
+-- Sets the label font to scale x its base size (base = size at first sight or after somebody else, e.g. the handwriting upgrade,
+-- reset it); returns nothing, the width is measured afterwards.
+local function subTabScale(b, scale)
+  local fs = b.text
+  if type(fs.GetFont) ~= "function" or type(fs.SetFont) ~= "function" then return end
+  local file, size, flags = fs:GetFont()
+  if not file or not tonumber(size) then return end
+  if b.fitSize and size ~= b.fitSize then b.baseSize = nil end
+  if not b.baseSize then b.baseSize = size end
+  local want = scale >= 1 and b.baseSize or math.max(8, floor(b.baseSize * scale + 0.5))
+  if want ~= size then pcall(fs.SetFont, fs, file, want, flags or "") end
+  b.fitSize = (want ~= b.baseSize) and want or nil
+end
+
 function Frame.updateSubTabs()
   if not J.subTabs then return end
   local k = Frame.SUBTAB
   local list = Frame.subList(J.page)
   local cur = list and Frame.currentSub()
-  local x = k.x0
   local D = Journal.Widgets and Journal.Widgets.Diary
+  local shown = {}
   for i, b in ipairs(J.subTabs) do
     local s = list and list[i]
     if s then
@@ -736,28 +928,45 @@ function Frame.updateSubTabs()
         b.labelText = s.label
         b.text:SetText(s.label)
       end
-      local tw = (D and D.measure(b.text)) or 0
-      if tw <= 0 then tw = #s.label * 7 end
-      local w = math.max(k.minW, floor(tw + 2 * k.pad + 0.5))
-      if b.cell ~= J.page then subTabSetCell(b, J.page) end
-      local current = s.key == cur
-      local lift = (not current and b.hover) and k.hover or 0
-      local extra = current and k.pull or lift
-      b:SetSize(w, k.under + k.out)
-      b:ClearAllPoints()
-      b:SetPoint("TOPLEFT", b.owner, "BOTTOMLEFT", x, k.under - extra)
-      if b.SetHitRectInsets then b:SetHitRectInsets(0, 0, math.max(0, k.under - extra - k.edge), 0) end
-      local v = current and 1 or (b.hover and 0.8 or k.dim)
-      b.body:SetVertexColor(v, v, v)
-      b.tip:SetVertexColor(v, v, v)
-      b.text:SetTextColor(SUB_LABEL[1], SUB_LABEL[2], SUB_LABEL[3], current and 1 or 0.82)
-      b.current = current
-      b:Show()
-      x = x + w + k.gap
+      shown[#shown + 1] = b
     else
       b.subKey, b.sub, b.current = nil, nil, false
       b:Hide()
     end
+  end
+  -- widths: first step of k.fit whose last ribbon ends before the fold (left page only), else the tightest
+  local xmax = Frame.W / 2 - k.foldGap
+  local widths, step = {}, k.fit[#k.fit]
+  for n, f in ipairs(k.fit) do
+    local x = k.x0
+    for i, b in ipairs(shown) do
+      subTabScale(b, f.scale)
+      local tw = (D and D.measure(b.text)) or 0
+      if tw <= 0 then tw = #b.sub.label * 7 * f.scale end
+      widths[i] = math.max(f.minW, floor(tw + 2 * f.pad + 0.5))
+      x = x + widths[i] + (i < #shown and f.gap or 0)
+    end
+    step = f
+    if x <= xmax then break end
+  end
+  local x = k.x0
+  for i, b in ipairs(shown) do
+    local s, w = b.sub, widths[i]
+    if b.cell ~= J.page then subTabSetCell(b, J.page) end
+    local current = s.key == cur
+    local lift = (not current and b.hover) and k.hover or 0
+    local extra = current and k.pull or lift
+    b:SetSize(w, k.under + k.out)
+    b:ClearAllPoints()
+    b:SetPoint("TOPLEFT", b.owner, "BOTTOMLEFT", x, k.under - extra)
+    if b.SetHitRectInsets then b:SetHitRectInsets(0, 0, math.max(0, k.under - extra - k.edge), 0) end
+    local v = current and 1 or (b.hover and 0.8 or k.dim)
+    b.body:SetVertexColor(v, v, v)
+    b.tip:SetVertexColor(v, v, v)
+    b.text:SetTextColor(SUB_LABEL[1], SUB_LABEL[2], SUB_LABEL[3], current and 1 or 0.82)
+    b.current = current
+    b:Show()
+    x = x + w + step.gap
   end
   Frame.updateSubEsc()
 end
@@ -843,6 +1052,10 @@ local function buildSettings(f)
       GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
       GameTooltip:AddLine(Frame.TEXT.settings, 1, 0.82, 0)
       GameTooltip:AddLine(Frame.TEXT.settingsTip, 0.8, 0.8, 0.8, true)
+      -- quiet save status (computed now, no ticker); the save button itself sits in the settings
+      local S = ns.Save
+      local ok, line = pcall(function() return S and S.statusText() end)
+      if ok and type(line) == "string" then GameTooltip:AddLine(line, 0.6, 0.6, 0.6, true) end
       GameTooltip:Show()
     end
   end)
@@ -1016,6 +1229,36 @@ function Frame.showPage(id)
   return true
 end
 
+-- Another character's book opens or closes (Pages.onGuestChange, fired before the pages redraw): the journey view starts from
+-- scratch for the other character, the To Do sheet closes, band and button follow, and a page that the guest book leaves out
+-- (Notizen) gives way to the journey map (Pages.setGuest itself only redraws pages that stay allowed).
+function Frame.onGuestChange(guid)
+  deps()
+  J.sel, J.contWhole, J.mapMode = {}, false, "zone"
+  J.zoneCards, J.stationsFor, J.stationList, J.stationSel, J.axisModel = nil, nil, nil, nil, nil
+  if J.st then J.st.playing = false end
+  if J.pb then Playback.stopTicking(J.pb) end
+  local V = Journal.Vorhaben
+  if guid ~= nil and V then
+    if V.cancelPick then pcall(V.cancelPick, true) end
+    if V.isOpen() then pcall(V.close) end
+  end
+  J.model, J.scene = nil, nil
+  if J.map then J.map.scene = nil end
+  if J.here then J.here:Hide() end
+  local Tw = Journal.Twinks
+  if Tw and Tw.onGuest then pcall(Tw.onGuest, guid) end
+  local f = J.frame
+  if not (f and f:IsShown()) then return end
+  if not tabAvailable(J.page) then
+    applyPage(Frame.HOME)
+  elseif J.page == Frame.HOME then
+    local _, _, changed = View.request()
+    if not changed then Frame.render(View.status, View.model, View.stale) end
+  end
+  Frame.updateTabs()
+end
+
 -- Book base image pieces (Theme.BOOK_SLICE): 3 rows x 5 columns, row by row; each with position/size in window pixels and
 -- texcoords u0..u1, v0..v1. Scale s = rim / ring is equal everywhere; edges are rounded to whole pixels (no seams). The leather
 -- edge lies on the window edge; the texture margin outside it (L.margin) sticks out by pad = margin * s px.
@@ -1129,6 +1372,7 @@ function Frame.build()
   if P then
     P.attach(pgLeft, pgRight)
     P.onChange(Frame.updateTabs)
+    if P.onGuestChange then P.onGuestChange(Frame.onGuestChange) end
     if P.onSubChange then P.onSubChange(function() Frame.updateSubTabs() end) end
   end
 
@@ -1305,6 +1549,14 @@ function Frame.build()
         if J.frame and J.frame:IsShown() and J.page == Frame.HOME and J.model and Frame.isTotal() then Frame.updateStations(true, true) end
       end)
     end
+    if I and I.onGuestReady then -- the guest's index finished in the background: stations of the guest book
+      I.onGuestReady(function(_, guid)
+        local g = guestNow()
+        if not (g and guid == g.guid) then return end
+        J.stationsFor = nil
+        if J.frame and J.frame:IsShown() and J.page == Frame.HOME and J.model and Frame.isTotal() then Frame.updateStations(true, true) end
+      end)
+    end
   end
 
   local close = CreateFrame("Button", nil, f)
@@ -1336,6 +1588,8 @@ function Frame.build()
   buildTabs(f)
   buildSubTabs(f)
   buildSettings(f)
+  if Journal.Twinks and Journal.Twinks.build then pcall(Journal.Twinks.build, f, over, J.gear) end
+  if Journal.Share and Journal.Share.build then pcall(Journal.Share.build, J.pb.frame) end
 
   f:SetScript("OnShow", safe(function(self)
     self:RegisterEvent("PLAYER_REGEN_DISABLED")
@@ -1344,6 +1598,7 @@ function Frame.build()
     Frame.applyScale()
     local P = Journal.Pages
     applyPage((P and P.initial()) or Frame.HOME)
+    if Journal.Twinks then pcall(Journal.Twinks.updateButton) end
     local S = Journal.Sound
     if S then
       S.play("open")
@@ -1356,7 +1611,8 @@ function Frame.build()
     self:UnregisterEvent("DISPLAY_SIZE_CHANGED")
     J.pendingScale = nil
     local P = Journal.Pages
-    if P then pcall(P.hide) end
+    if P then pcall(P.close or P.hide) end -- closing the book always goes back to the own book (frees a guest)
+    if Journal.Twinks then pcall(Journal.Twinks.onClose) end
     releaseHome()
     local S = Journal.Sound
     if S then
@@ -1369,7 +1625,7 @@ function Frame.build()
       Frame.applyScale()
     elseif event == "PLAYER_REGEN_DISABLED" then
       local P = Journal.Pages
-      if P then pcall(P.hide) end
+      if P then pcall(P.close or P.hide) end
       self:Hide()
     end
   end)
@@ -1606,12 +1862,48 @@ function Frame.layoutControls()
   J.contToggle.frame:ClearAllPoints()
   J.contToggle.frame:SetPoint("LEFT", ctrl, "LEFT", lx, 0)
   Frame.updateSubEsc()
+  Frame.updateHere()
   return n
 end
 Frame.layoutTitle = Frame.layoutControls
 
 function Frame.obstacles()
   return {}
+end
+
+-- Guest book: the map arrow is the other character's last known place, not a live position. A small hover area over the arrow
+-- says so ("Last here", with the last-seen date). Own book: no area.
+function Frame.updateHere()
+  local g, m = guestNow(), J.map
+  local shown = g ~= nil and m ~= nil and m.current ~= nil and m.current:IsShown() and J.page == Frame.HOME
+  if not shown then
+    if J.here then J.here:Hide() end
+    return false
+  end
+  local Tw = Journal.Twinks
+  local TX = Tw and Tw.TEXT
+  if not TX then return false end
+  if not J.here then
+    local h = CreateFrame("Frame", nil, J.over)
+    h:SetSize(24, 24)
+    h:SetFrameLevel(J.over:GetFrameLevel() + 3)
+    h:EnableMouse(true)
+    h:SetScript("OnEnter", function(self)
+      if Journal.Widgets and self.lines then Journal.Widgets.tip(self, self.lines) end
+    end)
+    h:SetScript("OnLeave", function(self) if Journal.Widgets then Journal.Widgets.hideTip(self) end end)
+    J.here = h
+  end
+  local S = ns.Sanitize
+  local name = (S and S.display(g.fullName or g.name, 40)) or TX.unknownName
+  local lines = { TX.hereTitle, TX("hereText", name) }
+  local d = Tw.dateText and Tw.dateText(g.lastSeen)
+  if d then lines[#lines + 1] = TX("standDate", d) end
+  J.here.lines = lines
+  J.here:ClearAllPoints()
+  J.here:SetPoint("CENTER", m.current, "CENTER", 0, 0)
+  J.here:Show()
+  return true
 end
 
 function Frame.rightClick()
@@ -1668,7 +1960,7 @@ function Frame.render(status, model, stale)
   J.model = model
   J.titleBox:Show()
   J.ctrl:Show()
-  if J.worldLink then J.worldLink:Show() end
+  if J.worldLink then J.worldLink:SetShown(guestNow() == nil) end -- the world map layer always shows the logged-in character
   J.noteBox:Show()
   J.map.viewport:Show()
   J.pb.frame:Show()
@@ -1745,9 +2037,14 @@ end
 
 function Frame.notePins(scene)
   local N = Journal.Notes
+  local P = Journal.Pages
   local out = {}
   if not (N and N.onMap and scene and type(scene.project) == "function") then return out end
-  local okList, list = pcall(N.onMap)
+  -- another character's book: neither the notes nor the To Do pins of the logged-in character (Pages.guestAllows)
+  local notesOk = not P or P.guestAllows("notizen")
+  local todoOk = not P or P.guestAllows(Frame.HOME, "vorhaben")
+  local okList, list = true, {}
+  if notesOk then okList, list = pcall(N.onMap) end
   if not okList or type(list) ~= "table" then return out end
   local S = ns.Sanitize
   for _, n in ipairs(list) do
@@ -1757,7 +2054,7 @@ function Frame.notePins(scene)
     end
   end
   local V = Journal.Vorhaben
-  if V and type(V.mapPins) == "function" then
+  if todoOk and V and type(V.mapPins) == "function" then
     local okV, pins = pcall(V.mapPins, scene)
     if okV and type(pins) == "table" then
       for _, e in ipairs(pins) do out[#out + 1] = e end
@@ -1891,7 +2188,8 @@ end
 local function stationIndex(fromReady)
   local I = Journal.Index
   if not (I and I.get) then return nil end
-  local ok, index = pcall(I.get, { noRebuild = fromReady or nil })
+  local g = guestNow()
+  local ok, index = pcall(I.get, { noRebuild = fromReady or nil, guid = g and g.guid or nil })
   return ok and type(index) == "table" and index or nil
 end
 
@@ -2058,4 +2356,11 @@ function Frame.tick(dt)
     Playback.stopTicking(J.pb)
     Frame.hideLevelHint()
   end
+end
+
+-- quest state changed or a sweep finished (journal/model/ZoneProgress.lua): redraw the zone row of the open book (no ticker)
+if Journal.ZoneProgress and type(Journal.ZoneProgress.onChange) == "function" then
+  Journal.ZoneProgress.onChange(function()
+    if J.frame and J.frame:IsShown() and J.card and J.card:IsShown() then Frame.updateZoneRow() end
+  end)
 end

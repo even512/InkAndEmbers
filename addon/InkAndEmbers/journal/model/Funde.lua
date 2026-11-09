@@ -360,7 +360,13 @@ local function buildBook(index)
         -- name: stored at the find (snapshots.items), else from the client, else load later
         local name = names[itemID]
         if name == nil then
-          name = (type(snap) == "table" and display(rawName(snap), Funde.NAME_MAX)) or display(clientName(itemID), Funde.NAME_MAX) or false
+          name = type(snap) == "table" and display(rawName(snap), Funde.NAME_MAX) or nil
+          if not name then
+            local raw = clientName(itemID)
+            name = display(raw, Funde.NAME_MAX)
+            if name and ns.Store and ns.Store.noteItem then pcall(ns.Store.noteItem, itemID, raw) end -- keep the name for next time
+          end
+          name = name or false
           names[itemID] = name
         end
         row.name = name or nil
@@ -436,10 +442,12 @@ function Funde.resolve(book, request)
   local found = {}
   local n = 0
   for id in pairs(book.pending) do
-    local name = display(clientName(id), Funde.NAME_MAX)
+    local raw = clientName(id)
+    local name = display(raw, Funde.NAME_MAX)
     if name then
       found[id] = name
       n = n + 1
+      if ns.Store and ns.Store.noteItem then pcall(ns.Store.noteItem, id, raw) end -- keep the name for next time
     elseif request then
       call("C_Item.RequestLoadItemDataByID", id)
     end

@@ -512,7 +512,7 @@ Begleiter.CUTOUTS = {
   troll = { x = -8.2, y = -60.0, w = 198.5, h = 238.0, inset = 12, dim = 1 },
   skyborne = { x = 8.9, y = -21.8, w = 191.1, h = 199.8, inset = 12, dim = 1 },
 }
-local slip = { frame = nil, phase = nil, t = 0, glowT = 0 }
+local slip = { frame = nil, phase = nil, t = 0, glowT = 0, waiting = {} }
 Begleiter.slipState = slip
 
 function Begleiter.slipTotalW()
@@ -701,20 +701,18 @@ function Begleiter.slipStep(dt)
     slipProgress(f, ease(p))
     if p >= 1 then slip.phase, slip.t = "hold", 0 end
   elseif slip.phase == "hold" then
-    if slip.t >= S.hold then Begleiter.closeSlip() end
+    if slip.t >= (slip.hold or S.hold) then Begleiter.closeSlip() end
   elseif slip.phase == "close" then
     local p = math.min(1, slip.t / S.anim)
     slipProgress(f, 1 - ease(p))
     if p >= 1 then
       f:Hide()
-      local w = slip.waiting
-      slip.waiting = nil
-      if w then w() end
+      Begleiter.runWaiting()
     end
   end
 end
 
--- the narrator leaves to the left again (click or after SLIP.hold seconds)
+-- the narrator leaves to the left again (click or after SLIP.hold seconds, or the note's own hold)
 function Begleiter.closeSlip()
   local f = slip.frame
   if not f or not f:IsShown() or slip.phase == "close" then return false end
@@ -757,10 +755,11 @@ local function inCombat()
 end
 
 -- Draws the note with prepared content (the welcome greeting and the level-up note share frame, narrator, glide and sound):
--- content = { kind = "welcome" | "level", title = text (may hold "\n"), variants = { { line, ... }, ... },
+-- content = { kind = "welcome" | "level" | "milestone", title = text (may hold "\n"), variants = { { line, ... }, ... },
 --   hint = small line at the bottom, closable = true (small x top right: only closes), onClick = function (click on the note, see
---   clickSlip) }. The variants run from the fullest to the leanest set of body lines: the first one that fits the parchment is
--- shown (the last one always is). A line may be a whole paragraph: the text field wraps it.
+--   clickSlip), hold = seconds on screen (default SLIP.hold) }. The variants run from the fullest to the leanest set of body
+-- lines: the first one that fits the parchment is shown (the last one always is). A line may be a whole paragraph: the text
+-- field wraps it.
 function Begleiter.showNote(content)
   local S = Begleiter.SLIP
   if type(content) ~= "table" then return false end
@@ -807,6 +806,7 @@ function Begleiter.showNote(content)
     if th + 4 + bh <= bottom - S.textTop or vi == #variants then break end
   end
   slip.kind = content.kind or "welcome"
+  slip.hold = num(content.hold) and content.hold > 0 and content.hold or nil
   -- text block centred on the parchment (not above the bookmark: textX is right of it)
   local block = th + gap + bh
   local top = S.textTop + ((bottom - S.textTop) - block) / 2
@@ -860,18 +860,54 @@ function Begleiter.showNote(content)
   return true
 end
 
--- which note is on screen: "welcome" | "level" | nil (none; a note that is just leaving still counts)
+-- which note is on screen: "welcome" | "level" | "milestone" | nil (none; a note that is just leaving still counts)
 function Begleiter.slipKind()
   if slip.frame ~= nil and slip.frame:IsShown() then return slip.kind or "welcome" end
   return nil
 end
 
--- Runs fn once, as soon as the note on screen has left again. false (fn not stored) if no note is on screen. A newer call replaces
--- the older one (only the latest state matters).
-function Begleiter.afterSlip(fn)
+-- Waiting list (FIFO) of what comes after the note on screen. afterSlip(fn, opts) stores fn while a note is on screen (false,
+-- nothing stored, if none is). opts.note = true: fn shows a note itself (level-up, milestone): it goes ahead of the waiting
+-- non-notes (toasts), behind the notes already waiting. opts.key: a newer call with the same key replaces the older one in its
+-- place (only the latest state matters). When the note has left, the entries run in order until one of them puts a note on
+-- screen again; the rest keeps waiting for that one.
+Begleiter.WAIT_MAX = 8
+
+function Begleiter.afterSlip(fn, opts)
   if type(fn) ~= "function" or not Begleiter.slipKind() then return false end
-  slip.waiting = fn
+  opts = type(opts) == "table" and opts or {}
+  local key = type(opts.key) == "string" and opts.key or nil
+  local list = slip.waiting
+  if key then
+    for _, w in ipairs(list) do
+      if w.key == key then
+        w.fn = fn
+        return true
+      end
+    end
+  end
+  local entry = { fn = fn, key = key, note = opts.note == true }
+  local at = #list + 1
+  if entry.note then
+    for i, w in ipairs(list) do
+      if not w.note then
+        at = i
+        break
+      end
+    end
+  end
+  table.insert(list, at, entry)
+  while #list > Begleiter.WAIT_MAX do table.remove(list, #list) end
   return true
+end
+
+function Begleiter.runWaiting()
+  local list = slip.waiting
+  while #list > 0 and not Begleiter.slipKind() do
+    local w = table.remove(list, 1)
+    local ok, err = pcall(w.fn)
+    if not ok and ns.Core and ns.Core.coreError then ns.Core.coreError(err) end
+  end
 end
 
 -- show the note now (force: also for the preview /chronik willkommen zettel). Waits in combat and tries again a few times.

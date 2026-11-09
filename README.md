@@ -14,17 +14,23 @@ loot, gear changes, gold, professions, reputation, talents, groups, guild events
 The journal is a book with these pages:
 
 - Journey: a map with your route for every zone, a chapter bar, and a playback that replays the trip at three speeds.
-  A To Do sub-page keeps your own goals (a place, an enemy to kill, items to collect).
-- Chronicle: a diary, a list of travel companions, medals and seals.
+  A To Do sub-page keeps your own goals (a place, an enemy to kill, items to collect). In WoW Forever every chapter shows how
+  much of the zone's quests you have done ("Zone completed").
+- Chronicle: a diary, a list of travel companions, dungeon runs, medals and seals, and (WoW Forever) the Milestones: at level
+  10, 20, 30, 40, 50 and 60 the narrator sums up the last ten levels.
 - Quests: what you accepted and turned in, the quest texts and quest chains. The Open tab lists quests you can still
   pick up, with the quest givers on the map. In WoW Forever the data comes from QuestieDB: read live from the QuestieDB add-on
   if it is installed (optional), otherwise from the bundled extract in `InkAndEmbers_QuestData`. In Retail the list comes from
   the game's own world map (no quest givers there). The Training tab (WoW Forever only) shows what your class trainer teaches
   at which level, what you can learn now and what it costs.
-- Treasures: the gold flow, notable loot and how your gear changed over the levels.
+- Treasures: the gold flow, notable loot and how your gear changed over the levels, including the Gear Journey, a 3D model of
+  your character wearing the gear of each level.
 - Moments: milestones as small handwritten diary notes, play time by hour of day, books you read and curiosities.
 - Combat: kills, a bestiary and the death reports.
 - Notes: your own notes, with a quick note field on the screen.
+
+A round button at the edge of the book (once the saved file knows a second character) opens the books of your other characters,
+read only. In WoW Forever, the tooltip of a player you have been out with before also shows a short memory line.
 
 The to-do goals also show up outside the book. Enemies you still have to kill get a "To Do: 3/10" line in their tooltip and
 a small book icon on their nameplate. A note at the screen edge lists the open goals. The enemy and item search for the goals uses
@@ -68,15 +74,17 @@ New files such as textures and fonts are only picked up after a full restart of 
 | `/chronik training` | open the Training tab under Quests (WoW Forever only; `training status` prints the state) |
 | `/chronik language` | `auto`, `de` or `en`; takes effect after `/reload` |
 | `/chronik save` | open the save window; saving reloads the interface |
+| `/chronik milestone [level]` | preview of the milestone note (WoW Forever) |
 | `/chronik backup` | state of the data safety: this character's backup copy, last save, how full the main file is, last restore |
 | `/chronik reset` | reset size and position of the journal |
 | `/chronik welcome`, `rest`, `tutorial` | show the welcome greeting, the "Since your last rest" recap, the introduction book |
 | `/chronik diag` | self-test of all interfaces, result in `EveNChronicleDB.diag` |
 | `/chronik help` | list all commands |
 
-The German command names (`optionen`, `sichern`, `rast`, `feuer` and so on) work as well. After 30 minutes without
-a save a small window asks whether to save the journey. It also asks when you take off on a flight or gain a level (if
-your last save is at least 10 minutes old, and not more often than every 10 minutes). In combat and in instances it waits
+The German command names (`optionen`, `sichern`, `rast`, `feuer` and so on) work as well. The save reminder is off by
+default; the settings show when you last saved and offer a "Save now" button. If you turn on "Save reminder" in the settings,
+a small window asks whether to save the journey after 30 minutes without a save, when you take off on a flight or gain a level
+(if your last save is at least 10 minutes old, and not more often than every 10 minutes). In combat and in instances it waits
 for the next quiet moment.
 
 ## Data and privacy
@@ -96,7 +104,7 @@ Your journal can hold weeks of play, so the add-on takes some care, but please r
 - **It is not a real backup.** The copy lives in the same `WTF` folder on the same disk. It does not help if the disk dies,
   or if the game fails to load saved variables at all. **If you want to be safe, copy your `WTF` folder now and then**
   (copying while the game runs is fine). The game writes the files only on logout and reload, so a crash loses what happened
-  since the last save; that is why the add-on reminds you every 30 minutes.
+  since the last save; that is why the settings show your last save and the optional save reminder can ask you.
 - **If the add-on shows a warning** that data was missing or restored, or that it started a new journal although you used it before:
   1. **Do not log out and do not reload yet.** Every write replaces `InkAndEmbers.lua.bak` with the current state, and that file
      is your last good copy.
@@ -202,7 +210,7 @@ EveNChronicleDB = {
   },
   archive = { ["Player-..."] = { { at, reason, lineCount, lastBlockAt, char }, ... } },  -- only if needed, see below
   chars = { ["Player-..."] = {
-    info = { name, realm, race, raceFile, class, classFile, faction, factionName, firstSeen, lastSeen },
+    info = { name, realm, race, raceFile, class, classFile, faction, factionName, firstSeen, lastSeen, project (WOW_PROJECT_ID of the client, since 1.0.10) },
     lineCount,                -- number of all log lines
     log = { "<block>", ... }, -- strings only, never line tables
     trail = { "<trail block>", ... },   -- position trail, separate stream (see below)
@@ -280,7 +288,8 @@ the map changes, after 500 points and after login or reload.
 - Item keys (in `LT`, `GW`, `TH`, `PM`, `PS`, `snapshots.gear`) are `<itemID>`, or `<itemID>.s<suffix>.b<bonusID>...` for random suffixes and bonus IDs.
   Never a link. Names and quality are in `snapshots.items`.
 - Counters (`counters[group][key] = n`): gold in copper, everything else counts pieces. Groups include `money_in`, `money_out`, `ah`, `loot`,
-  `loot_quality`, `gather`, `mates`, `duels`, `pvp`, `trade`, `mail`, `consumables`, `consumed`, `reagents`, `emotes`, `fishing` and `unreadable`.
+  `loot_quality`, `gather`, `mates`, `duels`, `pvp`, `trade`, `mail`, `consumables`, `consumed`, `reagents`, `emotes`, `fishing`, `unreadable`
+  and `zonedone` (WoW Forever: zones whose countable quests are all done, key = uiMapID, value 1, never removed; medal "Zone Master").
   `unreadable` counts messages that were hidden from the addon.
 - Snapshots (`snapshots[kind][key]`): numbers with at most 2 decimals, texts cleaned, `at` is the time. Fixed groups: `items`, `spells`, `factions`, `skills`,
   `gear[level]`, `stats[level]`, `talents[spent]`, `talentNodes`, `maps`, `zones`, `subzones`, `continents`, `instances`, `encounters`, `moments`

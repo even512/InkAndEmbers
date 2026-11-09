@@ -277,9 +277,15 @@ local TX = ns.Locale.ns("m.FireMates", {
   againYou = "{name} kennt Ihr von einem früheren Feuer.",
 })
 
+-- first name; on Forever "Vorname Nachname" if the part after "-" is a surname, not a shard (Names.mateName)
 local function firstName(p)
   local n = p.name or p.full
   if type(n) ~= "string" then return nil end
+  local N = ns.Names
+  if N then
+    local raw = p.name and N.mateName(p.name, p.realm) or N.mateName(p.full)
+    return shown(raw or n)
+  end
   return shown(match(n, "^([^%-]+)") or n)
 end
 

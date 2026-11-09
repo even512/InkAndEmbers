@@ -38,7 +38,8 @@
 -- Readers for other models (additive, change "dungeon-quests"; no effect on the open list): record(id), stateOf(id)/statesOf(ids)
 -- (done | log | open | locked | foreign, same rules as the open list), giversOf(id)/giverKind(id)/giverMap(id), pointOut,
 -- profileInfo, generation, listen (change notice, 0.5 s bundle), dungeonBlob (EveNChronicleQuestData.dungeon, kept raw for
--- journal/model/DungeonQuests.lua) and addTodo options text/unique.
+-- journal/model/DungeonQuests.lua) and addTodo options text/unique; zoneIndex and NO_ZONE (change "zone-abgeschlossen",
+-- journal/model/ZoneProgress.lua).
 local _, ns = ...
 
 local Journal = ns.Journal or {}
@@ -1670,14 +1671,15 @@ function OpenQuests.pointOut(mapID, x, y)
 end
 
 -- read-only record of a loaded quest (nil = not loaded / unknown / retail world map source): id, name (display), level, minLevel,
--- races, classes (bitmasks), flags (u = beta data unsure included), unsure, preAll/preAny/excl (ID lists, shared: do not modify)
-function OpenQuests.record(id)
+-- races, classes (bitmasks), flags (u = beta data unsure included), unsure, preAll/preAny/excl (ID lists, shared: do not modify).
+-- bare = true leaves out the name (no client title lookup; journal/model/ZoneProgress.lua counts many quests without showing them)
+function OpenQuests.record(id, bare)
   id = num(id)
   local d = S.data
   if not (id and d) or retailSource() then return nil end
   local q = d.quests[floor(id)]
   if not q then return nil end
-  return { id = q.id, name = nameOf(d, q.id), level = q.level, minLevel = q.minLevel, races = q.races, classes = q.classes,
+  return { id = q.id, name = bare ~= true and nameOf(d, q.id) or nil, level = q.level, minLevel = q.minLevel, races = q.races, classes = q.classes,
     flags = flagsOut(q), unsure = isUnsure(q), preAll = q.preAll, preAny = q.preAny, excl = q.excl }
 end
 
@@ -1816,6 +1818,36 @@ function OpenQuests.followers()
   end
   d.followers = f
   return f
+end
+
+-- maps that are no zones (change "zone-abgeschlossen"): the world (947) and the continents Kalimdor (1414) and the Eastern
+-- Kingdoms (1415)
+OpenQuests.NO_ZONE = { [947] = true, [1414] = true, [1415] = true }
+
+-- zone index for other models (journal/model/ZoneProgress.lua): client map -> sorted list of the quest IDs with a fitting giver
+-- (faction of the player) on that map, the same assignment as the zone counters of the open list (a quest with givers in two
+-- zones is in both). Built once per data, faction and map space from the static index; shared: do not modify. nil without
+-- data or with the world map source (retail). Never loads.
+function OpenQuests.zoneIndex()
+  local d = S.data
+  if not d or retailSource() then return nil end
+  local idx = buildIndex(profile().faction, space())
+  if idx.zones then return idx.zones end
+  local zones = {}
+  for _, q in ipairs(idx.quests) do
+    for _, oid in ipairs(idx.cmaps[q.id]) do
+      if not OpenQuests.NO_ZONE[oid] then
+        local t = zones[oid]
+        if not t then
+          t = {}
+          zones[oid] = t
+        end
+        t[#t + 1] = q.id
+      end
+    end
+  end
+  idx.zones = zones
+  return zones
 end
 
 function OpenQuests.test()

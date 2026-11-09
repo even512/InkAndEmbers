@@ -109,6 +109,8 @@ local TX = ns.Locale.ns("Options", {
   welcomeLabel = "Willkommen-Gruß",
   welcomeTip = "Kleiner Zettel am linken Bildschirmrand beim Einloggen: beim ersten Besuch eines Charakters und, wenn Ihr nach einer Pause zurückkehrt, mit dem Stand der Reise.",
   levelSlipLabel = "Stufenaufstieg: Erzähler sagt, was Ihr lernen könnt",
+  milestoneSlipLabel = "Meilenstein: Erzähler zieht bei Stufe 10, 20, … Bilanz",
+  milestoneSlipTip = "Bei Stufe 10, 20, 30, 40, 50 und 60 blickt der Erzähler auf die letzten zehn Stufen zurück: Zeit ohne AFK, neue Zonen, Gegner, Tode und Euer bester Fund, bei Stufe 60 auf die ganze Reise. Ein Klick öffnet die Meilensteine im Buch. Die Seite im Buch bleibt immer, die Option schaltet nur die Meldung ab (nur WoW Forever).",
   levelSlipTip = "Beim Stufenaufstieg gleitet der Erzähler herein und sagt in ganzen Sätzen: welche Zauber Ihr beim Lehrer lernen könnt, was sie kosten, wo der nächste Lehrer ist und ob Talentpunkte frei sind. Ein Klick darauf öffnet den Lehrplan im Buch. Im Kampf erst danach. Ist die Option aus, bleibt nur die kleine Talentpunkt-Einblendung (nur WoW Forever).",
   welcomeAfterLabel = "Zeigen nach Abwesenheit von",
   welcomeAfterTip = "Wie lange Ihr mindestens weg gewesen sein müsst, damit der Zettel beim Einloggen kommt. „Sofort“ zeigt ihn bei jedem Einloggen (nicht bei /reload). Der erste Besuch eines Charakters wird immer begrüßt.",
@@ -139,6 +141,8 @@ local TX = ns.Locale.ns("Options", {
   markSideLeft = "Links",
   markSideRight = "Rechts",
   markSideTop = "Oben",
+  reunionLabel = "Wiedersehen im Tooltip",
+  reunionTip = "Zeigt im Tooltip eines Spielers, mit dem Ihr schon unterwegs wart (Dungeon, Lagerfeuer oder Gruppe), bis zu zwei kurze Erinnerungszeilen. Gilt für alle Charaktere.",
   fireNotesLabel = "Gesprächszettel am Lagerfeuer",
   fireNotesTip = "Sitzt Ihr am Lagerfeuer, schweben drei Zettel mit Gesprächsvorschlägen über dem Feuer. Linksklick sagt den Satz in /sagen, Rechtsklick verwirft ihn. Ein Klick auf die Glut unter den Zetteln holt einen neuen.",
   fireShowLabel = "Am Feuer zeigen",
@@ -159,6 +163,16 @@ local TX = ns.Locale.ns("Options", {
   shotsTip = "Bei besonderen Momenten (Stufenaufstieg, Tod, neues Gebiet, Kills seltener Gegner, Elite-Kills und Bosse) macht die Chronik selbst einen Screenshot. Abgeschaltet entstehen nur noch Eure eigenen.",
   meterLabel = "Schadensanzeige automatisch einschalten",
   meterTip = "Schaltet die Schadensanzeige des Spiels ein, damit Kämpfe Schaden und Heilung festhalten (wie /chronik messer).",
+  showHiddenCharsLabel = "Ausgeblendete Charaktere zeigen",
+  showHiddenCharsTip = "Zeigt in der Liste „Andere Bücher“ auch die Charaktere, die Ihr aus der Liste genommen habt (Rechtsklick auf einen Eintrag nimmt ihn wieder auf). Die Daten der Charaktere bleiben immer erhalten.",
+  saveReminderLabel = "Speicher-Erinnerung",
+  saveReminderTip = "Ein kleines Fenster fragt, ob Ihr die Reise sichern wollt: nach 30 Minuten ohne Sicherung, beim Abflug und nach einem Stufenaufstieg (nie im Kampf oder in Instanzen). WoW speichert Eure Daten nur beim Ausloggen oder Neuladen; bei einem Absturz geht der Stand seit dem letzten Einloggen verloren.",
+  saveNowLabel = "Reise sichern",
+  saveNowButton = "Jetzt sichern",
+  saveNowTip = "Öffnet das Sichern-Fenster. „Sichern“ lädt dort die Oberfläche neu, damit das Spiel Eure Daten speichert.",
+  shareLabel = "Reise teilen",
+  shareButton = "Link zeigen",
+  shareTip = "Erstellt einen Link zu einer Webseite, auf der Ihr all Eure Daten aufbereitet zum Teilen vorfindet.",
   diagLabel = "Diagnose",
   diagButton = "In den Chat",
   diagTip = "Schreibt den Zustand des Addons in den Chat (wie /chronik diag).",
@@ -493,6 +507,10 @@ Options.GROUPS = {
         tip = tx("levelSlipTip"),
         get = function() local P = Journal.Pages return not P or P.setting("levelSlip") ~= false end,
         set = function(v) local P = Journal.Pages if P then P.setSetting("levelSlip", bool(v)) end end },
+      { kind = "check", key = "milestoneSlip", hidden = foreverOnly, label = tx("milestoneSlipLabel"), default = true,
+        tip = tx("milestoneSlipTip"),
+        get = function() local P = Journal.Pages return not P or P.setting("milestoneSlip") ~= false end,
+        set = function(v) local P = Journal.Pages if P then P.setSetting("milestoneSlip", bool(v)) end end },
       -- the next five depend on the greeting: greyed out while it is off (enabledBy)
       { kind = "dropdown", key = "welcomeAfter", label = tx("welcomeAfterLabel"), default = 3600, varType = "number",
         tip = tx("welcomeAfterTip"), enabledBy = "welcome",
@@ -549,6 +567,10 @@ Options.GROUPS = {
         end,
         get = function() local TM = Journal.TodoMarks return TM and TM.side() or "left" end,
         set = function(v) local TM = Journal.TodoMarks if TM then call(TM.setSide, v) end end },
+      { kind = "check", key = "reunion", label = tx("reunionLabel"), default = true,
+        tip = tx("reunionTip"),
+        get = function() local R = Journal.Reunion return not R or R.enabled() end,
+        set = function(v) local R = Journal.Reunion if R then call(R.setEnabled, v) end end },
     },
   },
   {
@@ -595,6 +617,21 @@ Options.GROUPS = {
         tip = tx("meterTip"),
         get = function() return type(ns.meterAutoOn) ~= "function" or ns.meterAutoOn() end,
         set = function(v) if type(ns.meterSlash) == "function" then call(ns.meterSlash, v and "an" or "aus") end end },
+      { kind = "check", key = "showHiddenChars", label = tx("showHiddenCharsLabel"), default = false,
+        tip = tx("showHiddenCharsTip"),
+        get = function() local P = Journal.Pages return P ~= nil and P.setting("showHiddenChars") == true end,
+        set = function(v) local P = Journal.Pages if P then P.setSetting("showHiddenChars", bool(v)) end end },
+      { kind = "check", key = "saveReminder", label = tx("saveReminderLabel"), default = false,
+        tip = tx("saveReminderTip"),
+        get = function() local S = ns.Save return S ~= nil and S.enabled() end,
+        set = function(v) local P = Journal.Pages if P then P.setSetting("saveReminder", bool(v)) end end },
+      -- the label carries the quiet status line; it is refreshed when the menu is opened (Options.open), never by a ticker
+      { kind = "button", key = "saveNow", label = function() return Options.saveNowLabel() end, button = tx("saveNowButton"),
+        tip = tx("saveNowTip"),
+        click = function() local S = ns.Save if S and type(S.offer) == "function" then S.offer() end end },
+      { kind = "button", key = "share", label = tx("shareLabel"), button = tx("shareButton"),
+        tip = tx("shareTip"),
+        click = function() local S = Journal.Share if S and type(S.open) == "function" then call(S.open, "journey") end end },
       { kind = "button", key = "diag", label = tx("diagLabel"), button = tx("diagButton"),
         tip = tx("diagTip"),
         click = function() local Core = ns.Core if Core then call(Core.runDiag) end end },
@@ -692,12 +729,32 @@ local function bindParent(init, item)
   end
 end
 
+-- "Reise sichern: Zuletzt gesichert vor N min" (status line of Save.lua), without Save just the plain label
+function Options.saveNowLabel()
+  local S = ns.Save
+  local line = S and type(S.statusText) == "function" and call(S.statusText)
+  if type(line) ~= "string" then return TX.saveNowLabel end
+  return TX.saveNowLabel .. ": " .. line
+end
+
+local buttonInits = {}
+
+-- re-reads the labels of button rows that carry live text (the settings list reads the initializer name when a row is shown)
+local function refreshButtonLabels()
+  for _, b in pairs(buttonInits) do
+    local init = b.init
+    local data = type(init) == "table" and type(init.GetData) == "function" and call(init.GetData, init)
+    if type(data) == "table" then data.name = txt(b.item.label) end
+  end
+end
+
 local function register(category, layout, item)
   local var = Options.PREFIX .. item.key
   if item.kind == "button" then
     if type(CreateSettingsButtonInitializer) ~= "function" then return end
     local init = CreateSettingsButtonInitializer(txt(item.label), txt(item.button), function() item.click() end, txt(item.tip), true)
     layout:AddInitializer(init)
+    if item.key == "saveNow" then buttonInits[item.key] = { init = init, item = item } end
     return
   end
   local get, set = item.get, item.set
@@ -797,6 +854,7 @@ function Options.open()
     say(Options.TEXT.unavailable)
     return false
   end
+  refreshButtonLabels()
   local ok = pcall(Settings.OpenToCategory, Options.categoryID)
   if not ok then say(Options.TEXT.failed) end
   return ok

@@ -376,23 +376,29 @@ end
 
 -- Duels
 
+-- own name in a duel message: plain or "Vorname Nachname"/"Vorname-Nachname" on Forever (Names.isMe)
+local function itsMe(name, me)
+  if ns.Names then return ns.Names.isMe(name) end
+  return name == me
+end
+
 local function duelMessage(self, text)
   local me = str(call(UnitName, "player"))
   if not me then return false end
   local winner, loser = Patterns.match("DUEL_WINNER_KNOCKOUT", text)
   local result, opponent
   if str(winner) and str(loser) then
-    if winner == me then
+    if itsMe(winner, me) then
       result, opponent = "win", loser
-    elseif loser == me then
+    elseif itsMe(loser, me) then
       result, opponent = "loss", winner
     end
   else
     winner, loser = Patterns.match("DUEL_WINNER_RETREAT", text)
     if str(winner) and str(loser) then
-      if loser == me then
+      if itsMe(loser, me) then
         result, opponent = "fled", winner
-      elseif winner == me then
+      elseif itsMe(winner, me) then
         result, opponent = "opp_fled", loser
       end
     end

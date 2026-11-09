@@ -376,6 +376,19 @@ local function personName(raw)
   return n
 end
 
+-- shown name: on Forever "Vorname Nachname" when the part after "-" is a surname, not a shard (Names.mateName); the key
+-- (personKey) stays on the first name, so existing notes and locks keep matching
+local function personDisplay(raw)
+  local first = personName(raw)
+  if not first then return nil end
+  local N = ns.Names
+  local shownRaw = N and N.mateName(raw)
+  local rest = type(shownRaw) == "string" and match(shownRaw, "^[^ ]+ (.+)$") or nil
+  local sur = rest and safeText(rest, CampfireTalk.NAME_MAX)
+  if not sur or find(sur, "[%s%p%d]") then return first end
+  return first .. " " .. sur
+end
+
 -- key of a session person as used in notes (note.person) and lock keys: guid, else "n:<first name>"
 function CampfireTalk.personKey(p)
   if type(p) ~= "table" or isSecret(p) then return nil end
@@ -401,7 +414,7 @@ end
 local function normPerson(p, index)
   if type(p) ~= "table" or isSecret(p) then return nil end
   local T = Journal.CampfireTexts
-  local out = { sure = p.sure == true, name = personName(p.name) }
+  local out = { sure = p.sure == true, name = personDisplay(p.name) }
   local guid = p.guid
   if type(guid) == "string" and not isSecret(guid) and #guid <= 64 and not find(guid, "%c") then out.guid = guid end
   out.key = CampfireTalk.personKey(p)

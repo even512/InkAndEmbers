@@ -52,6 +52,7 @@ local TEXT = Loc.ns("m.Schaetze", {
   out_training = "Training", out_repair = "Reparatur", out_vendor_buy = "Händlerkäufe", out_taxi = "Flüge", out_ah = "Auktionshaus",
   out_mail = "Post", out_trade = "Handel", out_guildbank = "Gildenbank", out_other = "Sonstiges",
   slot_1 = "Kopf", slot_3 = "Schultern", slot_5 = "Brust", slot_7 = "Beine", slot_8 = "Füße", slot_16 = "Haupthand", slot_17 = "Nebenhand",
+  slot_4 = "Hemd", slot_6 = "Taille", slot_9 = "Handgelenke", slot_10 = "Hände", slot_15 = "Umhang", slot_18 = "Distanz", slot_19 = "Wappenrock",
   level = "Stufe %s",
   levels = "Stufen %s–%s",
   itemFallback = "Gegenstand %s",
@@ -140,6 +141,14 @@ Schaetze.GEAR_SLOTS = {
   { slot = 1 }, { slot = 3 }, { slot = 5 }, { slot = 7 }, { slot = 8 }, { slot = 16 }, { slot = 17 },
 }
 lazyLabel(Schaetze.GEAR_SLOTS, "slot_", "slot")
+
+-- slots that show on the character model (INVSLOT) in the order of the list; neck, rings and trinkets are invisible and left out.
+-- hand = handSlotName for DressUpModel:TryOn (main hand / off hand), ranged = slot 18 (bow, wand ...)
+Schaetze.WARDROBE_SLOTS = {
+  { slot = 1 }, { slot = 3 }, { slot = 15 }, { slot = 5 }, { slot = 4 }, { slot = 19 }, { slot = 9 }, { slot = 10 }, { slot = 6 },
+  { slot = 7 }, { slot = 8 }, { slot = 16, hand = "MAINHANDSLOT" }, { slot = 17, hand = "SECONDARYHANDSLOT" }, { slot = 18 },
+}
+lazyLabel(Schaetze.WARDROBE_SLOTS, "slot_", "slot")
 
 local function isSecret(v)
   return type(issecretvalue) == "function" and issecretvalue(v) == true
@@ -363,9 +372,11 @@ local function levelLabel(from, to)
   return TEXT("levels", from, to)
 end
 
-local function gearHistory(index, char, level)
+-- Shared by gearHistory and wardrobe: the snapshots (sorted by level) and the GW lines per slot (slots 1..19) of a character.
+-- -> snaps { { level, t, v } }, bySlot { [slot] = { { level, ord = 1, t, seq, item = key|false, prev = key|false|nil } } }, number of
+-- GW lines of the slots read. A GW line with "?" (not readable) is no proof and is left out; prev nil = unknown, false = empty.
+local function collectGear(index, char)
   local Idx = I()
-  local items = snapGroup(char, "items")
   local snaps = {}
   for k, v in pairs(snapGroup(char, "gear") or {}) do
     local L = num(k)
@@ -400,26 +411,38 @@ local function gearHistory(index, char, level)
       end
     end
   end
+  return snaps, bySlot, total
+end
+
+-- Observations of one slot in order (level, snapshot before change, time, line): snapshots (ord 0) and changes (ord 1). A sequence
+-- that starts with a change begins with that change's previous item (valid from level 1).
+local function slotObservations(snaps, bySlot, slot)
+  local obs = {}
+  for i, s in ipairs(snaps) do
+    obs[#obs + 1] = { level = s.level, ord = 0, t = s.t, seq = -1000000 + i, item = slotValue(s.v, slot) }
+  end
+  for _, o in ipairs(bySlot[slot] or {}) do obs[#obs + 1] = o end
+  table.sort(obs, function(a, b)
+    if a.level ~= b.level then return a.level < b.level end
+    if a.ord ~= b.ord then return a.ord < b.ord end
+    if a.t ~= b.t then return a.t < b.t end
+    return a.seq < b.seq
+  end)
+  if obs[1] and obs[1].ord == 1 and obs[1].prev ~= nil then
+    table.insert(obs, 1, { level = 1, ord = -1, t = 0, seq = -2000000, item = obs[1].prev })
+  end
+  return obs
+end
+
+local function gearHistory(index, char, level)
+  local items = snapGroup(char, "items")
+  local snaps, bySlot, total = collectGear(index, char)
 
   local top = Schaetze.maxLevel()
   local cap = min(max(level or 1, 1), top)
   local rows = {}
   for _, def in ipairs(Schaetze.GEAR_SLOTS) do
-    local obs = {}
-    for i, s in ipairs(snaps) do
-      obs[#obs + 1] = { level = s.level, ord = 0, t = s.t, seq = -1000000 + i, item = slotValue(s.v, def.slot) }
-    end
-    for _, o in ipairs(bySlot[def.slot] or {}) do obs[#obs + 1] = o end
-    table.sort(obs, function(a, b)
-      if a.level ~= b.level then return a.level < b.level end
-      if a.ord ~= b.ord then return a.ord < b.ord end
-      if a.t ~= b.t then return a.t < b.t end
-      return a.seq < b.seq
-    end)
-    -- if the sequence starts with a change (no snapshot before it), the change's previous item applies before
-    if obs[1] and obs[1].ord == 1 and obs[1].prev ~= nil then
-      table.insert(obs, 1, { level = 1, ord = -1, t = 0, seq = -2000000, item = obs[1].prev })
-    end
+    local obs = slotObservations(snaps, bySlot, def.slot)
     -- state at the end of each level: last observation with level <= L
     local runs, cur, p = {}, nil, 1
     local run
@@ -476,6 +499,103 @@ local function gearHistory(index, char, level)
   -- empty: not a single proof (neither snapshot nor change)
   local empty = #snaps == 0 and total == 0
   return { level = cap, maxLevel = top, changes = total, changesText = int(total), rows = rows, empty = empty }
+end
+
+-- Heals holes of the snapshots of one slot (before 1.0.1 a crafted item with an unreadable link left its slot out of the snapshot,
+-- which looks like "empty"). A snapshot value "empty" counts as worn when the evidence on both sides names the same item: the
+-- observation before it holds it (or there is none and the change after it says it was worn before), and the next observation
+-- confirms it (next snapshot value, or the previous item of the next change). Works in place; returns the number of healed holes.
+local function healHoles(obs)
+  local healed = 0
+  for i, o in ipairs(obs) do
+    if o.ord == 0 and o.item == false then
+      local before, after = obs[i - 1], obs[i + 1]
+      local evidence = after and (after.ord == 0 and after.item or (after.ord == 1 and after.prev)) or nil
+      if type(evidence) == "string" and ((before and before.item == evidence) or (not before and after.ord == 1)) then
+        o.item = evidence
+        healed = healed + 1
+      end
+    end
+  end
+  return healed
+end
+
+-- Equipment of the visible slots at the end of every recorded level, for the "Ausrüstungsreise" (journey of the equipment).
+-- Schaetze.wardrobe(index, char, level) -> {
+--   first = first recorded level (first snapshot, else first change), last = current level (level, else the highest known),
+--   levels = { [L] = { [slot] = itemKey | false (empty) } } for first..last (a slot without any proof is missing),
+--   changed = { [L] = { slot, ... } } slots whose item differs from the level before (level first: all worn slots),
+--   slots = Schaetze.WARDROBE_SLOTS, healed = healed snapshot holes, empty = nothing recorded }
+-- Levels before the first record are left out on purpose (nothing is invented). Same mixing rules as gearHistory
+-- (snapshot before change on the same level; "?" lines are no proof). The raw item keys go to the UI only through
+-- Texts.itemString (checked numbers).
+function Schaetze.wardrobe(index, char, level)
+  local snaps, bySlot = collectGear(index, char)
+  local out = { levels = {}, changed = {}, slots = Schaetze.WARDROBE_SLOTS, healed = 0, empty = true }
+  local obsOf, first, highest = {}, nil, 0 -- highest = highest level with any record
+  for _, def in ipairs(Schaetze.WARDROBE_SLOTS) do
+    local obs = slotObservations(snaps, bySlot, def.slot)
+    out.healed = out.healed + healHoles(obs)
+    obsOf[def.slot] = obs
+    for _, o in ipairs(obs) do
+      if o.ord ~= -1 and o.level > highest then highest = o.level end
+    end
+  end
+  if #snaps > 0 then
+    first = snaps[1].level
+  else
+    for _, def in ipairs(Schaetze.WARDROBE_SLOTS) do
+      for _, o in ipairs(bySlot[def.slot] or {}) do
+        if not first or o.level < first then first = o.level end
+      end
+    end
+  end
+  if not first then return out end
+  out.empty = false
+  local top = Schaetze.maxLevel()
+  local last = num(level)
+  last = last and floor(last) or nil
+  if snaps[#snaps] and snaps[#snaps].level > highest then highest = snaps[#snaps].level end
+  if not last or last < 1 then last = highest end
+  last = min(max(last, first), max(top, first))
+  out.first, out.last = first, last
+
+  local pos, cur = {}, {}
+  for _, def in ipairs(Schaetze.WARDROBE_SLOTS) do pos[def.slot] = 1 end
+  local prevState = {}
+  for L = first, last do
+    local state, changed = {}, {}
+    for _, def in ipairs(Schaetze.WARDROBE_SLOTS) do
+      local obs, p = obsOf[def.slot], pos[def.slot]
+      while p <= #obs and obs[p].level <= L do
+        cur[def.slot] = obs[p].item
+        p = p + 1
+      end
+      pos[def.slot] = p
+      local v = cur[def.slot]
+      state[def.slot] = v
+      if v ~= prevState[def.slot] and (v ~= nil) and (L > first or v ~= false) then changed[#changed + 1] = def.slot end
+    end
+    out.levels[L], out.changed[L] = state, changed
+    prevState = state
+  end
+  return out
+end
+
+-- display data of one item key for the UI: { id, name (display-ready or nil), quality (0..7 or nil), color, string (item: string) }
+function Schaetze.itemInfo(char, key)
+  local id = itemIdOf(key)
+  if not id then return nil end
+  local e = byId(snapGroup(char, "items"), id)
+  local info = { id = id, string = T().itemString(key) }
+  if type(e) == "table" then
+    info.name = display(e.name, Schaetze.NAME_MAX)
+    local q = num(e.quality)
+    if q then q = floor(q) end
+    if q and Schaetze.QUALITY[q] then info.quality = q end
+  end
+  info.color = info.quality and Schaetze.QUALITY[info.quality].color or QUALITY_UNKNOWN
+  return info
 end
 
 local function firstBlue(index, char)

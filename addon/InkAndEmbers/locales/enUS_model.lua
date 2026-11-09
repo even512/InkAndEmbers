@@ -123,6 +123,7 @@ L.add("enUS", "m.ChronikTexts", {
   seal_close_win = "with the last of your strength",
   seal_duel = "blade against blade",
   seal_quests = "a thick quest book",
+  seal_zone_master = "not a quest left behind",
   seal_reputation = "a foreign banner",
   seal_books = "between two covers",
   seal_profession = "with your own hands",
@@ -1092,6 +1093,20 @@ L.add("enUS", "m.FireMates", {
   againYou = "You know {name} from an earlier fire.",
 })
 
+-- journal/model/Reunion.lua
+L.add("enUS", "m.Reunion", {
+  dateShort = "{m}/{d}",
+  dungeonDone = "Cleared {dungeon} together, {date}",
+  dungeonDoneAny = "Cleared a dungeon together, {date}",
+  dungeonFought = "Fought in {dungeon} with you, {date}",
+  dungeonFoughtAny = "Fought in a dungeon with you, {date}",
+  fire = "Sat with you at the fire in {zone}, {date}",
+  fireAny = "Sat with you at the fire, {date}",
+  together = "Travelled with you, last on {date}",
+  togetherZone = "Travelled with you, last on {date} in {zone}",
+  times = " ({n}×)",
+})
+
 -- journal/model/Chronik.lua
 -- Medal grid: a word has at most Chronik.GRID_WORD_MAX (11) characters, otherwise grid with a manual hyphenation "-\n";
 -- grid = title means no own hyphenation is needed.
@@ -1172,6 +1187,15 @@ L.add("enUS", "m.Chronik", {
   need_quests = "Turn in quests.",
   u_quests_one = "%s quest",
   u_quests_other = "%s quests",
+  title_zone_master = "Zone Master",
+  grid_zone_master = "Zone Master",
+  need_zone_master = "Complete every countable quest of a zone.",
+  u_zone_master_one = "%s zone",
+  u_zone_master_other = "%s zones",
+  zonesDone = "Completed: %s",
+  zonesMore = "%s … and %s more",
+  zoneFallback = "Zone %s",
+  zonesKeep = "A completed zone stays earned, even if new quest data opens it again.",
   title_reputation = "Friend of Strangers",
   grid_reputation = "Friend of Strangers",
   need_reputation = "Reach a high reputation standing with a faction.",
@@ -1519,6 +1543,7 @@ L.add("enUS", "m.Schaetze", {
   out_training = "Training", out_repair = "Repairs", out_vendor_buy = "Vendor purchases", out_taxi = "Flights", out_ah = "Auction House",
   out_mail = "Mail", out_trade = "Trade", out_guildbank = "Guild Bank", out_other = "Other",
   slot_1 = "Head", slot_3 = "Shoulder", slot_5 = "Chest", slot_7 = "Legs", slot_8 = "Feet", slot_16 = "Main Hand", slot_17 = "Off Hand",
+  slot_4 = "Shirt", slot_6 = "Waist", slot_9 = "Wrist", slot_10 = "Hands", slot_15 = "Back", slot_18 = "Ranged", slot_19 = "Tabard",
   level = "Level %s",
   levels = "Levels %s–%s",
   itemFallback = "Item %s",
@@ -1739,6 +1764,24 @@ L.add("enUS", "m.DungeonQuests", {
   reasonCombat = "in combat (loads afterwards)",
   diagLoaded = "Dungeon quests: %d dungeons, %d quests (%d missing in the quest data)",
   diagNotLoaded = "Dungeon quests: not loaded: %s",
+})
+
+-- journal/model/ZoneProgress.lua
+L.add("enUS", "m.ZoneProgress", {
+  tipHead = "You have completed %s of %s quests in this zone.",
+  tipComplete = "Every countable quest of this zone is done.",
+  tipOpen = "Still open:",
+  tipLine = "%s (level %s)",
+  tipLineLog = "%s (level %s, accepted)",
+  tipLineLocked = "%s (level %s, locked)",
+  tipMore = "… and %s more",
+  tipUnsure_one = "%s quest with unconfirmed beta data",
+  tipUnsure_other = "%s quests with unconfirmed beta data",
+  tipRule = "Quests without a map point, group, repeatable and profession quests do not count.",
+  tipPartial = "The journal is still being read: preliminary.",
+  diag = "Zones: %s computed, %s completed",
+  diagNone = "Zones: not computed yet (%s)",
+  notSwept = "data not loaded yet",
 })
 
 L.add("enUS", "m.OpenQuestsRetail", {

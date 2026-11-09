@@ -2,6 +2,8 @@
 -- Store). Rare events are kept as records, frequent ones (KI, XP, GD, AH) only as sums.
 -- Index.get(opts) -> index | nil, reason ("keine-daten", "kein-charakter", "baut", "fehler"). Incremental; with an
 -- older state of the same character the old index returns at once (stale = true) while the rebuild runs as a coroutine.
+-- Index.get({ guid = <another character> }) uses a separate guest slot (Twinks, read only): the own index is never replaced;
+-- guest builds report via Index.onGuestReady, Index.releaseGuest frees the slot (see the slot comment below).
 -- index fields (read only):
 --   guid, char, lines, blocks, firstT, lastT, startT, stale, timings, truncated[code] (a list or sum hit its cap),
 --   counts[code] (lines per code)
@@ -956,10 +958,15 @@ function Index.instanceName(index, instanceID)
   return name
 end
 
-local base = nil      -- private state of the closed blocks
-local cache = nil     -- { db, guid, sig, index }
-local job = nil
+-- Two slots (Twinks): "own" = the logged-in character (unchanged behaviour; Toasts, Rest and the world map use it), "guest" =
+-- at most one other character of the same SV, opened read-only in the book (Pages.setGuest). Each slot has its own private
+-- state, cache and build job; a guest build never replaces or discards the own slot. The guest's private state (base) is
+-- dropped right after the build (its log does not change while another character plays); Index.releaseGuest frees the slot.
+-- slot = { base (private state of the closed blocks), cache = { db, guid, sig, index }, job }
+local own = {}
+local guest = {}
 local readyFns = {}
+local guestReadyFns = {}
 local prepScheduled = false
 Index.readyErrors = 0
 
@@ -980,23 +987,32 @@ local function signature(guid, char, open)
   return table.concat({ guid, #log, ll, ob, format("%.0f", floor(os_) + 0) }, "|")
 end
 
+-- guid of the logged-in character (Store.guid, else UnitGUID) or nil (test VM without login)
+local function ownGuid()
+  local Store = ns.Store
+  local g = Store and Store.guid
+  if g == nil and type(UnitGUID) == "function" then
+    local ok, v = pcall(UnitGUID, "player")
+    if ok and not isSecret(v) then g = v end
+  end
+  return type(g) == "string" and g or nil
+end
+Index.ownGuid = ownGuid
+
+-- read only: never creates or changes anything under db.chars (a guest table stays untouched)
 local function resolve(opts)
   local db = opts.db or EveNChronicleDB
   if type(db) ~= "table" or type(db.chars) ~= "table" then return nil, "keine-daten" end
   local Store = ns.Store
   local guid = opts.guid
-  if guid == nil then
-    guid = Store and Store.guid
-    if guid == nil and type(UnitGUID) == "function" then
-      local ok, g = pcall(UnitGUID, "player")
-      if ok and not isSecret(g) then guid = g end
-    end
-  end
-  if type(guid) ~= "string" then return nil, "kein-charakter" end
+  if guid == nil then guid = ownGuid() end
+  if type(guid) ~= "string" or isSecret(guid) then return nil, "kein-charakter" end
   local char = db.chars[guid]
   if type(char) ~= "table" then return nil, "kein-charakter" end
   local open = (Store and Store.current == char) and Store or nil
-  return { db = db, guid = guid, char = char, open = open }
+  local me = ownGuid()
+  local slot = (not open and me ~= nil and guid ~= me) and guest or own
+  return { db = db, guid = guid, char = char, open = open, slot = slot }
 end
 
 -- snapshot of the sources: number of closed blocks and a copy of the open lines (the Store keeps writing while the
@@ -1013,22 +1029,22 @@ local function snapshot(ctx)
   return s
 end
 
-local function baseValid(ctx, snap)
-  local S = base
+local function baseValid(slot, ctx, snap)
+  local S = slot.base
   if not S or S.db ~= ctx.db or S.guid ~= ctx.guid or S.char ~= ctx.char then return false end
   if snap.nLog < S.nBlocks then return false end
   if S.nBlocks > 0 and (snap.log[1] ~= S.firstRef or snap.log[S.nBlocks] ~= S.lastRef) then return false end
   return true
 end
 
-local function build(ctx, snap, force)
+local function build(slot, ctx, snap, force)
   local c0 = clock()
-  if force or not baseValid(ctx, snap) then base = newState(ctx.db, ctx.guid, ctx.char) end
-  local S = base
+  if force or not baseValid(slot, ctx, snap) then slot.base = newState(ctx.db, ctx.guid, ctx.char) end
+  local S = slot.base
   for i = S.nBlocks + 1, snap.nLog do
     readBlock(S, snap.log[i])
     -- counted only after the whole block. If readBlock fails mid-block, the whole state is dropped (stepJob/buildSync
-    -- set base = nil),
+    -- set slot.base = nil),
     -- so a half-read block never stays in the state. The pauses only interrupt the block inside the build coroutine,
     -- which finishes it.
     S.nBlocks = i
@@ -1048,6 +1064,8 @@ local function build(ctx, snap, force)
   I.blocks = snap.nLog
   I.keyN, I.firstRef, I.lastRef, I.db, I.nBlocks = nil, nil, nil, nil, nil
   I.timings = { total = clock() - c0 }
+  -- the guest needs no incremental state: drop the private sums at once (memory)
+  if slot == guest then slot.base = nil end
   return I
 end
 
@@ -1069,16 +1087,26 @@ local function currentSig(db, guid)
   return signature(guid, char, (Store and Store.current == char) and Store or nil)
 end
 
-local function publish(j, I)
+local function publish(slot, j, I)
   I.timings.cpu, I.timings.frames, I.timings.maxFrame = j.cpu, j.frames, j.maxFrame
   I.sig = j.sig
   I.stale = currentSig(j.db, j.guid) ~= j.sig
-  cache = { db = j.db, guid = j.guid, sig = j.sig, index = I }
+  slot.cache = { db = j.db, guid = j.guid, sig = j.sig, index = I }
+end
+
+-- ready callbacks: the own slot calls Index.onReady (Toasts, Pages, OpenQuests), the guest slot only Index.onGuestReady
+-- (fn(index, guid)), so a guest index never reaches the Toasts or the open quests
+local function announce(slot, I)
+  local list = slot == guest and guestReadyFns or readyFns
+  for _, fn in ipairs(list) do
+    if not pcall(fn, I, I.guid) then Index.readyErrors = Index.readyErrors + 1 end
+  end
 end
 
 -- work one slice (budget ms) -> true when finished or aborted
 local function stepJob(j, budget)
-  if job ~= j then return true end
+  local slot = j.slot
+  if slot.job ~= j then return true end
   local c0 = clock()
   deadline, inJob, tick = c0 + budget, true, 0
   local ok, res = coroutine.resume(j.co)
@@ -1087,29 +1115,28 @@ local function stepJob(j, budget)
   j.cpu, j.frames = j.cpu + dt, j.frames + 1
   if budget < huge and dt > j.maxFrame then j.maxFrame = dt end
   if not ok then
-    job, base = nil, nil -- half state: start over next time
+    slot.job, slot.base = nil, nil -- half state: start over next time
     fail(res)
     return true
   end
   if coroutine.status(j.co) ~= "dead" then return false end
-  job = nil
-  publish(j, res)
-  for _, fn in ipairs(readyFns) do
-    if not pcall(fn, res) then Index.readyErrors = Index.readyErrors + 1 end
-  end
+  slot.job = nil
+  publish(slot, j, res)
+  announce(slot, res)
   return true
 end
 
 local function schedule(j)
+  local slot = j.slot
   local function step()
-    if job ~= j then return end
-    if j.low and inCombat() then
+    if slot.job ~= j then return end -- replaced or released (Index.releaseGuest)
+    if (j.low or slot == guest) and inCombat() then -- a guest is never built in combat
       C_Timer.After(Index.COMBAT_RETRY, step)
       return
     end
     local ok, done = pcall(stepJob, j, Index.FRAME_BUDGET)
     if not ok then
-      if job == j then job, base = nil, nil end
+      if slot.job == j then slot.job, slot.base = nil, nil end
       fail(done)
     elseif not done then
       C_Timer.After(0, step)
@@ -1119,46 +1146,53 @@ local function schedule(j)
 end
 
 local function startJob(ctx, sig, low)
+  local slot = ctx.slot
+  local job = slot.job
   if job and job.db == ctx.db and job.guid == ctx.guid then
     if not low then job.low = false end
     return job
   end
-  if job then base = nil end -- a replaced build (other character) may leave a half state
+  if job then slot.base = nil end -- a replaced build (other character) may leave a half state
+  if slot == guest and slot.cache and slot.cache.guid ~= ctx.guid then slot.cache = nil end -- another guest: drop the old one
   local snap = snapshot(ctx)
-  local j = { db = ctx.db, guid = ctx.guid, sig = sig, low = low, cpu = 0, frames = 0, maxFrame = 0 }
-  j.co = coroutine.create(function() return build(ctx, snap, false) end)
-  job = j
+  local j = { db = ctx.db, guid = ctx.guid, sig = sig, low = low, cpu = 0, frames = 0, maxFrame = 0, slot = slot }
+  j.co = coroutine.create(function() return build(slot, ctx, snap, false) end)
+  slot.job = j
   schedule(j)
   return j
 end
 
--- synchronous: finish a running background build without budget (never abort it), then read what is missing
+-- synchronous: finish a running background build of the same slot without budget (never abort it), then read what is missing
 local function buildSync(ctx, sig, force)
-  if job then stepJob(job, huge) end
+  local slot = ctx.slot
+  if slot.job then stepJob(slot.job, huge) end
+  local cache = slot.cache
   if not force and cache and cache.db == ctx.db and cache.guid == ctx.guid and cache.sig == sig then
     cache.index.stale = false
     return cache.index
   end
   local c0 = clock()
-  local ok, I = pcall(build, ctx, snapshot(ctx), force)
+  local ok, I = pcall(build, slot, ctx, snapshot(ctx), force)
   if not ok then
-    base = nil
+    slot.base = nil
     fail(I)
     return nil, "fehler"
   end
   local dt = clock() - c0
   I.timings.cpu, I.timings.frames, I.timings.maxFrame = dt, 1, dt
   I.sig, I.stale = sig, false
-  cache = { db = ctx.db, guid = ctx.guid, sig = sig, index = I }
+  slot.cache = { db = ctx.db, guid = ctx.guid, sig = sig, index = I }
   return I
 end
 
+-- opts: { db, guid (nil = logged-in character; another character's guid = guest slot), sync, force, noRebuild }
 function Index.get(opts)
   opts = opts or {}
   local ctx, why = resolve(opts)
   if not ctx then return nil, why end
   local sig = signature(ctx.guid, ctx.char, ctx.open)
   if opts.force or not asyncOK(opts) then return buildSync(ctx, sig, opts.force) end
+  local cache = ctx.slot.cache
   local mine = cache and cache.db == ctx.db and cache.guid == ctx.guid
   if mine and cache.sig == sig then
     cache.index.stale = false
@@ -1176,12 +1210,14 @@ function Index.get(opts)
   return nil, "baut"
 end
 
+-- background preparation, only for the logged-in character (never builds a guest)
 function Index.prepare(opts)
   opts = opts or {}
   if not asyncOK(opts) then return false end
   local ctx = resolve(opts)
-  if not ctx then return false end
+  if not ctx or ctx.slot ~= own then return false end
   local sig = signature(ctx.guid, ctx.char, ctx.open)
+  local cache = own.cache
   if cache and cache.db == ctx.db and cache.guid == ctx.guid and cache.sig == sig then return false end
   startJob(ctx, sig, true)
   return true
@@ -1199,17 +1235,36 @@ function Index.prepareAfterLogin(delay)
   return true
 end
 
-function Index.building() return job ~= nil end
+-- which = nil: build of the logged-in character running; "guest": a guest build running
+function Index.building(which)
+  if which == "guest" then return guest.job ~= nil end
+  return own.job ~= nil
+end
 
-function Index.onReady(fn)
+local function addFn(list, fn)
   if type(fn) ~= "function" then return false end
-  for _, f in ipairs(readyFns) do
+  for _, f in ipairs(list) do
     if f == fn then return true end
   end
-  readyFns[#readyFns + 1] = fn
+  list[#list + 1] = fn
   return true
 end
 
+function Index.onReady(fn) return addFn(readyFns, fn) end
+function Index.onGuestReady(fn) return addFn(guestReadyFns, fn) end
+
+-- guid held by the guest slot (finished index or running build) or nil
+function Index.guestGuid()
+  if guest.job then return guest.job.guid end
+  return guest.cache and guest.cache.guid or nil
+end
+
+-- frees the guest slot (back to the own book, book closed); the own slot stays as it is
+function Index.releaseGuest()
+  guest.cache, guest.base, guest.job = nil, nil, nil
+end
+
 function Index.invalidate()
-  cache, base, job = nil, nil, nil
+  own.cache, own.base, own.job = nil, nil, nil
+  guest.cache, guest.base, guest.job = nil, nil, nil
 end

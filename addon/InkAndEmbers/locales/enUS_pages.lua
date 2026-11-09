@@ -6,6 +6,7 @@ local L = ns.Locale
 L.add("enUS", "p.Chronik", {
   ofSeals = "%s of %s", longest = "longest: %s", noLevel = "%s without a level", pageOf = "Page %s of %s",
   brand = "INK & EMBERS", profile = "PROFILE", page = "CHRONICLE", traveller = "TRAVELER", travellerM = "TRAVELER", travellerF = "TRAVELER",
+  standDate = "As of %s", standXp = "As of %s · %s", standFmt = "%m/%d/%Y",
   since = "On the road since", played = "Total time played", perDay = "Avg. per play day", sessions = "Sessions", entries = "Recorded events",
   seals = "MEDALS OF THE JOURNEY", flow = "Level flow", flowSub = "How long each level took",
   legend = "red dots = died", xpTotal = "TOTAL EXPERIENCE", sources = "EXPERIENCE SOURCES",
@@ -15,6 +16,7 @@ L.add("enUS", "p.Chronik", {
   toMates = "Companions", toMatesTip = "View companions", toMatesTip2 = "Who traveled with you",
   toDungeons = "Dungeons", toDungeonsTip = "View dungeons", toDungeonsTip2 = "Every run: when, how long, with whom, bosses, deaths and loot",
   toProfile = "Profile", toProfileTip = "Profile, level flow and journal excerpt",
+  toMilestones = "Milestones", toMilestonesTip = "View milestones", toMilestonesTip2 = "Every ten levels a tally of the journey, at level 60 the final page",
 })
 
 -- journal/pages/ChronikViews.lua
@@ -88,6 +90,24 @@ L.add("enUS", "p.ChronikDungeons", {
   byFoe = "to %s", guess = "%s (assumed)", died = "died", more = "… and %s more",
   questDone = "turned in", questTaken = "accepted", questFallback = "Quest #%s", itemFallback = "Item #%s",
   xpUnit = "%s experience", reward = "Reward: %s", groupTip = "Group",
+})
+
+-- journal/pages/ChronikMeilensteine.lua
+L.add("enUS", "p.ChronikMeilensteine", {
+  page = "MILESTONES", brand = "INK & EMBERS", title = "Milestones",
+  reachedOf = "%s of %s reached", range = "Level %s–%s", final = "Journey's End", finalSub = "The whole journey · level 1–%s",
+  date = "{m}/{d}/{y}", dateRange = "{from} – {to}", running = "in progress", runningSince = "in progress since {date}", open = "not reached yet",
+  before = "before the recording", noRecord = "nothing recorded", soFar = "%s so far", reachedIn = "reached in %s",
+  openBody = "You have not reached this milestone yet. As soon as you reach the level, the narrator sums it up here.",
+  beforeBody = "There is no record for this stretch: the book only writes from level %s on.",
+  emptyBody = "Nothing is recorded for this stretch.",
+  truncated = "A very long journey: older lines are trimmed, the numbers are minimums.",
+  kTime = "Time (without AFK)", kZones = "New zones", kKills = "Kills", kQuests = "Quests", kDeaths = "Deaths", kDungeons = "Dungeons",
+  kBest = "Best find", kDays = "Play days", kSeals = "Medals", kTotal = "Total time (without AFK)",
+  noDeaths = "no deaths", runs_one = "%s run", runs_other = "%s runs", bosses_one = "%s boss", bosses_other = "%s bosses",
+  sealsOf = "%s of %s", about = "about %s", roughly = "about %s", atLeast = "at least %s",
+  colsHead = "Time per stretch", colDur = "%s:%s h", colTip = "Level %s–%s", colUnknown = "Time unknown", itemFallback = "Item #%s",
+  zonesMore = "… and %s more",
 })
 
 -- journal/pages/Kampf.lua
@@ -187,6 +207,8 @@ L.add("enUS", "p.Quests", {
   subDungeonsTip = "All dungeon quests and their quest chains (data: QuestieDB)",
   subTrain = "Training",
   subTrainTip = "What your class trainer teaches you at which level (WoW Forever only)",
+  subZones = "Zones",
+  subZonesTip = "How far the quests of every zone are done, with the medal Zone Master (WoW Forever only)",
   pageOf = "Page %d of %d", prevPage = "Previous page", nextPage = "Next page", level = "Level %s",
   filterName = "Name “%s”", filterArea = "Zone %s", filterLevel = "Level %s",
   countOf = "%s of %s quests", count_one = "%s quest", count_other = "%s quests", questLevel = "Quest level %s",
@@ -238,6 +260,20 @@ L.add("enUS", "p.Schaetze", {
   toFunde = "Gear finds", fundeTip = "All gear finds of Uncommon quality or better",
   fundeTipEpic = "Epic counts epic and legendary finds together.",
   fundeTip2 = "Table: from where, where and at which level",
+  toAnprobe = "Gear Journey", anprobeTip = "Your character with the gear of every level",
+  anprobeTip2 = "3D model and timeline: try on level by level",
+})
+
+-- journal/pages/SchaetzeAnprobe.lua
+L.add("enUS", "p.SchaetzeAnprobe", {
+  brand = "INK & EMBERS", book = "GEAR", page = "GEAR JOURNEY",
+  title = "Gear Journey", recordFrom = "Recorded from level %s",
+  level = "Level %s", startState = "Starting gear", noChange = "no change", newPieces = "%s new",
+  empty = "No gear recorded yet.",
+  emptyBody = "The gear journey fills with your next gear change.",
+  slotEmpty = "empty", itemNo = "Item #%s", newTag = "new",
+  notShown = "Cannot be shown on the model",
+  modelCombat = "The model appears after the fight.", modelMissing = "The model cannot be shown here.",
 })
 
 -- journal/pages/SchaetzeFunde.lua
@@ -390,5 +426,28 @@ L.add("enUS", "p.QuestsLehrplan", {
   noDataHead = "No training plan",
   noDataBody = "There is no training data for this class.",
   emptyNow = "Nothing to learn right now. Visit your trainer again with the next level.", emptyNext = "Nothing more in sight.", emptyLearned = "Nothing learned yet. Visit your class trainer.",
+  prevPage = "Previous page", nextPage = "Next page",
+})
+
+-- journal/pages/QuestsZonen.lua
+L.add("enUS", "p.QuestsZonen", {
+  brand = "INK & EMBERS", book = "QUEST BOOK", page = "ZONE OVERVIEW", title = "Zones",
+  head = "Zones completed %s / %s", partial = "journal still being read: preliminary",
+  medalNone = "Medal “%s”: %s of %s zones to %s",
+  medalNext = "Medal “%s”: %s · %s of %s zones to %s",
+  medalMax = "Medal “%s”: %s · %s zones",
+  medalTipSteps = "Bronze %s · Silver %s · Gold %s zones",
+  medalTipKeep = "A completed zone stays counted, even when new quests are added.",
+  contHead = "%s of %s completed",
+  otherCont = "Other areas",
+  levelSpan = "Level %s–%s", levelOne = "Level %s",
+  rule = "Zones with at least %s quests for you (your faction, race and class) count. Group, repeatable and profession quests do not count.",
+  legendDone = "completed", legendPale = "pale: not entered yet", legendClick = "click: open quests",
+  clickTip = "Click: open quests of this zone", notVisited = "You have not entered this zone yet.",
+  noData = "Quest data not loaded", noDataHint = "Check with /chronik diag",
+  noDataRight = "The zones appear as soon as the quest data is loaded.",
+  computing = "Counting the zones …", computingRight = "One moment: the quests of every zone are being counted.",
+  combat = "Nothing is counted in combat.", combatRight = "The overview appears after the fight.",
+  empty = "No zone counts yet.", emptyBody = "A zone appears here as soon as it has at least %s quests for you.",
   prevPage = "Previous page", nextPage = "Next page",
 })

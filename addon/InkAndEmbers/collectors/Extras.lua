@@ -193,7 +193,11 @@ handlers.CHAT_MSG_TEXT_EMOTE = function(self, text, sender)
   end
   local me = str(call(UnitName, "player"))
   local name = str(sender)
-  if not me or not name or string.match(name, "^[^%-]+") ~= me then return end
+  if not me or not name then return end
+  -- own emote: "Name", "Name-Realm" or on Forever "Vorname Nachname"/"Vorname-Nachname" (Names.isMe)
+  local mine
+  if ns.Names then mine = ns.Names.isMe(name) else mine = string.match(name, "^[^%-]+") == me end
+  if not mine then return end
   if self.emoteAt and GetTime() - self.emoteAt <= EMOTE_WINDOW then return end -- the hook already counted this emote
   Store.count("emotes", "unknown")
 end

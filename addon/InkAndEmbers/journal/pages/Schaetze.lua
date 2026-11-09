@@ -80,6 +80,8 @@ Page.TEXT = ns.Locale.ns("p.Schaetze", {
   toFunde = "Ausrüstungsfunde", fundeTip = "Alle Ausrüstungsfunde ab Güte Ungewöhnlich",
   fundeTipEpic = "Episch zählt epische und legendäre Funde zusammen.",
   fundeTip2 = "Tabelle: woher, wo und auf welcher Stufe",
+  toAnprobe = "Ausrüstungsreise", anprobeTip = "Dein Charakter mit der Ausrüstung jeder Stufe",
+  anprobeTip2 = "3D-Modell und Zeitstrahl: Stufe für Stufe anprobiert",
 })
 
 local function font(parent, kind, size, color, justify)
@@ -534,7 +536,34 @@ function Page.CloseFunde(self)
   if was then Pages.subChanged("schaetze") end
 end
 
--- sub-bookmarks (contract journal/Pages.lua): overview · equipment finds. Labels are read late (the language is not yet
+-- sub-view "Ausrüstungsreise" (pages/SchaetzeAnprobe.lua): model with the equipment of a level, timeline, list of the worn pieces.
+-- Not in a guest book (the model is the logged-in character).
+
+function Page.OpenAnprobe(self)
+  local View = Journal.AnprobeView
+  if not (self.built and View and self.index) then return end
+  if not Pages.guestAllows("schaetze", "anprobe") then return end
+  if not self.anprobe then self.anprobe = View.new(self, self.holderL, self.holderR) end
+  Widgets.hideTip(self.R.fundeHit)
+  self.mainL:Hide()
+  self.mainR:Hide()
+  self.anprobeOpen = true
+  self.anprobe:Open(self.index, self.view and self.view.level)
+  Pages.subChanged("schaetze")
+end
+
+function Page.CloseAnprobe(self)
+  local was = self.anprobeOpen
+  if self.anprobe then self.anprobe:Close() end
+  self.anprobeOpen = false
+  if self.mainL and not self.fundeOpen then
+    self.mainL:Show()
+    self.mainR:Show()
+  end
+  if was then Pages.subChanged("schaetze") end
+end
+
+-- sub-bookmarks (contract journal/Pages.lua): overview · equipment finds · journey of the equipment. Labels are read late (the language is not yet
 -- fixed when the file loads)
 local function subTab(key, label, tip1, tip2)
   return setmetatable({ key = key }, { __index = function(_, k)
@@ -545,13 +574,26 @@ end
 Page.subs = {
   subTab("uebersicht", "toOverview", "toOverview", "overviewTip"),
   subTab("funde", "toFunde", "fundeTip", "fundeTip2"),
+  subTab("anprobe", "toAnprobe", "anprobeTip", "anprobeTip2"),
 }
 
-function Page:GetSub() return self.fundeOpen and "funde" or "uebersicht" end
+function Page:GetSub()
+  if self.anprobeOpen then return "anprobe" end
+  return self.fundeOpen and "funde" or "uebersicht"
+end
 
 function Page:ShowSub(key)
   if key == self:GetSub() then return end
-  if key == "funde" then Page.OpenFunde(self) else Page.CloseFunde(self) end
+  if key == "funde" then
+    if self.anprobeOpen then Page.CloseAnprobe(self) end
+    Page.OpenFunde(self)
+  elseif key == "anprobe" then
+    if self.fundeOpen then Page.CloseFunde(self) end
+    Page.OpenAnprobe(self)
+  else
+    if self.anprobeOpen then Page.CloseAnprobe(self) end
+    Page.CloseFunde(self)
+  end
 end
 
 local function clearFlow(self)
@@ -1000,6 +1042,13 @@ function Page:Refresh(data)
   self:DrawGear(view)
   drawBottom(self, view)
   if self.fundeOpen and self.funde then self.funde:Refresh(data.index) end
+  if self.anprobeOpen and self.anprobe then
+    if Pages.guestAllows("schaetze", "anprobe") then
+      self.anprobe:Refresh(data.index, view.level)
+    else
+      Page.CloseAnprobe(self) -- a guest book has no model of the logged-in character
+    end
+  end
 end
 
 function Page:OnHide()
@@ -1014,6 +1063,7 @@ function Page:OnHide()
   end
   -- the next open starts with the overview again (filter and sort of the finds stay)
   if self.fundeOpen then Page.CloseFunde(self) end
+  if self.anprobeOpen then Page.CloseAnprobe(self) end
 end
 
 Pages.register("schaetze", Page)

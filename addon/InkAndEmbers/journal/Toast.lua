@@ -1156,6 +1156,15 @@ function Toast.safe(fn, ...)
   return ok
 end
 
+-- A live counter outside the log rose (journal/model/ZoneProgress.lua: counters.zonedone): check the medals soon, like after a
+-- relevant line (bundled after Toast.CHECK_DELAY, never in combat). false when the toasts are off.
+function Toast.poke()
+  if not gate() then return false end
+  dirty = true
+  schedule()
+  return true
+end
+
 local function onReady(index)
   if not gate() then
     if not inCombat() then Toast.remember(index) end

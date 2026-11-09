@@ -548,7 +548,7 @@ local LOG_ARRAYS = { "spT0", "spT1", "tzT", "tzV", "sT", "sM", "lv", "kT", "kN",
   "hb", "tf", "tl", "fp", "ib", "mo", "sz", "ex", "tb", "rt", "gs", "gm", "gu", "du", "pk", "bk", "ta", "sp", "gT", "gV",
   "breaks", "evX" }
 local LOG_VALUES = { "firstT", "lastT", "spanOpen", "spanStart", "qaN", "baseLevel" }
-local logCache = nil
+-- the log and trail caches live in the model slot (slot.logCache, slot.trailCache; see Model.get: own / guest)
 
 local function copyArray(a)
   local o = {}
@@ -589,9 +589,9 @@ local function readBlock(J, block)
   end
 end
 
-local function readLog(J, snap, db, guid)
+local function readLog(J, snap, db, guid, slot)
   local log, n, k = snap.log, snap.nLog, 0
-  local c = logCache
+  local c = slot.logCache
   if c and c.db == db and c.guid == guid and c.n <= n and log[1] == c.first and log[c.n] == c.last then
     copyLogState(c.state, J)
     k = c.n
@@ -601,7 +601,7 @@ local function readLog(J, snap, db, guid)
     pause()
   end
   if n > k then
-    logCache = { db = db, guid = guid, n = n, first = log[1], last = log[n], state = copyLogState(J, {}) }
+    slot.logCache = { db = db, guid = guid, n = n, first = log[1], last = log[n], state = copyLogState(J, {}) }
   end
   local lines, start = snap.openLines, snap.openStart
   if lines then
@@ -613,8 +613,7 @@ local function readLog(J, snap, db, guid)
 end
 
 -- Trail blocks as number series { start, map, n, t (epoch), x, y (0..9999), mk (marker per index, sparse) }. Closed blocks
--- are decoded once and cached (per block index, checked against the block text).
-local trailCache = nil
+-- are decoded once and cached (per block index, checked against the block text; slot.trailCache).
 local NO_MARKS = {}
 
 local function trailPoints(start, map, iter)
@@ -650,11 +649,11 @@ local function lineIter(lines)
   end
 end
 
-local function trailBlocks(snap, db, guid)
-  local c = trailCache
+local function trailBlocks(snap, db, guid, slot)
+  local c = slot.trailCache
   if not (c and c.db == db and c.guid == guid) then
     c = { db = db, guid = guid, list = {} }
-    trailCache = c
+    slot.trailCache = c
   end
   local out, list, trail = {}, c.list, snap.trail
   for i = 1, snap.nTrail do
@@ -1568,15 +1567,15 @@ local function newJ(db, char, geo)
   }
 end
 
-local function build(db, guid, char, snap, opts)
+local function build(db, guid, char, snap, opts, slot)
   local J = newJ(db, char, opts.geo or Journal.Geo)
   local tm, c0 = {}, clock()
-  readLog(J, snap, db, guid)
+  readLog(J, snap, db, guid, slot)
   local cL = clock()
   tm.log = cL - c0
   pause()
   local cT = clock()
-  local blocks = trailBlocks(snap, db, guid)
+  local blocks = trailBlocks(snap, db, guid, slot)
   local trailParse = clock() - cT
   for _, b in ipairs(blocks) do
     if b.start < J.firstT then J.firstT = b.start end
@@ -1670,14 +1669,19 @@ local function build(db, guid, char, snap, opts)
 
   local info = J.info
   local level = levelAt(J, J.lastT)
-  local name, race, class = disp(info.name, Model.NAME_MAX), disp(info.race, Model.NAME_MAX), disp(info.class, Model.NAME_MAX)
+  local race, class = disp(info.race, Model.NAME_MAX), disp(info.class, Model.NAME_MAX)
+  -- "Vorname Nachname" and the ruleset on Forever (never the hidden shard); Retail unchanged: the name only (Names.lua)
+  local Names = ns.Names
+  local name = disp(Names and Names.fullName(info) or info.name, Model.NAME_MAX)
+  local realm = Names and Names.isForever(info) and disp(Names.realmText(info), Model.NAME_MAX) or nil
   local line = {}
   if name then line[#line + 1] = name end
+  if realm then line[#line + 1] = realm end
   if race or class then line[#line + 1] = (race or "") .. ((race and class) and " " or "") .. (class or "") end
   line[#line + 1] = MT("levelN", int(level))
   local km = J.yards * 0.9144 / 1000
   model.header = {
-    name = name, race = race, class = class, level = level, line = table.concat(line, " · "),
+    name = name, realm = realm, race = race, class = class, level = level, line = table.concat(line, " · "),
     km = floor(km * 10 + 0.5) / 10, kmApprox = J.kmApprox, flights = #J.tf, hearths = #J.hs, deaths = #J.deaths,
     played = J.playedTotal, playedText = Model.formatPlayed(J.playedTotal),
   }
@@ -1686,6 +1690,8 @@ local function build(db, guid, char, snap, opts)
   tm.rest = clock() - c3
   tm.total = clock() - c0
   model.timings = tm
+  -- the guest needs no incremental caches (its log does not change while another character plays): drop them (memory)
+  if slot.guest then slot.logCache, slot.trailCache = nil, nil end
   return model
 end
 
@@ -1698,9 +1704,14 @@ function Model.refreshHeader(model, now)
     .. MT(ns.Locale.plural(h.hearths, "statsHearths_one", "statsHearths_other"), int(h.hearths))
 end
 
-local cache = nil
-local job = nil
+-- Two slots (Twinks, as Index): "own" = the logged-in character (book, world map), "guest" = at most one other character of
+-- the same SV, opened read-only in the book. Each slot has its own cache, build job and log/trail caches; a guest build never
+-- replaces the own slot. Model.releaseGuest frees the guest slot.
+-- slot = { guest (bool), cache = { db, guid, sig, model }, job, logCache, trailCache }
+local own = { guest = false }
+local guest = { guest = true }
 local readyFns = {}
+local guestReadyFns = {}
 local prepScheduled = false
 Model.readyErrors = 0
 
@@ -1715,31 +1726,49 @@ local function signature(guid, char, open)
   return table.concat({ guid, #log, ll, #trail, tl, ob, ot, int(openStart), int(trailStart) }, "|")
 end
 
+local function clearSlot(slot)
+  slot.cache, slot.job, slot.logCache, slot.trailCache = nil, nil, nil, nil
+end
+
 function Model.invalidate()
-  cache, job, logCache, trailCache = nil, nil, nil, nil
+  clearSlot(own)
+  clearSlot(guest)
+end
+
+-- frees the guest slot (back to the own book, book closed); the own slot stays as it is
+function Model.releaseGuest()
+  clearSlot(guest)
 end
 
 local function fail(err)
   Model.lastError = (ns.Sanitize and ns.Sanitize.field(tostring(err))) or "?"
 end
 
+-- guid of the logged-in character (Store.guid, else UnitGUID) or nil
+local function ownGuid()
+  local Store = ns.Store
+  local g = Store and Store.guid
+  if g == nil and type(UnitGUID) == "function" then
+    local ok, v = pcall(UnitGUID, "player")
+    if ok and not isSecret(v) then g = v end
+  end
+  return type(g) == "string" and g or nil
+end
+
+-- read only: never creates or changes anything under db.chars
 local function resolve(opts)
   local db = opts.db or EveNChronicleDB
   if type(db) ~= "table" or type(db.chars) ~= "table" then return nil, "keine-daten" end
   local Store = ns.Store
   local guid = opts.guid
-  if guid == nil then
-    guid = Store and Store.guid
-    if guid == nil and type(UnitGUID) == "function" then
-      local ok, g = pcall(UnitGUID, "player")
-      if ok and not isSecret(g) then guid = g end
-    end
-  end
-  if type(guid) ~= "string" then return nil, "kein-charakter" end
+  if guid == nil then guid = ownGuid() end
+  if type(guid) ~= "string" or isSecret(guid) then return nil, "kein-charakter" end
   local char = db.chars[guid]
   if type(char) ~= "table" then return nil, "kein-charakter" end
   local open = (Store and Store.current == char) and Store or nil
-  return { db = db, guid = guid, char = char, open = open }
+  local me = ownGuid()
+  local slot = (not open and me ~= nil and guid ~= me) and guest or own
+  return { db = db, guid = guid, char = char, open = open, slot = slot }
 end
 
 local function currentSig(db, guid)
@@ -1760,8 +1789,17 @@ local function inCombat()
   return ok and v == true
 end
 
+-- ready callbacks: own slot -> Model.onReady (book, world map), guest slot -> Model.onGuestReady (fn(model, guid))
+local function announce(slot, model, guid)
+  local list = slot == guest and guestReadyFns or readyFns
+  for _, fn in ipairs(list) do
+    if not pcall(fn, model, guid) then Model.readyErrors = Model.readyErrors + 1 end
+  end
+end
+
 local function stepJob(j, budget)
-  if job ~= j then return true end
+  local slot = j.slot
+  if slot.job ~= j then return true end
   local c0 = clock()
   deadline, inJob = c0 + budget, true
   local ok, res = coroutine.resume(j.co)
@@ -1770,31 +1808,30 @@ local function stepJob(j, budget)
   j.cpu, j.frames = j.cpu + dt, j.frames + 1
   if budget < huge and dt > j.maxFrame then j.maxFrame = dt end
   if not ok then
-    job = nil
+    slot.job = nil
     fail(res)
     return true
   end
   if coroutine.status(j.co) ~= "dead" then return false end
-  job = nil
+  slot.job = nil
   res.timings.cpu, res.timings.frames, res.timings.maxFrame = j.cpu, j.frames, j.maxFrame
   res.stale = currentSig(j.db, j.guid) ~= j.sig
-  cache = { db = j.db, guid = j.guid, sig = j.sig, model = res }
-  for _, fn in ipairs(readyFns) do
-    if not pcall(fn, res) then Model.readyErrors = Model.readyErrors + 1 end
-  end
+  slot.cache = { db = j.db, guid = j.guid, sig = j.sig, model = res }
+  announce(slot, res, j.guid)
   return true
 end
 
 local function schedule(j)
+  local slot = j.slot
   local function tick()
-    if job ~= j then return end
-    if j.low and inCombat() then
+    if slot.job ~= j then return end -- replaced or released (Model.releaseGuest)
+    if (j.low or slot == guest) and inCombat() then -- a guest is never built in combat
       C_Timer.After(Model.COMBAT_RETRY, tick)
       return
     end
     local ok, done = pcall(stepJob, j, Model.FRAME_BUDGET)
     if not ok then
-      if job == j then job = nil end
+      if slot.job == j then slot.job = nil end
       fail(done)
     elseif not done then
       C_Timer.After(0, tick)
@@ -1804,29 +1841,36 @@ local function schedule(j)
 end
 
 local function startJob(ctx, sig, opts, low)
+  local slot = ctx.slot
+  local job = slot.job
   if job and job.db == ctx.db and job.guid == ctx.guid then
     if not low then job.low = false end
     return job
   end
   local snap = snapshot(ctx.char, ctx.open)
   local o = { geo = opts.geo, now = opts.now }
-  local j = { db = ctx.db, guid = ctx.guid, sig = sig, low = low, cpu = 0, frames = 0, maxFrame = 0 }
-  j.co = coroutine.create(function() return build(ctx.db, ctx.guid, ctx.char, snap, o) end)
-  job = j
+  local j = { db = ctx.db, guid = ctx.guid, sig = sig, low = low, cpu = 0, frames = 0, maxFrame = 0, slot = slot }
+  j.co = coroutine.create(function() return build(ctx.db, ctx.guid, ctx.char, snap, o, slot) end)
+  slot.job = j
   schedule(j)
   return j
 end
 
+-- opts: { db, guid (nil = logged-in character; another character's guid = guest slot), now, geo, sync, force, noRebuild }
 function Model.get(opts)
   opts = opts or {}
   local ctx, why = resolve(opts)
   if not ctx then return nil, why end
+  local slot = ctx.slot
   local sig = signature(ctx.guid, ctx.char, ctx.open)
   local now = tonumber(opts.now) or time()
   if not opts.force then
+    local cache = slot.cache
     local mine = cache and cache.db == ctx.db and cache.guid == ctx.guid
+    local job = slot.job
     if not mine and job and job.db == ctx.db and job.guid == ctx.guid then
       stepJob(job, huge)
+      cache = slot.cache
       mine = cache and cache.db == ctx.db and cache.guid == ctx.guid
     end
     if mine and cache.sig == sig then
@@ -1846,22 +1890,25 @@ function Model.get(opts)
       return cache.model
     end
   end
-  job = nil
-  local ok, model = pcall(build, ctx.db, ctx.guid, ctx.char, snapshot(ctx.char, ctx.open), opts)
+  slot.job = nil
+  if slot == guest and slot.cache and slot.cache.guid ~= ctx.guid then clearSlot(guest) end -- another guest: drop the old one
+  local ok, model = pcall(build, ctx.db, ctx.guid, ctx.char, snapshot(ctx.char, ctx.open), opts, slot)
   if not ok then
     fail(model)
     return nil, "fehler"
   end
-  cache = { db = ctx.db, guid = ctx.guid, sig = sig, model = model }
+  slot.cache = { db = ctx.db, guid = ctx.guid, sig = sig, model = model }
   return model
 end
 
+-- background preparation, only for the logged-in character (never builds a guest)
 function Model.prepare(opts)
   opts = opts or {}
   if not asyncOK(opts) then return false end
   local ctx = resolve(opts)
-  if not ctx then return false end
+  if not ctx or ctx.slot ~= own then return false end
   local sig = signature(ctx.guid, ctx.char, ctx.open)
+  local cache = own.cache
   if cache and cache.db == ctx.db and cache.guid == ctx.guid and cache.sig == sig then return false end
   startJob(ctx, sig, opts, true)
   return true
@@ -1879,15 +1926,28 @@ function Model.prepareAfterLogin(delay)
   return true
 end
 
-function Model.building() return job ~= nil end
+-- which = nil: build of the logged-in character running; "guest": a guest build running
+function Model.building(which)
+  if which == "guest" then return guest.job ~= nil end
+  return own.job ~= nil
+end
 
-function Model.onReady(fn)
+local function addFn(list, fn)
   if type(fn) ~= "function" then return false end
-  for _, f in ipairs(readyFns) do
+  for _, f in ipairs(list) do
     if f == fn then return true end
   end
-  readyFns[#readyFns + 1] = fn
+  list[#list + 1] = fn
   return true
+end
+
+function Model.onReady(fn) return addFn(readyFns, fn) end
+function Model.onGuestReady(fn) return addFn(guestReadyFns, fn) end
+
+-- guid held by the guest slot (finished model or running build) or nil
+function Model.guestGuid()
+  if guest.job then return guest.job.guid end
+  return guest.cache and guest.cache.guid or nil
 end
 
 function Model.playedAt(model, t) return played(model._J, t) end

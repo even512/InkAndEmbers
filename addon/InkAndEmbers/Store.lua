@@ -23,8 +23,9 @@ Store.SNAPSHOT_LIMITED = {
   items = true, spells = true, factions = true, skills = true, talentNodes = true, talents = true, mailseen = true,
 }
 Store.COUNTER_KEYS = 2000      -- keys per counter group (default)
--- Other caps per counter group: loot (one itemID per item) and consumables grow fastest over a journey, so they get more room.
-Store.COUNTER_LIMITS = { loot = 6000, consumables = 6000 }
+-- Other caps per counter group: loot (one itemID per item) and consumables grow fastest over a journey, so they get more room;
+-- zonedone (completed zones, one uiMapID each, journal/model/ZoneProgress.lua) needs only a few.
+Store.COUNTER_LIMITS = { loot = 6000, consumables = 6000, zonedone = 200 }
 -- fields always stored short and single-line (names, titles): Sanitize.field instead of long text
 Store.SHORT_FIELDS = { title = true, giver = true, material = true, name = true, questLineName = true, category = true }
 Store.CHAR_TABLES = { "info", "log", "trail", "quests", "books", "npcs", "counters", "snapshots", "shots" }
@@ -774,6 +775,12 @@ function Store.login()
   if fresh then info.firstSeen = now end
   info.name = text(UnitName("player")) or info.name
   info.realm = text(GetRealmName and GetRealmName()) or info.realm
+  -- Forever (1.0.9, Names.lua): surname and ruleset, additive; an old character without them shows the first name only
+  local Names = ns.Names
+  if Names then
+    info.surname = Names.readSurname() or info.surname
+    info.ruleset = Names.readRuleset() or info.ruleset
+  end
   local raceName, raceFile = UnitRace("player")
   info.race, info.raceFile = text(raceName) or info.race, text(raceFile) or info.raceFile
   local className, classFile = UnitClass("player")
@@ -781,6 +788,9 @@ function Store.login()
   local factionFile, factionName = UnitFactionGroup("player")
   info.faction, info.factionName = text(factionFile) or info.faction, text(factionName) or info.factionName
   info.lastSeen = now
+  -- client of this character (WOW_PROJECT_ID; Twinks: a copied SV of another client is recognised in the character list)
+  local project = rawget(_G, "WOW_PROJECT_ID")
+  if finite(project) and project == floor(project) and project > 0 and project < 1000 then info.project = project end
   if type(char.lineCount) ~= "number" then char.lineCount = 0 end
   Store.guid, Store.current, Store.loginAt = guid, char, now
   -- first session of this character with the addon: time and level at that login (journal/Toast.lua keeps medals
@@ -1076,9 +1086,17 @@ function Store.putShot(fields)
 end
 
 -- item cache: snapshots.items[itemID] = { name, quality } (first time only; cap Store.LIMITS.items).
+-- An entry that was stored without a name (item not in the client cache at that moment) is completed once the name is known.
 function Store.noteItem(itemID, name, quality)
   if isSecret(itemID) or type(itemID) ~= "number" then return false end
-  return Store.putSnapshot("items", itemID, { name = name, quality = (type(quality) == "number" and not isSecret(quality)) and quality or nil })
+  local q = (type(quality) == "number" and not isSecret(quality)) and quality or nil
+  local char = Store.current
+  local group = char and type(char.snapshots) == "table" and char.snapshots.items or nil
+  local old = type(group) == "table" and group[normKey(itemID)] or nil
+  if type(old) == "table" and old.name == nil and not isSecret(name) and type(name) == "string" and name ~= "" then
+    return Store.putSnapshot("items", itemID, { name = name, quality = q or old.quality }, true)
+  end
+  return Store.putSnapshot("items", itemID, { name = name, quality = q })
 end
 
 -- counter: chars[guid].counters[group][key] += n (default 1).

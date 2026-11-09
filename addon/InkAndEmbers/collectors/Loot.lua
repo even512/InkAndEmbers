@@ -135,8 +135,10 @@ local function onRoll(self, rollID, rollType)
   Store.count("rolls", choice)
 end
 
--- own name in "by <player>" (plain or with realm); never a name that only contains ours
+-- own name in "by <player>" (plain, with realm, or "Vorname Nachname"/"Vorname-Nachname" on Forever, Names.isMe); never a name
+-- that only contains ours
 local function isMe(who)
+  if ns.Names then return ns.Names.isMe(who) end
   local me = str(call(UnitName, "player"))
   who = str(who)
   if not me or not who then return false end

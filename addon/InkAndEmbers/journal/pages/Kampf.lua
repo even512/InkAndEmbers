@@ -172,10 +172,29 @@ end
 
 -- the player's current map (uiMapID) only outside combat; secret values and unreadable ones give nil
 function Page.currentMap()
+  -- another character's book (read only): the zone the guest last entered (their zone records), never the client's map
+  local guest = Pages.guest and Pages.guest()
+  if guest then return Page.guestMap(guest) end
   if inCombat() or not (C_Map and C_Map.GetBestMapForUnit) then return nil end
   local ok, id = pcall(C_Map.GetBestMapForUnit, "player")
   if not ok or isSecret(id) or type(id) ~= "number" or id ~= id or id <= 0 or id >= 2147483648 then return nil end
   return floor(id)
+end
+
+-- last zone (map type 3) a guest character entered, from the guest index; nil without a record
+function Page.guestMap(guest)
+  local data = Journal.KampfPage and Journal.KampfPage.data
+  local index, Idx = data and data.index, Journal.Index
+  if not (index and Idx and index.guid == guest.guid) then return nil end
+  local list = Idx.list(index, "ZN")
+  for i = #list, 1, -1 do
+    local r = list[i]
+    if Idx.str(r, "ZN", "mapType") == "3" then
+      local id = Idx.num(r, "ZN", "mapID")
+      if type(id) == "number" and id == id and id > 0 and id < 2147483648 then return floor(id) end
+    end
+  end
+  return nil
 end
 
 -- 3D model of the enemy (PlayerModel:SetCreature(npcID)). The frame shows "?" until the client has loaded the model
@@ -1824,7 +1843,7 @@ function Page.SelectHunted(self, key)
   self.hunted = key
   self.deathIdx = nil
   self.detail = false
-  Pages.setSetting("kampfHunted", key)
+  if not self.data.guest then Pages.setSetting("kampfHunted", key) end -- looking at a guest never changes the own choice
   Page.ToggleHuntedZones(self, false)
   local nv = evaluate(self)
   if not nv then return end
@@ -1863,10 +1882,17 @@ function Page:Refresh(data)
   if not self.built then return end
   self.data = data
   if data.changed then self.deathIdx = nil end
+  -- another character's book (or back to the own one): the area choice starts from scratch for that character
+  local gid = data.guest and data.guest.guid or false
+  if self.bookOf ~= gid then
+    self.bookOf = gid
+    self.hunted, self.here, self.detail = nil, nil, false
+  end
   -- area choice on open: the current zone (readable only outside combat), else the remembered choice, else all areas
   if self.hunted == nil and data.index then
     self.here = Page.currentMap()
-    self.hunted = Kampf.huntedZone(data.index, self.here, Pages.setting("kampfHunted"))
+    -- guest book: not the logged-in character's remembered choice
+    self.hunted = Kampf.huntedZone(data.index, self.here, (not data.guest) and Pages.setting("kampfHunted") or nil)
   end
   local view = evaluate(self)
   if not view then error("Kampf: keine Auswertung") end

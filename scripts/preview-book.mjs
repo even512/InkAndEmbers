@@ -1,6 +1,6 @@
 // InkAndEmbers: Vorschaubilder aller Doppelseiten mit Probedaten (B2b), ohne Spiel.
 //
-// Aufruf:  node scripts/preview-book.mjs [--only <reiter>[,<reiter>...]] [--profil voll|frisch|zehn] [--lang de|en] [--sperren] [--buch] [--todo] [--help]
+// Aufruf:  node scripts/preview-book.mjs [--only <reiter>[,<reiter>...]] [--profil voll|frisch|zehn] [--lang de|en] [--sperren] [--buch] [--todo] [--teilen] [--help]
 //
 // Ablauf: Das Addon laeuft in der fengari-VM mit der Frame-Attrappe (tests/helpers/wow-vm.mjs, tests/fixtures/ui-mock.lua) und der
 // simulierten Reise 1 -> 60 (tests/fixtures/journey.lua). Je Reiter (und die Unteransichten Tagebuch, Weggefaehrten, Am Feuer, Questtext,
@@ -41,6 +41,11 @@ const DUNGEONS_CLOSE = `
   P:ShowSub("historie")
   C_QuestLog.IsQuestFlaggedCompleted, C_QuestLog.GetNumQuestLogEntries = DV_SAVED.flagged, DV_SAVED.n
   NS.Journal.OpenQuests.invalidate()`;
+const ZONES_CLOSE = `
+  NS.Journal.QuestsPage:ShowSub("historie")
+  C_QuestLog.IsQuestFlaggedCompleted, C_QuestLog.GetNumQuestLogEntries = ZV_SAVED.flagged, ZV_SAVED.n
+  NS.Journal.ZoneProgress.BUDGET_MS = ZV_SAVED.budget
+  NS.Journal.OpenQuests.invalidate()`;
 // Unteransichten: [reiter, name, Lua zum Oeffnen, Lua zum Schliessen]
 export const SUBVIEWS = [
   ["reise", "gesamt", "NS.Journal.Frame.selectTotal()", "NS.Journal.Frame.selectTotal()"],
@@ -76,6 +81,12 @@ export const SUBVIEWS = [
   ["chronik", "tagebuch", "NS.Journal.ChronikPage:OpenDiary()", "NS.Journal.ChronikPage:CloseSub()"],
   ["chronik", "weggefaehrten", "NS.Journal.ChronikPage:OpenCompanions()", "NS.Journal.ChronikPage:CloseSub()"],
   ["chronik", "feuer", "NS.Journal.ChronikPage:OpenFire()", "NS.Journal.ChronikPage:CloseSub()"],
+  // Meilensteine (I8): Abschnitt Stufe 1-10 und die Abschlussseite (Reise bis 60)
+  ["chronik", "meilensteine-10", "NS.Journal.ChronikPage:OpenMilestones() NS.Journal.ChronikPage.milestonesView:SelectKey(10)", "NS.Journal.ChronikPage:CloseSub()"],
+  ["chronik", "meilensteine-60", "NS.Journal.ChronikPage:OpenMilestones() NS.Journal.ChronikPage.milestonesView:SelectKey('final')", "NS.Journal.ChronikPage:CloseSub()"],
+  // Meilensteine mit langen Namen (nichts darf mit "..." abgeschnitten werden): Zonen, Gegenstand, Spielername
+  ["chronik", "meilensteine-lang-10", "local S = NS.Store local c = S.char() MS_SAVED = { maps = {}, items = {}, name = c.info.name } local long = { \"Östliche Pestländer\", \"Silberwald, Vorgebirge des Hügellands, Arathihochland\", \"Westliche Pestländer\", \"Schlingendorntal und Hinterland von Tirisfal\" } local k = 0 for id, e in pairs(c.snapshots.maps or {}) do k = k + 1 MS_SAVED.maps[id] = e.name e.name = long[(k % #long) + 1] end for id, e in pairs(c.snapshots.items or {}) do MS_SAVED.items[id] = e.name e.name = \"Umhang der Schildkröte des Ozeans\" end c.info.name = \"Lenu Barrowstone\" NS.Journal.Meilensteine.clear() " + "NS.Journal.ChronikPage:OpenMilestones() NS.Journal.ChronikPage.milestonesView:SelectKey(10)", "local c = NS.Store.char() for id, n in pairs(MS_SAVED.maps) do c.snapshots.maps[id].name = n end for id, n in pairs(MS_SAVED.items) do c.snapshots.items[id].name = n end c.info.name = MS_SAVED.name NS.Journal.Meilensteine.clear() " + "NS.Journal.ChronikPage:CloseSub()"],
+  ["chronik", "meilensteine-lang-60", "local S = NS.Store local c = S.char() MS_SAVED = { maps = {}, items = {}, name = c.info.name } local long = { \"Östliche Pestländer\", \"Silberwald, Vorgebirge des Hügellands, Arathihochland\", \"Westliche Pestländer\", \"Schlingendorntal und Hinterland von Tirisfal\" } local k = 0 for id, e in pairs(c.snapshots.maps or {}) do k = k + 1 MS_SAVED.maps[id] = e.name e.name = long[(k % #long) + 1] end for id, e in pairs(c.snapshots.items or {}) do MS_SAVED.items[id] = e.name e.name = \"Umhang der Schildkröte des Ozeans\" end c.info.name = \"Lenu Barrowstone\" NS.Journal.Meilensteine.clear() " + "NS.Journal.ChronikPage:OpenMilestones() NS.Journal.ChronikPage.milestonesView:SelectKey('final')", "local c = NS.Store.char() for id, n in pairs(MS_SAVED.maps) do c.snapshots.maps[id].name = n end for id, n in pairs(MS_SAVED.items) do c.snapshots.items[id].name = n end c.info.name = MS_SAVED.name NS.Journal.Meilensteine.clear() " + "NS.Journal.ChronikPage:CloseSub()"],
   ["quests", "questtext", "NS.Journal.QuestsPage:ToggleTable()", "NS.Journal.QuestsPage:ToggleTable()"],
   // Offene Quests (Unter-Lesezeichen "Offen"): echtes Datenaddon, Untoter Paladin Stufe 8, Zone Tirisfal (gesperrte an) bzw. "Alle Zonen"
   ["quests", "offen", () => OPEN_QUESTS_LUA(1420), 'NS.Journal.QuestsPage:ShowSub("historie")'],
@@ -95,6 +106,8 @@ export const SUBVIEWS = [
   ["quests", "dungeons-brs-offen", () => DUNGEONS_LUA(58, 'DV:SetAll(true) DV:OpenDungeon("1583") DV_LONG() local it = DV_MORE() if it then DV:OnItem(it) end'), DUNGEONS_CLOSE],
   // Lehrplan (Unter-Lesezeichen "Lehrplan", nur Forever): Untoter Paladin Stufe 20, ein Teil gelernt, ein Lehrer bekannt, Talentpunkt frei
   ["quests", "lehrplan", () => LEHRPLAN_LUA, 'NS.Journal.QuestsPage:ShowSub("historie") LEHRPLAN_RESTORE()'],
+  // Zonen (Unter-Lesezeichen "Zonen", nur Forever): echtes Datenaddon, Untoter Paladin Stufe 24, Tirisfal ganz erledigt (Stempel)
+  ["quests", "zonen", () => ZONES_LUA(24), ZONES_CLOSE],
   ["schaetze", "funde", "NS.Journal.SchaetzePage:OpenFunde()", "NS.Journal.SchaetzePage:CloseFunde()"],
   ["schaetze", "quellen", 'NS.Journal.SchaetzePage:SetFlow("bars")', 'NS.Journal.SchaetzePage:SetFlow("levels")'],
   ["schaetze", "besitz", 'NS.Journal.SchaetzePage:SetFlow("hold")', 'NS.Journal.SchaetzePage:SetFlow("levels")'],
@@ -154,6 +167,26 @@ export const DUNGEONS_LUA = (level, after = "") => `${QUEST_DATA_LUA()}
   function DV_MORE() for _, it in ipairs(DV.items) do if it.kind == "more" then return it end end end
   function DV_LONG() for _, it in ipairs(DV.items) do if it.kind == "more" then DV.ui.list:SetOffset(0) return end end end
   ${after}`;
+
+// Zonen-Vorschau: wie Dungeons (erledigt ist, was deutlich unter der Stufe liegt), dazu Tirisfal komplett; der Sweep von ZoneProgress
+// rechnet hier ohne Zeitbudget in einem Zug (sonst wartet die Ansicht auf den naechsten Frame)
+export const ZONES_LUA = (level) => `${QUEST_DATA_LUA()}
+  H.units.player.level = ${level}; H.units.player.raceFile = "Scourge"; H.units.player.classFile = "PALADIN"; H.units.player.faction = "Horde"
+  local OQ, ZP = NS.Journal.OpenQuests, NS.Journal.ZoneProgress
+  ZV_SAVED = ZV_SAVED or { flagged = C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted, n = C_QuestLog and C_QuestLog.GetNumQuestLogEntries, budget = ZP.BUDGET_MS }
+  C_QuestLog = C_QuestLog or {}
+  OQ.available()
+  local full = {}
+  for _, id in ipairs(OQ.zoneIndex()[1420] or {}) do full[id] = true end
+  C_QuestLog.IsQuestFlaggedCompleted = function(id)
+    if full[id] then return true end
+    local r = OQ.record(id)
+    return r ~= nil and (r.level or 99) <= ${level} - 6 and id % 4 ~= 0
+  end
+  C_QuestLog.GetNumQuestLogEntries = function() return 0, 0 end
+  OQ.invalidate()
+  ZP.BUDGET_MS = 1e9
+  NS.Journal.QuestsPage:ShowSub("zonen")`;
 
 // Lehrplan-Vorschau: Zauberbuch-Attrappe (Namen aus Zauber-IDs), ein gelernter Teil bis Stufe 12, ein bekannter Lehrer, 1 Talentpunkt frei
 export const LEHRPLAN_LUA = `
@@ -277,6 +310,8 @@ Aufruf:
              zehn (10 Minuten Spielzeit, Stufe 2, zehn-*); frisch/zehn zeigen alle Seiten/Unterseiten ausser
              Kampf und Ausruestungsfunde
   --buch     ganzes Buch mit Einband und Unter-Lesezeichen (B3): b3-reise/-chronik/-schaetze/-dropdown.png
+  --twinks   Buecher der Twinks (1.0.10): Gastbuch mit Band und Siegel, Charakterliste -> docs/previews/twinks/*.png
+  --teilen   Fenster Reise teilen, Link zur Webseite und Sichern-Hinweis (helles Pergament): docs/previews/teilen/*.png
   --todo     Notizzettel am Bildschirmrand in beiden Stilen (Z3): todo-tracker-notizblock.png, todo-tracker-schlicht.png
   --groessen (mit --todo) zusaetzlich beide Stile klein/mittel/gross mit 1 und 8 Eintraegen, 2x vergroessert (Naehte pruefen):
              <praefix>-<stil>-<groesse>-<n>.png, Praefix ueber --praefix <name> (Standard todo-var)
@@ -476,6 +511,8 @@ export const BOOK_SHOTS = [
   ["b3-schaetze", "schaetze", 'NS.Journal.Frame.showSub("funde")'],
   // Spaltenkopf-Popup "Gebiet" offen, Maus ueber dem dritten Eintrag (Tintenstrich)
   ["b3-dropdown", "quests", 'local Q = NS.Journal.QuestsPage Q:TogglePopup("area") local r = Q.ui.lists.area.rows[3] r._scripts.OnEnter(r)'],
+  // Zonenuebersicht: fuenf Quests-Lesezeichen enden vor dem Falz
+  ["b3-quests-zonen", "quests", () => ZONES_LUA(24) + " NS.Journal.Frame.updateSubTabs()"],
 ];
 
 export function bookHtml(items, w, h) {
@@ -491,13 +528,69 @@ html,body{margin:0;padding:0;background:#2a231d;overflow:hidden}
 </style></head><body><div id="s">${body}</div></body></html>`;
 }
 
+// Twinks (1.0.10): zwei weitere Charaktere (Gast "Gastine" mit eigener Klasse/Realm, ein leerer, einer nur in der Sicherung)
+const TWINKS_LUA = `
+  local S = NS.Store
+  S.flush()
+  local function copy(t)
+    if type(t) ~= "table" then return t end
+    local o = {}
+    for k, v in pairs(t) do o[copy(k)] = copy(v) end
+    return o
+  end
+  local own = S.char()
+  own.info.name, own.info.realm, own.info.class, own.info.classFile, own.info.race, own.info.raceFile =
+    "Morwenna", "Silberwind", "Paladin", "PALADIN", "Untoter", "Scourge"
+  local g = copy(own)
+  g.info.name, g.info.realm, g.info.class, g.info.classFile, g.info.race, g.info.raceFile =
+    "Gastine", "Andere Welt", "Magierin", "MAGE", "Mensch", "Human"
+  g.info.lastSeen = H.now - 3 * 86400
+  EveNChronicleDB.chars["Player-6945-00AABB01"] = g
+  local t = copy(own)
+  t.info.name, t.info.realm, t.info.class, t.info.classFile, t.info.race, t.info.raceFile =
+    "Brumhild", "Silberwind", "Krieger", "WARRIOR", "Zwerg", "Dwarf"
+  t.info.lastSeen = H.now - 12 * 86400
+  EveNChronicleDB.chars["Player-6945-00AABB02"] = t
+  EveNChronicleDB.chars["Player-6945-00AABB03"] = { info = { name = "Neuling", realm = "Silberwind", class = "Jäger", classFile = "HUNTER",
+    race = "Gnom", raceFile = "Gnome", lastSeen = H.now - 3600 }, log = {} }
+  NS.Guard.state = NS.Guard.state or {}
+  NS.Guard.state.missing = NS.Guard.state.missing or {}
+  NS.Guard.state.missing["Player-6945-00AABB09"] = { lines = 4200 }
+  return "ok"`;
+
+function twinkShots(vm, browser, tmp) {
+  const outDir = path.join(ROOT, "docs", "previews", "twinks");
+  mkdirSync(outDir, { recursive: true });
+  vm.exec(TWINKS_LUA);
+  const geo = vm.lua("local F = NS.Journal.Frame return { F.W, F.H, F.TABS_OUT, F.SUBTABS_OUT, F.RIM }");
+  const [W, H, TOUT, SOUT] = geo;
+  const w = W + TOUT + 2 * BOOK_PAD, h = H + SOUT + 2 * BOOK_PAD;
+  const shot = (name, note) => {
+    let items = vm.lua("return KO_PREVIEW(NS.Journal.Frame.state.frame, 0, 0, 1e12)");
+    items = Array.isArray(items) ? items : [];
+    const file = path.join(outDir, `${name}.png`);
+    screenshot(browser, tmp, bookHtml(items, w, h), w, h, file);
+    console.log(`  ${path.relative(ROOT, file)}  (${items.length} Elemente, ${note})`);
+  };
+  // 1. Gastbuch: Steckbrief von Gastine mit Band, Siegel, ohne Notizen-Reiter
+  vm.lua(`return NS.Journal.Pages.setGuest("Player-6945-00AABB01")`);
+  vm.lua(`return NS.Journal.Frame.showPage("chronik")`);
+  shot("gastbuch-chronik", "Gastbuch mit Band und Siegel");
+  // 2. Charakterliste (Buch des eigenen Charakters, Liste offen)
+  vm.lua(`return NS.Journal.Pages.setGuest(nil)`);
+  vm.lua(`return NS.Journal.Frame.showPage("chronik")`);
+  vm.exec("NS.Journal.Twinks.openList()");
+  shot("charakterliste", "Charakterliste offen");
+  vm.exec("NS.Journal.Twinks.closeList()");
+}
+
 function bookShots(vm, browser, tmp) {
   const geo = vm.lua("local F = NS.Journal.Frame return { F.W, F.H, F.TABS_OUT, F.SUBTABS_OUT, F.RIM }");
   const [W, H, TOUT, SOUT, RIM] = geo;
   const w = W + TOUT + 2 * BOOK_PAD, h = H + SOUT + 2 * BOOK_PAD;
   for (const [name, tab, open] of BOOK_SHOTS) {
     vm.lua(`return NS.Journal.Frame.showPage(${JSON.stringify(tab)})`);
-    if (open) vm.exec(open);
+    if (open) vm.exec(typeof open === "function" ? open() : open);
     let items = vm.lua(`return KO_PREVIEW(NS.Journal.Frame.state.frame, 0, 0, 1e12)`);
     items = Array.isArray(items) ? items : [];
     if (tab === "reise") {
@@ -632,6 +725,53 @@ html,body{margin:0;padding:0;overflow:hidden}
   }
 }
 
+
+// Teilen-/Sichern-Fenster (journal/Share.lua, Save.lua): helles Notizblock-Pergament; --teilen
+export const TEILEN_SHOTS = [
+  ["teilen-reise-teilen", `NS.Journal.Share.open("journey") return "_G.InkAndEmbersShareDialog"`],
+  ["teilen-link", `NS.Journal.Share.showLink({ guid = "Player-6945-0003049D" }, "journey", true) return "_G.InkAndEmbersShareLink"`],
+  ["teilen-speichern", `NS.Save.show() return "NS.Save.frame"`],
+];
+
+function teilenShots(browser, tmp) {
+  const UIMOCK = readFileSync(path.join(ROOT, "tests", "fixtures", "ui-mock.lua"), "utf8");
+  const vm = createVm({ setup: `WOW_PROJECT_ID = 18; WOW_PROJECT_MAINLINE = 1\nUISpecialFrames = {}\n${UIMOCK}` });
+  vm.boot();
+  vm.exec("UI.measureText = true; UI.measureWidth = true");
+  vm.exec(PREVIEW_LUA + "\nreturn 'ok'");
+  const caveat = pathToFileURL(path.join(MEDIA, "Fonts", "Caveat-Bold.ttf")).href;
+  for (const [name, open] of TEILEN_SHOTS) {
+    const frame = vm.lua(open);
+    const [w, h] = vm.lua(`local f = ${frame} return { f:GetWidth(), f:GetHeight() }`);
+    let items = vm.lua(`return KO_PREVIEW(${frame}, 0, 0, 1e12)`);
+    items = Array.isArray(items) ? items : [];
+    const sorted = items.filter((i) => i.kind === "tex" || i.kind === "text" || (i.kind === "control" && i.full))
+      .map((it, i) => ({ it, i }))
+      .sort((a, b) => (a.it.lvl ?? 0) - (b.it.lvl ?? 0) || (a.it.kind === "text") - (b.it.kind === "text") || a.i - b.i).map((e) => e.it);
+    // Knoepfe (Blizzard-Vorlage, in der Attrappe ohne Bild): als rote Platzhalter mit Beschriftung
+    const buttons = items.filter((i) => i.kind === "control" && !i.full && i.label && i.label !== "Button" && i.label !== "Frame")
+      .map((b) => `<div style="position:absolute;left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px;box-sizing:border-box;border:1px solid #3a0f08;border-radius:3px;background:linear-gradient(#8a2c1c,#5b1a10);color:#f6d98a;font:600 12px Georgia,serif;text-align:center;line-height:${b.h - 2}px">${esc(b.label)}</div>`).join("\n");
+    const PAD = 28, cw = w + 2 * PAD, ch = h + 2 * PAD;
+    const cells = TODO_BACKDROPS.map((bg, k) => {
+      const body = sorted.map((i) => itemHtml(null, i)).join("\n");
+      return `<div style="position:absolute;left:${k * cw}px;top:0;width:${cw}px;height:${ch}px;background:${bg}"></div>
+<div style="position:absolute;left:${k * cw + PAD}px;top:${PAD}px;width:${w}px;height:${h}px">${body}\n${buttons}</div>`;
+    }).join("\n");
+    const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:'Caveat';src:url('${caveat}');font-weight:700}
+html,body{margin:0;padding:0;overflow:hidden}
+#s{position:relative;width:${2 * cw}px;height:${ch}px}
+</style></head><body><div id="s">${cells}</div></body></html>`;
+    const dir = path.join(ROOT, "docs", "previews", "teilen");
+    mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `${name}.png`);
+    screenshot(browser, tmp, html, 2 * cw, ch, file);
+    console.log(`  ${path.relative(ROOT, file)}  (${sorted.length} Elemente, ${w} x ${h}, hell und dunkel)`);
+  }
+  const errs = vm.errors();
+  if (errs.length) console.log(`  Lua-Fehler in der Attrappe:\n    ${errs.join("\n    ")}`);
+}
+
 export function main(argv) {
   if (argv.includes("--help") || argv.includes("-h")) return console.log(HELP);
   const oi = argv.indexOf("--only");
@@ -651,6 +791,10 @@ export function main(argv) {
   mkdirSync(SCREENS, { recursive: true });
   const tmp = mkdtempSync(path.join(os.tmpdir(), "even-preview-"));
   try {
+    if (argv.includes("--teilen")) {
+      teilenShots(browser, tmp);
+      return;
+    }
     if (argv.includes("--todo")) {
       const pi2 = argv.indexOf("--praefix");
       const prefix = pi2 >= 0 ? String(argv[pi2 + 1] || "") : "todo-var";
@@ -659,6 +803,12 @@ export function main(argv) {
       return;
     }
     const vm = bootVm({ profil, lang });
+    if (argv.includes("--twinks")) {
+      twinkShots(vm, browser, tmp);
+      const errs = vm.errors();
+      if (errs.length) console.log(`  Lua-Fehler in der Attrappe:\n    ${errs.join("\n    ")}`);
+      return;
+    }
     if (argv.includes("--buch")) {
       bookShots(vm, browser, tmp);
       const errs = vm.errors();

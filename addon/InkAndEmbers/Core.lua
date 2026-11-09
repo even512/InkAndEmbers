@@ -61,6 +61,7 @@ local T = ns.Locale.ns("Core", {
   helpOpen = "/chronik offene - offene Quests (Rubrik \"Offen\" unter Quests)",
   helpOpenTest = "/chronik offene test - schaltet den Retail-Testmodus ein (\"test aus\" beendet ihn)",
   helpLevelSlip = "/chronik stufe - Meldung des Erzählers zum Stufenaufstieg als Vorschau zeigen: was Ihr beim Lehrer lernen könnt (nur WoW Forever)",
+  helpMilestone = "/chronik meilenstein [Stufe] - Bilanz des Erzählers zu einem Meilenstein (Stufe 10, 20, … 60) als Vorschau zeigen (nur WoW Forever)",
   helpTrain = "/chronik lehrplan - Lehrplan Eurer Klasse (Rubrik \"Lehrplan\" unter Quests, nur WoW Forever); \"lehrplan status\" zeigt den Stand",
   helpLanguage = "/chronik sprache - Sprache wählen: \"sprache auto\", \"sprache de\" oder \"sprache en\" (wirkt nach /reload)",
   helpReset = "/chronik reset - Größe und Position des Reisejournals zurücksetzen",
@@ -86,6 +87,7 @@ local T = ns.Locale.ns("Core", {
   labOpenQuests = "Offene Quests",
   labDungeonQuests = "Dungeon-Quests",
   labMarks = "Namensplaketten-Markierung",
+  labReunion = "Wiedersehen im Tooltip",
   labMeter = "Schadensmesser",
   labFire = "Lagerfeuer",
   labRound = "Lagerfeuer-Runde",
@@ -123,7 +125,7 @@ local COMMAND_ALIASES = {
   welcome = "willkommen", rest = "rast", sound = "ton", meter = "messer", note = "notiz",
   language = "sprache", lang = "sprache", save = "sichern", backup = "sicherung", campfire = "feuer", lagerfeuer = "feuer",
   open = "offene", quests = "offene", auras = "auren", buffs = "auren", coins = "muenzen", ["münzen"] = "muenzen",
-  training = "lehrplan", trainer = "lehrplan", lehrer = "lehrplan", level = "stufe",
+  training = "lehrplan", trainer = "lehrplan", lehrer = "lehrplan", level = "stufe", milestone = "meilenstein",
   -- ("stufe" shows the level-up note as a preview)
   anleitung = "tutorial", einfuehrung = "tutorial", ["einführung"] = "tutorial", intro = "tutorial",
 }
@@ -918,7 +920,7 @@ end
 -- help lines in display order (empty texts are skipped)
 local HELP = {
   "helpTitle", "helpToggle", "helpShort", "helpStatus", "helpOptions", "helpMinimap", "helpToast", "helpSound", "helpWelcome", "helpTutorial", "helpRest",
-  "helpMeter", "helpTodo", "helpNote", "helpOpen", "helpOpenTest", "helpTrain", "helpLevelSlip", "helpLanguage", "helpReset", "helpSave", "helpBackup", "helpHelp", "helpAliases", "helpDebug", "helpDiag",
+  "helpMeter", "helpTodo", "helpNote", "helpOpen", "helpOpenTest", "helpTrain", "helpLevelSlip", "helpMilestone", "helpLanguage", "helpReset", "helpSave", "helpBackup", "helpHelp", "helpAliases", "helpDebug", "helpDiag",
   "helpDiagQuests", "helpCampfire", "helpSim", "helpAuras", "helpCoins",
 }
 
@@ -937,7 +939,7 @@ local function helpHiddenInRetail(key)
   if key == "helpCampfire" then
     local ms = J and J.MapSpace
     return ms ~= nil and type(ms.fireTalkHidden) == "function" and ms.fireTalkHidden() == true
-  elseif key == "helpTrain" or key == "helpLevelSlip" then
+  elseif key == "helpTrain" or key == "helpLevelSlip" or key == "helpMilestone" then
     local lp = J and J.Lehrplan
     return lp ~= nil and type(lp.active) == "function" and lp.active() == false
   end
@@ -1061,6 +1063,12 @@ function Core.runDiag()
     local ok, line = pcall(dungeonQuests.diagLine)
     Core.print(ok and tostring(line) or T("checkFailed", T.labDungeonQuests, tostring(line)))
   end
+  -- zone progress ("Zone erledigt", medal "Zonenkenner"): zones of the last sweep; nil in Retail = no line
+  local zoneProgress = ns.Journal and ns.Journal.ZoneProgress
+  if zoneProgress and type(zoneProgress.diagLine) == "function" then
+    local ok, line = pcall(zoneProgress.diagLine)
+    if ok and type(line) == "string" then Core.print(line) end
+  end
   -- installed QuestieDB add-on (version and contract from its TOC only) next to the data extract; nil in Retail = no line
   if openQuests and type(openQuests.qdbDiagLine) == "function" then
     local ok, line = pcall(openQuests.qdbDiagLine)
@@ -1075,6 +1083,12 @@ function Core.runDiag()
       local s = marks.state.diag
       db.diag.todoMarks = { seen = s.seen, forbidden = s.forbidden, marked = s.marked, reason = s.reason, how = s.how, anchor = s.anchor }
     end
+  end
+  -- reunion in the tooltip: state of the lookup table, secret values met, last omission
+  local reunion = ns.Journal and ns.Journal.Reunion
+  if reunion and type(reunion.diagLine) == "function" then
+    local ok, line = pcall(reunion.diagLine)
+    Core.print(ok and tostring(line) or T("checkFailed", T.labReunion, tostring(line)))
   end
   if ns.Trainer and type(ns.Trainer.diagLine) == "function" then
     local ok, line = pcall(ns.Trainer.diagLine)
@@ -1396,6 +1410,8 @@ function Core.slash(msg)
     ns.Trainer.slash(rest)
   elseif cmd == "stufe" and ns.Trainer then
     ns.Trainer.slashLevel()
+  elseif cmd == "meilenstein" and ns.Journal and ns.Journal.Meilenstein then
+    ns.Journal.Meilenstein.slash(rest)
   elseif cmd == "notiz" and ns.Journal and ns.Journal.QuickNote then
     ns.Journal.QuickNote.slash(rest)
   elseif cmd == "messer" and type(ns.meterSlash) == "function" then
@@ -1415,6 +1431,9 @@ function Core.slash(msg)
     else
       Core.print(T.campfireMissing)
     end
+  elseif cmd == "anprobe" and ns.WardrobeProbe and type(ns.WardrobeProbe.slash) == "function" then
+    -- development probe for the equipment journey (journal/WardrobeProbe.lua, not in the release package: there this word is unknown)
+    ns.WardrobeProbe.slash(string.match(type(msg) == "string" and msg or "", "^%s*%S+%s+(.-)%s*$") or "")
   elseif cmd == "sim" and Core.hasDevTools() then
     -- whole rest of the line (name and class of the dummy guest need several words)
     local all = string.match(type(msg) == "string" and msg or "", "^%s*%S+%s+(.-)%s*$") or ""

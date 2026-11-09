@@ -539,7 +539,7 @@ function Trainer.flushTodoToast(self)
   if inCombat() or self.pendingSlip then return true end -- PLAYER_REGEN_ENABLED / flushSlip call this again
   local B = ns.Journal and ns.Journal.Begleiter
   if B and type(B.slipKind) == "function" and B.slipKind() and type(B.afterSlip) == "function"
-    and B.afterSlip(function() Trainer.flushTodoToast(self) end) then
+    and B.afterSlip(function() Trainer.flushTodoToast(self) end, { key = "todoToast" }) then
     return true
   end
   self.pendingTodoToast = nil
@@ -776,7 +776,8 @@ function Trainer.flushSlip(self)
   end
   if inCombat() then return true end
   local kind = type(B.slipKind) == "function" and B.slipKind() or nil
-  if kind and kind ~= "level" and type(B.afterSlip) == "function" and B.afterSlip(function() Trainer.flushSlip(self) end) then
+  if kind and kind ~= "level" and type(B.afterSlip) == "function"
+    and B.afterSlip(function() Trainer.flushSlip(self) end, { note = true, key = "levelSlip" }) then
     return true
   end
   self.pendingSlip = nil

@@ -16,6 +16,13 @@ L.add("enUS", "Locale", {
   usage = "Language: /chronik language auto | de | en (current: %s).",
 })
 
+L.add("enUS", "Names", {
+  hardcore = "Hardcore",
+  rp = "Roleplay (PvE)",
+  pvp = "PvP",
+  pve = "PvE",
+})
+
 L.add("enUS", "Core", {
   prefix = "Chronicle:",
   noteMissing = "missing: %s",
@@ -52,6 +59,7 @@ L.add("enUS", "Core", {
   helpOpen = "/chronik open - open quests (\"Open\" tab under Quests)",
   helpOpenTest = "/chronik open test - turns on Retail test mode (\"test off\" ends it)",
   helpLevelSlip = "/chronik level - preview the level-up note: what you can learn at the trainer (WoW Forever only)",
+  helpMilestone = "/chronik milestone [level] - preview the narrator's tally of a milestone (level 10, 20, … 60; WoW Forever only)",
   helpTrain = "/chronik training - your class training plan (\"Training\" tab under Quests, WoW Forever only); \"training status\" shows the state",
   helpLanguage = "/chronik language - choose language: \"language auto\", \"language de\" or \"language en\" (takes effect after /reload)",
   helpReset = "/chronik reset - reset the size and position of the travel journal",
@@ -77,6 +85,7 @@ L.add("enUS", "Core", {
   labOpenQuests = "Open Quests",
   labDungeonQuests = "Dungeon Quests",
   labMarks = "Nameplate marker",
+  labReunion = "Tooltip reunion",
   labMeter = "Damage Meter",
   labFire = "Campfire",
   labRound = "Campfire round",
@@ -139,6 +148,9 @@ L.add("enUS", "Save", {
   prompt = "Save your journey? Last saved %d min ago.",
   save = "Save",
   later = "Later",
+  status = "Last saved %d min ago",
+  combat = "Not possible in combat. Please try again after the fight.",
+  typeReload = "The game does not allow the reload here. Please type /reload, your progress is saved then.",
 })
 
 L.add("enUS", "col.Combat", {

@@ -6,12 +6,25 @@
 --   needs = { index = true, model = false },   defaults
 --   Build(page, left, right)    once, on first show; an error leaves the page broken until /reload
 --   Refresh(page, data)         on every show and when new data is ready; data = { index, model (only with
---                               needs.model, may be nil), char (read only), live, texts, now, stale, changed }
+--                               needs.model, may be nil), char (read only), live, texts, now, stale, changed, guest }
+--                               In the guest mode (another character's book, read only) data.live = nil (no live API of the
+--                               logged-in character), data.guest = { guid, name (raw SV text), lastSeen }, index/model/char
+--                               belong to the guest; otherwise data.guest = nil.
 --   OnHide(page)                optional
 --   subs / GetSub / ShowSub     optional sub-bookmarks (pages with at least two subpages)
 -- }
 -- Rules: SV/client text only via Sanitize.display (or Texts.fill) and only via SetText/AddLine; no tickers or OnUpdate;
--- list entries through the pool widgets. The window must call Pages.hide() on combat start and on close.
+-- list entries through the pool widgets. The window must call Pages.close() on combat start and on close (Pages.hide() when
+-- it only switches to the map).
+-- Guest mode (Twinks, read only; character list: journal/model/Roster.lua):
+--   Pages.setGuest(guid | nil) -> ok, reason   open another character's book (Roster.canOpen decides) or go back (nil);
+--                               releases the old guest slots (Index/Model.releaseGuest), sets View.setGuest, calls the
+--                               Pages.onGuestChange listeners (fn(guid)), redraws the current page if it stays allowed
+--   Pages.guest() -> { guid, name, lastSeen } | nil      Pages.close()  hide + back to the own book (frees the guest)
+--   Pages.guestAllows(id, sub) -> bool    Pages.GUEST_HIDDEN / GUEST_HIDDEN_SUBS: pages and sub-bookmarks that stay with
+--                               the logged-in character (live data or writing); Pages.subs and Pages.tabs (row.hidden)
+--                               already leave them out, Pages.show refuses a hidden page ("nur-eigen"). The journey
+--                               sub-bookmarks live in Frame (Frame.SUBTABS_REISE): the UI filters them with guestAllows.
 local _, ns = ...
 
 local Journal = ns.Journal or {}
@@ -43,6 +56,17 @@ Pages.errors = 0
 
 local KNOWN = {}
 for i, id in ipairs(Pages.ORDER) do KNOWN[id] = i end
+
+-- Twinks: what another character's book leaves out (live data of the logged-in character or writing into the SV)
+Pages.GUEST_HIDDEN = { notizen = true }
+Pages.GUEST_HIDDEN_SUBS = {
+  reise = { vorhaben = true },
+  quests = { offen = true, dungeons = true, lehrplan = true, zonen = true },
+  schaetze = { anprobe = true }, -- the model is the logged-in character (SetUnit "player")
+}
+
+local guestGuid = nil
+local guestFns = {}
 
 local pages = {}
 local state = {}
@@ -92,10 +116,12 @@ local CHECK = {
     return false
   end,
   restReview = function(v) return type(v) == "boolean" end,
+  saveReminder = function(v) return type(v) == "boolean" end, -- reminder window "Save your journey?" (Save.lua); missing = off
   autoShots = function(v) return type(v) == "boolean" end, -- automatic screenshots at special moments (collectors/Moments.lua)
   bookSounds = function(v) return type(v) == "boolean" end,
   worldMap = function(v) return type(v) == "boolean" end,
   worldPins = function(v) return type(v) == "boolean" end, -- note and place to-do pins on the world map (own filter entry); missing = on
+  showHiddenChars = function(v) return type(v) == "boolean" end, -- Twinks list: also show the characters taken off the list; missing = off
   albumFilter = function(v) return type(v) == "string" and Pages.ALBUM_FILTERS[v] == true end,
   openZone = function(v)
     return v == "all" or (type(v) == "number" and v == v and v > 0 and v < 2147483648 and v == math.floor(v))
@@ -112,15 +138,17 @@ local CHECK = {
   todoToast = function(v) return type(v) == "boolean" end,
   -- narrator note at a level-up (what can be learned; collectors/Trainer.lua levelSlip); missing = on
   levelSlip = function(v) return type(v) == "boolean" end,
+  -- narrator note at level 10, 20, ... 60 (journal/Meilenstein.lua: the stretch's tally); only the note, the book view stays; missing = on
+  milestoneSlip = function(v) return type(v) == "boolean" end,
   trainFilter = function(v) return v == "now" or v == "next" or v == "learned" or v == "all" end,
   kampfHunted = function(v)
     return v == nil or v == "all" or (type(v) == "number" and v == v and v > 0 and v < 2147483648 and v == math.floor(v))
   end,
 }
-local DEFAULT = { toast = true, toastSound = true, toastMedal = true, toastZone = true, welcome = true, narrator = "own", restReview = false, autoShots = true, welcomeAfter = 3600, welcomeSeen = true,
+local DEFAULT = { toast = true, toastSound = true, toastMedal = true, toastZone = true, welcome = true, narrator = "own", restReview = false, saveReminder = false, autoShots = true, welcomeAfter = 3600, welcomeSeen = true,
   welcomeQuests = true, welcomeRested = true, welcomePlan = true, bookSounds = true, worldMap = true, worldPins = true,
-  albumFilter = "all", openLocked = false, openGroup = false, openRepeat = false, openClass = true,
-  openCategory = false, trainerTodo = true, talentHint = true, todoToast = true, levelSlip = true, trainFilter = "now" }
+  albumFilter = "all", showHiddenChars = false, openLocked = false, openGroup = false, openRepeat = false, openClass = true,
+  openCategory = false, trainerTodo = true, talentHint = true, todoToast = true, levelSlip = true, milestoneSlip = true, trainFilter = "now" }
 
 -- Old saved games had two switches: "welcome" (greeting) and "welcomeSlip" (welcome-back note). Now there is one: on only if both
 -- were on (nil = default on). The old key is removed, so this runs once per saved game.
@@ -163,10 +191,21 @@ function Pages.isAvailable(id)
   return type(id) == "string" and pages[id] ~= nil
 end
 
+-- true when page id (and sub-bookmark sub, optional) is shown in the current mode; in the own book always true
+function Pages.guestAllows(id, sub)
+  if guestGuid == nil then return true end
+  if Pages.GUEST_HIDDEN[id] then return false end
+  local subs = sub ~= nil and Pages.GUEST_HIDDEN_SUBS[id]
+  if subs and subs[sub] then return false end
+  return true
+end
+
+-- row.hidden = true: the tab is left out in the guest book (not dimmed, gone)
 function Pages.tabs()
   local out = {}
   for i, id in ipairs(Pages.ORDER) do
-    out[i] = { id = id, label = Pages.LABELS[id], available = pages[id] ~= nil, active = id == currentId }
+    out[i] = { id = id, label = Pages.LABELS[id], available = pages[id] ~= nil, active = id == currentId,
+      hidden = not Pages.guestAllows(id) }
   end
   return out
 end
@@ -218,10 +257,10 @@ function Pages.subs(id)
   local page = type(id) == "string" and pages[id]
   local list = page and page.subs
   if type(list) ~= "table" then return nil end
-  if hiddenSubs[id] then
+  if hiddenSubs[id] or (guestGuid ~= nil and Pages.GUEST_HIDDEN_SUBS[id]) then
     local shown = {}
     for _, s in ipairs(list) do
-      if not subHidden(id, s.key) then shown[#shown + 1] = s end
+      if not subHidden(id, s.key) and Pages.guestAllows(id, s.key) then shown[#shown + 1] = s end
     end
     list = shown
   end
@@ -345,23 +384,37 @@ end
 
 -- quiet = redraw from an onReady callback: draw the existing state and do not trigger a rebuild, otherwise every finished
 -- build that was followed by new rows would keep the next round going.
+-- guest mode: index and model of the guest (the own slots stay untouched), no live object, data.guest set
 local function fetch(page, quiet)
   local needs = type(page.needs) == "table" and page.needs or {}
-  local data = { live = Journal.Live, texts = Journal.Texts, now = time() }
+  local g = guestGuid
+  local data = { live = (g == nil) and Journal.Live or nil, texts = Journal.Texts, now = time() }
+  if g ~= nil then
+    data.guest = Pages.guest()
+    if not data.guest then return nil, "kein-charakter" end
+  end
   if needs.index ~= false then
     local Index = Journal.Index
     if not Index then return nil, "fehler" end
-    local index, why = Index.get({ noRebuild = quiet })
+    local index, why = Index.get({ guid = g, noRebuild = quiet })
     if not index then return nil, why end
+    if g ~= nil and index.guid ~= g then return nil, "fehler" end -- never draw another character's index by mistake
     data.index, data.char, data.stale = index, index.char, index.stale == true
   end
   if needs.model then
     local Model = Journal.Model
     local model, why
-    if Model and Model.get then model, why = Model.get({ now = data.now, noRebuild = quiet }) end
+    if Model and Model.get then model, why = Model.get({ guid = g, now = data.now, noRebuild = quiet }) end
     data.model, data.modelReason = model, why
     if model and model.stale then data.stale = true end
-    if not data.char and ns.Store and ns.Store.char then data.char = ns.Store.char() end
+    if not data.char then
+      if g ~= nil then
+        local db = EveNChronicleDB
+        data.char = type(db) == "table" and type(db.chars) == "table" and db.chars[g] or nil
+      elseif ns.Store and ns.Store.char then
+        data.char = ns.Store.char()
+      end
+    end
   end
   return data
 end
@@ -374,6 +427,10 @@ local function draw(id, quiet)
   if st.broken then
     setStatus(st, Pages.TEXT.error)
     return "fehler"
+  end
+  if not Pages.guestAllows(id) then -- stays with the logged-in character: nothing is drawn in a guest book
+    setStatus(st, nil)
+    return "nur-eigen"
   end
   local ok, data, why = pcall(fetch, page, quiet)
   if not ok then
@@ -416,6 +473,7 @@ end
 
 function Pages.show(id)
   if not pages[id] then return false, "nicht-verfuegbar" end
+  if not Pages.guestAllows(id) then return false, "nur-eigen" end
   if not left or not right then return false, "fehler" end
   if currentId ~= id or not shown then
     if shown then hideCurrent() end
@@ -449,14 +507,95 @@ function Pages.hide()
   shown = false
 end
 
+-- Guest mode (see the head comment). The name stays raw SV text: the UI shows it only via Sanitize.display.
+function Pages.guest()
+  local g = guestGuid
+  if g == nil then return nil end
+  local db = EveNChronicleDB
+  local char = type(db) == "table" and type(db.chars) == "table" and db.chars[g] or nil
+  if type(char) ~= "table" then return nil end
+  local info = type(char.info) == "table" and char.info or {}
+  local name = info.name
+  name = (type(name) == "string" and not isSecret(name) and name ~= "") and name or nil
+  local seen = info.lastSeen
+  seen = (type(seen) == "number" and not isSecret(seen) and seen == seen and seen > 0 and seen < 2 ^ 40) and seen or nil
+  -- fullName: "Vorname Nachname" (Forever, Names.lua) or the name; also raw, shown only via Sanitize.display
+  local Names = ns.Names
+  local full = name and Names and Names.fullName(info) or name
+  return { guid = g, name = name, fullName = full, lastSeen = seen }
+end
+
+function Pages.onGuestChange(fn)
+  if type(fn) ~= "function" then return false end
+  for _, f in ipairs(guestFns) do
+    if f == fn then return true end
+  end
+  guestFns[#guestFns + 1] = fn
+  return true
+end
+
+local function releaseGuest()
+  local Index, Model, View = Journal.Index, Journal.Model, Journal.View
+  if Index and type(Index.releaseGuest) == "function" then pcall(Index.releaseGuest) end
+  if Model and type(Model.releaseGuest) == "function" then pcall(Model.releaseGuest) end
+  if View and type(View.setGuest) == "function" then pcall(View.setGuest, nil) end
+end
+
+function Pages.setGuest(guid)
+  if guid ~= nil then
+    if type(guid) ~= "string" or isSecret(guid) then return false, "unbekannt" end
+    local R = Journal.Roster
+    if not R or type(R.canOpen) ~= "function" then return false, "fehler" end
+    local ok, why = R.canOpen(guid)
+    if not ok then return false, why end
+  end
+  if guid == guestGuid then return true end
+  if guestGuid ~= nil then releaseGuest() end
+  guestGuid = guid
+  local View = Journal.View
+  if guid ~= nil and View and type(View.setGuest) == "function" then pcall(View.setGuest, guid) end
+  for _, st in pairs(state) do st.lastIndex = nil end -- the next draw counts as changed (other character)
+  for _, fn in ipairs(guestFns) do
+    local ok, err = pcall(fn, guid)
+    if not ok then note(err) end
+  end
+  if shown and currentId and Pages.guestAllows(currentId) then
+    local key = Pages.sub(currentId)
+    local page, st = pages[currentId], state[currentId]
+    -- the page may still show a sub-bookmark the guest book leaves out: switch to the first allowed one
+    if key and st and st.built and type(page.GetSub) == "function" then
+      local ok, cur = pcall(page.GetSub, page)
+      if ok and cur ~= key then Pages.showSub(currentId, key) end
+    end
+    draw(currentId)
+  end
+  return true
+end
+
+function Pages.close()
+  Pages.hide()
+  Pages.setGuest(nil)
+end
+
 local function onData()
   if shown and currentId then draw(currentId, true) end
 end
 
-if Journal.Index and Journal.Index.onReady then Journal.Index.onReady(onData) end
+local function onModelData()
+  local page = currentId and pages[currentId]
+  if page and type(page.needs) == "table" and page.needs.model then onData() end
+end
+
+-- own builds redraw only the own book, guest builds only the open guest book
+if Journal.Index and Journal.Index.onReady then
+  Journal.Index.onReady(function() if guestGuid == nil then onData() end end)
+end
+if Journal.Index and type(Journal.Index.onGuestReady) == "function" then
+  Journal.Index.onGuestReady(function(_, guid) if guid ~= nil and guid == guestGuid then onData() end end)
+end
 if Journal.Model and type(Journal.Model.onReady) == "function" then
-  Journal.Model.onReady(function()
-    local page = currentId and pages[currentId]
-    if page and type(page.needs) == "table" and page.needs.model then onData() end
-  end)
+  Journal.Model.onReady(function() if guestGuid == nil then onModelData() end end)
+end
+if Journal.Model and type(Journal.Model.onGuestReady) == "function" then
+  Journal.Model.onGuestReady(function(_, guid) if guid ~= nil and guid == guestGuid then onModelData() end end)
 end

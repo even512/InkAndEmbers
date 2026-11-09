@@ -138,6 +138,7 @@ local function clock()
 end
 
 local OQ = Journal.OpenQuests
+local QT = Journal.QuestTally -- shared counting (journal/model/QuestTally.lua)
 
 -- module state: parsed table per data table, static chain expansion per dungeon, caches per generation of OpenQuests
 local M = { blob = nil, data = nil, D = nil, exp = {}, c = nil, cg = nil, cn = nil, listeners = {}, hooked = false, diag = {} }
@@ -410,8 +411,6 @@ end
 
 -- ---------------------------------------------------------------- counts
 
-local PRIO = { done = 4, log = 3, open = 2, locked = 1 }
-
 local function hasId(list, id)
   if list then
     for _, x in ipairs(list) do
@@ -421,113 +420,11 @@ local function hasId(list, id)
   return false
 end
 
--- counts over a list of quest IDs: foreign ones are left out; quests voided by a done/accepted alternative (own excl; the other
--- way round, i.e. listed as excl by another quest, only if that exclusion is mutual) are left out; alternatives that exclude each other (mutual) count once (best state)
+-- counts over a list of quest IDs (journal/model/QuestTally.lua, shared with ZoneProgress): foreign ones are left out; quests voided
+-- by a done/accepted alternative are left out; alternatives that exclude each other (mutual) count once (best state)
 local function tally(c, ids)
-  local list, seen = {}, {}
-  for _, id in ipairs(ids) do
-    if not seen[id] then
-      seen[id] = true
-      list[#list + 1] = id
-    end
-  end
-  local extra = {}
-  for _, id in ipairs(list) do
-    local r = rec(c, id)
-    if r and r.excl then
-      for _, x in ipairs(r.excl) do
-        if not seen[x] then
-          seen[x] = "peer"
-          extra[#extra + 1] = x
-        end
-      end
-    end
-  end
-  loadStates(c, list)
-  loadStates(c, extra)
-  local res = { all = 0, total = 0, done = 0, log = 0, open = 0, locked = 0, foreign = 0, voided = 0 }
-  local cand, rev = {}, {}
-  for _, id in ipairs(list) do
-    local r, st = rec(c, id), stOf(c, id)
-    if r and st then
-      res.all = res.all + 1
-      if st.partial then res.partial = true end
-      if st.state == "foreign" then
-        res.foreign = res.foreign + 1
-      else
-        cand[#cand + 1] = id
-        for _, x in ipairs(r.excl or EMPTY) do
-          local t = rev[x]
-          if not t then
-            t = {}
-            rev[x] = t
-          end
-          t[#t + 1] = id
-        end
-      end
-    end
-  end
-  local live, liveSet = {}, {}
-  for _, id in ipairs(cand) do
-    local st = stOf(c, id)
-    local void = false
-    if st.state ~= "done" and st.state ~= "log" then
-      local r = rec(c, id)
-      for _, x in ipairs(r.excl or EMPTY) do
-        local sx = stOf(c, x)
-        if sx and (sx.state == "done" or sx.state == "log") then void = true break end
-      end
-      if not void then
-        -- reverse voiding only if the exclusion is mutual (both list each other): QuestieDB often has one-sided entries
-        -- (e.g. 2923 excludes 2922 but not the other way round); the row of the other quest shows no reason then, so it must
-        -- not be dropped from the counts either
-        for _, x in ipairs(rev[id] or EMPTY) do
-          local sx = stOf(c, x)
-          if sx and (sx.state == "done" or sx.state == "log") and hasId(r.excl, x) then void = true break end
-        end
-      end
-    end
-    if void then
-      res.voided = res.voided + 1
-    else
-      live[#live + 1] = id
-      liveSet[id] = true
-    end
-  end
-  -- mutual exclusion groups (union-find)
-  local parent = {}
-  local function root(x)
-    while parent[x] and parent[x] ~= x do
-      parent[x] = parent[parent[x]] or parent[x]
-      x = parent[x]
-    end
-    return x
-  end
-  for _, id in ipairs(live) do parent[id] = id end
-  for _, id in ipairs(live) do
-    local r = rec(c, id)
-    for _, x in ipairs(r.excl or EMPTY) do
-      if liveSet[x] then
-        local rx = rec(c, x)
-        if rx and hasId(rx.excl, id) then
-          local a, b = root(id), root(x)
-          if a ~= b then parent[b] = a end
-        end
-      end
-    end
-  end
-  local unit = {}
-  for _, id in ipairs(live) do
-    local k = root(id)
-    local s = stOf(c, id).state
-    if not unit[k] or PRIO[s] > PRIO[unit[k]] then unit[k] = s end
-  end
-  for _, s in pairs(unit) do
-    res.total = res.total + 1
-    res[s] = res[s] + 1
-  end
-  res.complete = res.total > 0 and res.done == res.total
-  return res
+  return QT.count(ids, function(id) return rec(c, id) end, function(id) return stOf(c, id) end,
+    function(list) loadStates(c, list) end)
 end
 
 local function dungeonCounts(c, dg)

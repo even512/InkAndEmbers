@@ -345,7 +345,8 @@ end
 -- display-ready texts of a person (all foreign values via Sanitize.display)
 function Mates:Lines(p)
   local T = Mates.TEXT
-  local name = disp(p.name, 48) or "?"
+  -- Forever: "Vorname Nachname" (never a shard); Retail unchanged "Name-Realm" (Names.mateName)
+  local name = disp(ns.Names and ns.Names.mateName(p.name, nil, true) or p.name, 48) or "?"
   local zone = disp(p.firstZone, 40) or T.unknownZone
   local out = {
     name = name,
@@ -700,10 +701,19 @@ function Fire.kindText(p)
   return race or cls
 end
 
+-- shown name of a campfire guest (raw): Forever "Vorname Nachname" (never a shard), Retail the first name (Names.mateName)
+function Fire.personName(p)
+  local N = ns.Names
+  if not N or type(p) ~= "table" then return nil end
+  if type(p.name) == "string" then return N.mateName(p.name, p.realm) end
+  return N.mateName(p.full)
+end
+
 -- a person in the diary entry tooltip: "Kuno · Orc · Krieger · Stufe 12" (raw values from the log, all via display)
 function Fire.personLine(p)
   local raw = p.name or p.full
   local first = type(raw) == "string" and (string.match(raw, "^([^%-]+)") or raw) or nil
+  if first and ns.Names then first = Fire.personName(p) or first end
   local parts = { disp(first, 48) or "?" }
   local kind = Fire.kindText(p)
   if kind then parts[#parts + 1] = kind end
@@ -741,7 +751,7 @@ function Fire:Lines(p)
   if p.live then
     local lz = disp(p.liveZone, 40)
     return {
-      name = disp(p.name or p.full, 48) or "?",
+      name = disp(Fire.personName(p) or p.name or p.full, 48) or "?",
       level = levelOf(p),
       kind = Fire.kindText(p),
       fires = Fire.fireCount(p.n),
@@ -753,7 +763,7 @@ function Fire:Lines(p)
   local zone = disp(p.lastZone, 40)
   local probe = p.lastSim and T.probe or ""
   return {
-    name = disp(p.name or p.full, 48) or "?",
+    name = disp(Fire.personName(p) or p.name or p.full, 48) or "?",
     level = levelOf(p),
     kind = Fire.kindText(p),
     fires = Fire.fireCount(p.n),
@@ -1007,8 +1017,11 @@ function Fire:Load(index)
   self.index = index
   local FM = Journal.FireMates
   local res = FM.aggregate(index) or { list = {}, count = 0, rounds = 0 }
+  -- another character's book (read only): no running campfire round of the logged-in character is mixed in
   local C = ns.Campfire
-  local ok, live = pcall(function() return C and C.session and C.session() end)
+  local guest = Pages and type(Pages.guest) == "function" and Pages.guest() or nil
+  local ok, live = false, nil
+  if not guest then ok, live = pcall(function() return C and C.session and C.session() end) end
   self.res = FM.withLive(res, ok and live or nil)
 end
 

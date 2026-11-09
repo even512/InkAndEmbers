@@ -128,6 +128,15 @@ local TEXT = Loc.ns("m.Chronik", {
   need_quests = "Quests abgeben.",
   u_quests_one = "%s Quest",
   u_quests_other = "%s Quests",
+  title_zone_master = "Zonenkenner",
+  grid_zone_master = "Zonenkenner",
+  need_zone_master = "Alle zählbaren Quests einer Zone erledigen.",
+  u_zone_master_one = "%s Zone",
+  u_zone_master_other = "%s Zonen",
+  zonesDone = "Abgeschlossen: %s",
+  zonesMore = "%s … und %s weitere",
+  zoneFallback = "Zone %s",
+  zonesKeep = "Einmal abgeschlossen bleibt verdient, auch wenn neue Questdaten die Zone wieder öffnen.",
   title_reputation = "Freund der Fremden",
   grid_reputation = "Freund der Fremden",
   need_reputation = "Bei einer Fraktion eine hohe Rufstufe erreichen.",
@@ -473,8 +482,8 @@ local function deathsByLevel(index)
   return by, noLevel, n
 end
 
--- medals: 35 medals in 9 families, 29 with three tiers (bronze -> silver -> gold), 6 one-off medals with a fixed tier;
--- 93 tiers in all.
+-- medals: 36 medals in 9 families, 30 with three tiers (bronze -> silver -> gold), 6 one-off medals with a fixed tier;
+-- 96 tiers in all.
 -- No death medals: the "survival" family only rewards not dying. All thresholds live in Chronik.MEDAL_STEPS; earned
 -- tiers stay (snapshots.medals).
 
@@ -540,6 +549,7 @@ Chronik.MEDAL_STEPS = {
   dungeon = { 1, 5, 10 },               -- distinct dungeons (IE party)
   boss = { 5, 25, 60 },                 -- distinct bosses (IB, MO boss, KI worldboss)
   plans = { 1, 5, 15 },                 -- own to-dos completed (VE)
+  zone_master = { 1, 4, 10 },           -- zones with every countable quest done (counters.zonedone, journal/model/ZoneProgress.lua)
 }
 Chronik.TOUGH_DEATHS = { 10, 25, 50 }  -- "tough": at most this many deaths until level 20 / 40 / 60
 Chronik.CONTINENT_SEAL = 2             -- continents (the starting continent counts)
@@ -556,10 +566,11 @@ function Chronik.standingName(n) return TEXT.standing[n] end
 local function standing(n) return Chronik.standingName(n) or plain(n) end
 local function hours(n) return Chronik.duration(n) end
 
--- catalogue (order = grid = cells of the future motif atlas Media/Seals.tga). id, title, family, need = requirement
--- sentence; steps = Chronik.MEDAL_STEPS entry, nil = one-off medal with fixed tier;
+-- catalogue (order = grid; the motif cell of Media/Seals.tga follows it unless the field cell is set). id, title, family, need =
+-- requirement sentence; steps = Chronik.MEDAL_STEPS entry, nil = one-off medal with fixed tier;
 -- unit(n) / value(n) = threshold / counter as text; art = old image in the current atlas, nil = family placeholder
--- motif; live = counter without a log line (char.counters), read fresh on every call;
+-- motif; cell = fixed motif cell (medals added after the atlas); placeholder = motif not in the atlas yet (family icon);
+-- retailHidden = not on the retail client; live = counter without a log line (char.counters), read fresh on every call;
 -- watch = prefilter for the observer (journal/Toast.lua): { code, test(F), value(F), always, elapsed, first }; F(name)
 -- = field text
 local M = Chronik.MEDAL_STEPS
@@ -606,6 +617,10 @@ Chronik.SEALS = {
   -- quests & lore
   { id = "quests", family = "lore", steps = M.quests, unit = unit("quests"),
     watch = { { code = "QT" } } },
+  -- Forever only (quest data of OpenQuests). Motif: cell 36 of Media/Seals.tga (appended after the 35 others, their cells stay;
+  -- art/seals/v2/motif_zonemaster.jpg, approved 08.11.2026)
+  { id = "zone_master", family = "lore", steps = M.zone_master, unit = unit("zone_master"), live = "zonedone",
+    retailHidden = true, cell = 36 },
   { id = "reputation", family = "lore", steps = M.reputation, art = "reputation",
     unit = standing, value = standing, watch = { { code = "MO", test = fieldIs("kind", "reputation"), value = fieldNum("detail") } } },
   { id = "books", family = "lore", steps = M.books, art = "first_book", unit = unit("books"),
@@ -674,11 +689,24 @@ local SEAL_TEXT = {
     if g ~= t then return g end
   end,
 }
+-- motif cell in Media/Seals.tga: catalogue field cell (a medal added later is appended to the atlas, the cells of the others stay),
+-- else the next cell in catalogue order (SEAL_MOTIF_IDS of scripts/render-media.mjs lists the medals by cell)
 Chronik.SEAL_BY_ID = {}
-for i, s in ipairs(Chronik.SEALS) do
-  s.index = i
-  Chronik.SEAL_BY_ID[s.id] = s
-  lazy(s, SEAL_TEXT)
+do
+  local fixed, nextCell = {}, 1
+  for _, s in ipairs(Chronik.SEALS) do
+    if s.cell then fixed[s.cell] = true end
+  end
+  for i, s in ipairs(Chronik.SEALS) do
+    s.index = i
+    if not s.cell then
+      while fixed[nextCell] do nextCell = nextCell + 1 end
+      s.cell = nextCell
+      nextCell = nextCell + 1
+    end
+    Chronik.SEAL_BY_ID[s.id] = s
+    lazy(s, SEAL_TEXT)
+  end
 end
 
 -- medal evaluation: per medal a counter value and per tier a proof { t, level, zone } (each field may be missing; {} =
@@ -732,7 +760,7 @@ local function bsearchLE(arr, v) -- largest index i with arr[i] <= v, 0 if none
 end
 
 -- sum of the counters of a group (counters[group]); count = true: number of keys with a value > 0 (distinct fellow players)
-local LIVE_COUNT = { mates = true }
+local LIVE_COUNT = { mates = true, zonedone = true }
 local function counterValue(char, group)
   local c = type(char) == "table" and type(char.counters) == "table" and char.counters[group] or nil
   if type(c) ~= "table" then return 0 end
@@ -741,6 +769,27 @@ local function counterValue(char, group)
     if type(v) == "number" and finite(v) and v > 0 then n = n + (LIVE_COUNT[group] and 1 or v) end
   end
   return floor(n)
+end
+
+-- completed zones (counters.zonedone, written by journal/model/ZoneProgress.lua) as display names, sorted; at most
+-- Chronik.ZONE_NAMES names, n = all zones. Names from OpenQuests.mapName (client map name, else the fixed name), never raw.
+Chronik.ZONE_NAMES = 6
+local function zoneNames(char)
+  local c = type(char) == "table" and type(char.counters) == "table" and char.counters.zonedone or nil
+  if type(c) ~= "table" then return nil, 0 end
+  local OQ = Journal.OpenQuests
+  local names = {}
+  for id, v in pairs(c) do
+    if type(id) == "number" and finite(id) and id > 0 and id == floor(id) and type(v) == "number" and v > 0 then
+      local name = OQ and OQ.mapName and OQ.mapName(id) or nil
+      names[#names + 1] = display(name, Chronik.ZONE_MAX) or TEXT("zoneFallback", int(id))
+    end
+  end
+  if #names == 0 then return nil, 0 end
+  table.sort(names)
+  local n = #names
+  for i = n, Chronik.ZONE_NAMES + 1, -1 do names[i] = nil end
+  return names, n
 end
 
 -- counter value of a medal without a log line (fishing, gathering, emotes, fellows) straight from the SV; nil for other medals.
@@ -1351,6 +1400,15 @@ local function sealTip(seal, e)
       lines[#lines + 1] = TEXT.allSteps
       colors[#lines] = CT.earned
     end
+    -- "Zonenkenner": the completed zones and the note that a completed zone stays counted
+    if e.zoneNames then
+      local list = table.concat(e.zoneNames, ", ")
+      if (e.zoneCount or 0) > #e.zoneNames then list = TEXT("zonesMore", list, int(e.zoneCount - #e.zoneNames)) end
+      lines[#lines + 1] = TEXT("zonesDone", list)
+      colors[#lines] = CT.label
+      lines[#lines + 1] = TEXT.zonesKeep
+      colors[#lines] = CT.label
+    end
   else
     local s = e.steps[1]
     if s then
@@ -1416,6 +1474,7 @@ local function sealEntry(seal, C, value, earned, saved)
   elseif not top and ONCE_PROGRESS[seal.id] then
     e.progress = ONCE_PROGRESS[seal.id](C)
   end
+  if seal.live == "zonedone" then e.zoneNames, e.zoneCount = zoneNames(C.char) end
   e.tip, e.tipColors = sealTip(seal, e)
   return e
 end
@@ -1452,7 +1511,8 @@ end
 --  needsHealth: "Um Haaresbreite" needs the health at combat end; hidden while the client does not let the add-on read it
 --    (Combat collector: ns.closeWinReadable() == false).
 --  retailHidden: the profession medal measures the Classic curve 150/225/300; Retail's skill lines top out far lower
---    (per expansion), so the medal would be unreachable there. Retail = MapSpace.retailClient(); Forever unchanged.
+--    (per expansion), so the medal would be unreachable there; "Zonenkenner" needs the quest data of Forever (OpenQuests).
+--    Retail = MapSpace.retailClient(); Forever unchanged.
 -- The entry stays in the list (consumers index it by position) with hidden = true; it counts in neither total nor family
 -- counts nor steps.
 local function sealLocked(seal)
@@ -2017,7 +2077,9 @@ end
 local function profileOf(index, st, level, playedSec, exact, db, now)
   local Texts = T()
   local info = type(st.char.info) == "table" and st.char.info or {}
-  local name = display(info.name, Chronik.NAME_MAX) or TEXT.traveller
+  -- Forever: "Vorname Nachname" and the ruleset after the subtitle (never the hidden shard); Retail unchanged (Names.lua)
+  local Names = ns.Names
+  local name = display(Names and Names.fullName(info) or info.name, Chronik.NAME_MAX) or TEXT.traveller
   local race, class = display(info.race, Chronik.NAME_MAX), display(info.class, Chronik.NAME_MAX)
   local faction = display(info.factionName, Chronik.NAME_MAX)
   local parts = {}
@@ -2025,6 +2087,8 @@ local function profileOf(index, st, level, playedSec, exact, db, now)
   if class then parts[#parts + 1] = class end
   local subtitle = table.concat(parts, " ")
   if faction and subtitle ~= "" then subtitle = TEXT("subtitleFaction", subtitle, faction) end
+  local ruleset = Names and Names.isForever(info) and display(Names.realmText(info), Chronik.NAME_MAX) or nil
+  if ruleset then subtitle = subtitle ~= "" and (subtitle .. " · " .. ruleset) or ruleset end
   local seed = Texts and Texts.seed(info.firstSeen) or "0"
   local raceFile = type(info.raceFile) == "string" and not isSecret(info.raceFile) and info.raceFile or ""
   local motto = Texts and Texts.pick("motto", { raceFile = raceFile }, seed, "motto", {}) or nil

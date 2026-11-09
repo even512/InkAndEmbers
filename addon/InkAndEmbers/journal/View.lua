@@ -26,6 +26,10 @@ View.OVERLAY_MAX = 400
 
 View.status, View.model, View.stale, View.reason = "idle", nil, false, nil
 View.active = false
+-- Twinks: guid of the other character whose book is open read-only (View.setGuest), nil = own book. The book map then asks
+-- Model.get for that guid and shows no live position, tail or arrow; the world map layer (View.worldModel, View.livePosition)
+-- always stays with the logged-in character.
+View.guest = nil
 
 local PENDING = { pending = true, laeuft = true, ["läuft"] = true, building = true, aufbau = true, loading = true }
 local STALE = { stale = true, veraltet = true, alt = true }
@@ -114,12 +118,43 @@ function View.subscribe()
   if subscribed or not M then return end
   local fn = M.onReady
   if type(fn) == "function" then
-    subscribed = pcall(fn, function(model) View.onReadySignal(model) end) and true or false
+    subscribed = pcall(fn, function(model)
+      if View.guest == nil then View.onReadySignal(model) end
+    end) and true or false
   end
+  if subscribed and type(M.onGuestReady) == "function" then
+    pcall(M.onGuestReady, function(model, guid)
+      if View.guest ~= nil and guid == View.guest then View.onReadySignal(model) end
+    end)
+  end
+end
+
+-- guid of another character (read-only book) or nil (back to the own book). Drops the shown model so the next
+-- View.request asks for the right character; never touches the own model slot. -> true when the mode changed
+function View.setGuest(guid)
+  if guid ~= nil and (type(guid) ~= "string" or guid == "") then return false end
+  if guid == View.guest then return false end
+  View.guest = guid
+  pendingModel = nil
+  View.status, View.model, View.stale, View.reason = "idle", nil, false, nil
+  unwatch()
+  return true
+end
+
+-- live position for the book map: none while a guest book is open
+local function bookPosition()
+  if View.guest ~= nil then return nil end
+  return View.livePosition()
 end
 
 function View.request(opts)
   local M = Model()
+  if View.guest ~= nil and (opts == nil or opts.guid == nil) then
+    local o = { guid = View.guest }
+    for k, v in pairs(opts or {}) do o[k] = v end
+    o.guid = View.guest
+    opts = o
+  end
   local status, model, stale, why
   if not M or type(M.get) ~= "function" then
     status = "error"
@@ -310,7 +345,7 @@ end
 -- hide the arrow) | nil (no usable position right now: leave the arrow as it is).
 function View.liveHead(scene)
   if type(scene) ~= "table" or type(scene.project) ~= "function" then return nil end
-  local lm, lx, ly = View.livePosition()
+  local lm, lx, ly = bookPosition()
   if not lm then return nil end
   if scene.mode ~= "continent" and scene.mode ~= "zone" and lm ~= scene.mapID then return false end
   local known = lx and ly
@@ -396,7 +431,7 @@ end
 
 local function emptyScene(model, sel)
   local G = Geo()
-  local map, x, y = View.livePosition()
+  local map, x, y = bookPosition()
   if not map and model.current then map, x, y = model.current.mapID, model.current.x, model.current.y end
   local scene = { sel = sel or {}, empty = true, markers = {}, gaps = {}, route = { segments = {}, count = 0 },
     range = { 0, 0 } }
@@ -420,10 +455,10 @@ local function emptyScene(model, sel)
   if map and x and y then
     local ok, vx, vy = pcall(scene.project, map, x, y)
     if ok and num(vx) and num(vy) then
-      scene.current = { vx = vx, vy = vy, facing = View.livePosition() and View.facing() or nil }
+      scene.current = { vx = vx, vy = vy, facing = bookPosition() and View.facing() or nil }
     end
   end
-  scene.live = true
+  scene.live = View.guest == nil -- no live tick in a guest book
   scene.notes = { { text = T.startNote, kind = "start", vx = scene.current and scene.current.vx,
     vy = scene.current and scene.current.vy } }
   return scene
@@ -448,7 +483,7 @@ function View.zoneFor(model, sel)
     end
     return z or map
   end
-  local lm = View.livePosition()
+  local lm = bookPosition()
   local z = zoneOfMap(lm) or zoneOfMap(model.current and num(model.current.mapID))
   if z then return z end
   local last = chapters[#chapters]
@@ -540,7 +575,7 @@ local function zoneScene(model, sel)
     if n.t and not n.p then n.p = call("playedAt", model, n.t) end
   end
   addMinis(scene, model, view, project, key, true)
-  local lm, lx, ly = View.livePosition()
+  local lm, lx, ly = bookPosition()
   local cur
   if lm and lx and ly then cur = { mapID = lm, x = lx, y = ly } else cur = model.current end
   if cur then
@@ -549,7 +584,7 @@ local function zoneScene(model, sel)
       scene.current = { vx = vx, vy = vy, facing = (lm and lx and ly) and View.facing() or nil }
     end
   end
-  scene.live = true
+  scene.live = View.guest == nil -- no live tick in a guest book
   scene.yards = View.sceneYards(zone)
   local total = model.timeline and num(model.timeline.total) or 0
   local c = view.chapter and model.chapters[view.chapter]
@@ -604,7 +639,7 @@ function View.scene(model, sel, opts)
   end
   addMinis(scene, model, view, project, key, mode ~= "continent")
 
-  local lm, lx, ly = View.livePosition()
+  local lm, lx, ly = bookPosition()
   local cur
   if lm and lx and ly then cur = { mapID = lm, x = lx, y = ly } else cur = model.current end
   if cur and (mode == "continent" or cur.mapID == scene.mapID) then
@@ -613,7 +648,7 @@ function View.scene(model, sel, opts)
       scene.current = { vx = vx, vy = vy, facing = (lm and lx and ly) and View.facing() or nil }
     end
   end
-  scene.live = true
+  scene.live = View.guest == nil -- no live tick in a guest book
   scene.yards = View.sceneYards(mode == "continent" and scene.contID or scene.mapID)
 
   local focus
