@@ -279,6 +279,28 @@ end
 function View.playedAt(model, t) return call("playedAt", model, t) end
 function View.timeAt(model, p) return call("timeAt", model, p) end
 function View.chapterAt(model, t) return call("chapterAt", model, t) end
+function View.actAt(model, t) return call("actAt", model, t) end
+-- K2 replay: main zone at time t (Model.zoneAt, flown-over zones skipped) and the flight running at t (start, landing)
+function View.zoneAtTime(model, t)
+  local M = Model()
+  if not (M and type(M.zoneAt) == "function") then return nil end
+  local ok, z, a, b = pcall(M.zoneAt, model, t)
+  if not ok then return nil end
+  return num(z), num(a), num(b)
+end
+function View.flightAt(model, t)
+  local M = Model()
+  if not (M and type(M.flightAt) == "function") then return nil end
+  local ok, a, b = pcall(M.flightAt, model, t)
+  if not ok or not num(a) or not num(b) then return nil end
+  return a, b
+end
+function View.continentOf(mapID)
+  local G = Geo()
+  if not (G and G.continentOf and num(mapID)) then return nil end
+  local ok, c = pcall(G.continentOf, mapID)
+  return ok and num(c) or nil
+end
 function View.formatWhen(model, t) return call("formatWhen", model, t) end
 function View.toAxis(model, p)
   local q = call("toAxis", model, p)
@@ -398,6 +420,11 @@ local WHOLE = { x0 = 0, x1 = 1, y0 = 0, y1 = 1 }
 function View.viewFor(model, sel)
   sel = sel or {}
   if sel.chapter and model.chapters and model.chapters[sel.chapter] then return { chapter = sel.chapter } end
+  local act = sel.act and model.acts and model.acts[sel.act]
+  if act then
+    local cont = num(act.continentID) or View.continentOf(View.zoneFor(model, sel))
+    if cont then return { continent = cont } end
+  end
   if sel.zone then return { zone = sel.zone } end
   if sel.map then return { map = sel.map } end
   if sel.continent then return { continent = sel.continent } end
@@ -472,6 +499,13 @@ function View.zoneFor(model, sel)
     local c = chapters[sel.chapter]
     return c and num(c.zoneID) or nil
   end
+  -- an act starts in the zone of its first station (K2: the click jumps to the start of the act)
+  local act = sel.act and model.acts and model.acts[sel.act]
+  if act then
+    local z = num(act.t0) and View.zoneAtTime(model, act.t0)
+    local c = chapters[act.first]
+    return z or (c and num(c.zoneID)) or num(act.zoneID)
+  end
   if sel.zone then return num(sel.zone) end
   local M = Model()
   local function zoneOfMap(map)
@@ -531,7 +565,9 @@ function View.overlayTiles(entries, tileW, tileH, max)
   return out
 end
 
-function View.zoneArt(zoneID)
+-- reveal = true (setting revealMap): the whole zone uncovered, overlays from OpenQuests.overlays (same way as the open-quests
+-- page). Without data for the zone the explored overlays stay.
+function View.zoneArt(zoneID, reveal)
   local art = View.mapArt(zoneID)
   if not art then return nil end
   local valid = false
@@ -545,18 +581,121 @@ function View.zoneArt(zoneID)
     local ok, entries = pcall(E.GetExploredMapTextures, zoneID)
     if ok then art.overlays = View.overlayTiles(entries, art.tileW, art.tileH) end
   end
+  if reveal then
+    local OQ = Journal.OpenQuests
+    if type(OQ) == "table" and type(OQ.overlays) == "function" then
+      local okA, all = pcall(OQ.overlays, zoneID)
+      if okA and type(all) == "table" and next(all) ~= nil then
+        local okT, tiles = pcall(View.overlayTiles, all, art.tileW, art.tileH)
+        if okT and type(tiles) == "table" and #tiles > 0 then art.overlays = tiles end
+      end
+    end
+  end
   return art
 end
 
-local function zoneScene(model, sel)
+-- K2: played-seconds range of a selection (chapter, else act); nil for the whole journey
+function View.selRange(model, sel)
+  sel = sel or {}
+  local c = sel.chapter and model.chapters and model.chapters[sel.chapter]
+  if c and num(c.p0) and num(c.p1) and c.p1 > c.p0 then return c.p0, c.p1 end
+  local a = sel.act and model.acts and model.acts[sel.act]
+  if a and num(a.p0) and num(a.p1) and a.p1 > a.p0 then return a.p0, a.p1 end
+  return nil
+end
+
+-- start (epoch) of the selected chapter or act; nil without one
+function View.selStart(model, sel)
+  sel = sel or {}
+  local c = sel.chapter and model.chapters and model.chapters[sel.chapter]
+  if c then return num(c.t0) end
+  local a = sel.act and model.acts and model.acts[sel.act]
+  return a and num(a.t0) or nil
+end
+
+local function within(p, a, b)
+  p = num(p)
+  return p ~= nil and p >= a and p <= b
+end
+
+-- Restricts route, markers, gaps, level-ups and kills of a scene to the played seconds a..b (act, or a chapter shown on another
+-- zone's map while replaying). New tables: the model's memoised results stay untouched.
+function View.clipRange(scene, model, a, b)
+  local r = scene.route or {}
+  local segs = {}
+  for _, s in ipairs(r.segments or {}) do
+    local s0, s1 = num(s.p0) or num(s.p) or 0, num(s.p) or num(s.p0) or 0
+    if s1 >= a and s0 <= b then segs[#segs + 1] = s end
+  end
+  local total = model.timeline and num(model.timeline.total) or 0
+  scene.route = { segments = segs, count = #segs, points = r.points, tolerance = r.tolerance, truncated = r.truncated,
+    partial = r.partial, failed = r.failed, tail = (b >= total) and r.tail or nil }
+  local function keep(list, pOf)
+    local out = {}
+    for _, e in ipairs(list or {}) do
+      if within(pOf(e), a, b) then out[#out + 1] = e end
+    end
+    return out
+  end
+  scene.markers = keep(scene.markers, function(e) return e.marker and e.marker.p end)
+  scene.gaps = keep(scene.gaps, function(e) return e.gap and e.gap.p0 end)
+  if scene.levelUps then scene.levelUps = keep(scene.levelUps, function(e) return e.p end) end
+  local k = scene.kills
+  if type(k) == "table" and type(k.n) == "number" then
+    local o = { n = 0, vx = {}, vy = {}, p = {}, t = {}, id = {}, lv = {}, name = k.name, stamp = k.stamp }
+    for i = 1, k.n do
+      if within(k.p[i], a, b) then
+        local n = o.n + 1
+        o.n = n
+        o.vx[n], o.vy[n], o.p[n], o.t[n], o.id[n], o.lv[n] = k.vx[i], k.vy[i], k.p[i], k.t[i], k.id[i], k.lv[i]
+      end
+    end
+    scene.kills = o
+  end
+  return scene
+end
+
+-- margin notes of a range: the best notes of its chapters (Model.notes per chapter, memoised there), at most Model.NOTES_MAX
+local function rangeNotes(model, sel, project)
+  local M = Model()
+  local list = {}
+  local act = sel.act and model.acts and model.acts[sel.act]
+  local ids = sel.chapter and { sel.chapter } or (act and act.chapters) or {}
+  for _, i in ipairs(ids) do
+    local ok, notes = pcall(M.notes, model, { chapter = i }, project)
+    if ok and type(notes) == "table" then
+      for _, n in ipairs(notes) do list[#list + 1] = n end
+    end
+  end
+  table.sort(list, function(x, y)
+    if (x.score or 0) ~= (y.score or 0) then return (x.score or 0) > (y.score or 0) end
+    return (x.t or 0) < (y.t or 0)
+  end)
+  local max = (M and M.NOTES_MAX) or 3
+  for i = #list, max + 1, -1 do list[i] = nil end
+  return list
+end
+
+local function zoneScene(model, sel, opts)
   local G, M = Geo(), Model()
   if not (G and G.zoneProjector and M) then return nil end
-  local zone = View.zoneFor(model, sel)
-  if not zone then return nil end
-  local art = View.zoneArt(zone)
-  if not art then return nil end
+  local reveal = View.peek("revealMap") == true
+  -- opts.zone: the replay shows another zone than the selection (K2 zone change); without art for it the selection's zone
+  local zone, art = opts and num(opts.zone), nil
+  if zone then
+    art = View.zoneArt(zone, reveal)
+    if not art then zone = nil end
+  end
+  if not zone then
+    zone = View.zoneFor(model, sel)
+    if not zone then return nil end
+    art = View.zoneArt(zone, reveal)
+    if not art then return nil end
+  end
   local project, key, affine = G.zoneProjector(zone)
-  local view = (sel.chapter and model.chapters[sel.chapter]) and { chapter = sel.chapter } or { zone = zone }
+  local chap = sel.chapter and model.chapters[sel.chapter]
+  local view = (chap and chap.zoneID == zone) and { chapter = sel.chapter } or { zone = zone }
+  local ra, rb = View.selRange(model, sel)
   local scene = { sel = sel, mode = "zone", zoneID = zone, art = art, project = project, key = key, affine = affine,
     view = view, focus = WHOLE, clip = WHOLE }
   if G.continentOf then
@@ -569,12 +708,17 @@ local function zoneScene(model, sel)
   scene.markers = okM and markers or emptyList()
   local okG, gaps = pcall(M.gapsIn, model, view, project)
   scene.gaps = okG and gaps or emptyList()
-  local okN, notes = pcall(M.notes, model, view, project)
-  scene.notes = okN and notes or emptyList()
+  if ra and not view.chapter then
+    scene.notes = rangeNotes(model, sel, project)
+  else
+    local okN, notes = pcall(M.notes, model, view, project)
+    scene.notes = okN and notes or emptyList()
+  end
   for _, n in ipairs(scene.notes) do
     if n.t and not n.p then n.p = call("playedAt", model, n.t) end
   end
   addMinis(scene, model, view, project, key, true)
+  if ra and not view.chapter then View.clipRange(scene, model, ra, rb) end
   local lm, lx, ly = bookPosition()
   local cur
   if lm and lx and ly then cur = { mapID = lm, x = lx, y = ly } else cur = model.current end
@@ -587,13 +731,9 @@ local function zoneScene(model, sel)
   scene.live = View.guest == nil -- no live tick in a guest book
   scene.yards = View.sceneYards(zone)
   local total = model.timeline and num(model.timeline.total) or 0
-  local c = view.chapter and model.chapters[view.chapter]
-  if c and num(c.p0) and num(c.p1) and c.p1 > c.p0 then
-    scene.range = { c.p0, c.p1 }
-  else
-    scene.range = { 0, total }
-  end
-  scene.chapter = view.chapter
+  scene.range = ra and { ra, rb } or { 0, total }
+  scene.chapter = chap and sel.chapter or nil
+  scene.act = sel.act
   scene.empty = (scene.route.count or 0) == 0 and #scene.markers == 0
   return scene
 end
@@ -606,11 +746,16 @@ function View.scene(model, sel, opts)
   if model.empty then return emptyScene(model, sel) end
   local wantZone = not (opts and opts.mode == "continent")
   if wantZone then
-    local ok, zs = pcall(zoneScene, model, sel)
+    local ok, zs = pcall(zoneScene, model, sel, opts)
     if ok and zs then return zs end
     if not ok and ns.Core then ns.Core.coreError("Reisejournal (Zonenkarte): " .. tostring(zs)) end
   end
   local view = View.viewFor(model, sel)
+  -- K2: a flight while replaying an act/chapter shows its continent (opts.continent); an act on the continent map likewise
+  -- (the act's chapters are cut to its time range below)
+  local ra, rb = View.selRange(model, sel)
+  local flight = opts and num(opts.continent) and true or false
+  if flight then view = { continent = opts.continent } end
   local project, key, mode, map, affine = projector(model, view)
   if not project then
     project, key, mode = function(_, x, y) return x, y end, "map:-", "map"
@@ -632,12 +777,18 @@ function View.scene(model, sel, opts)
   scene.markers = okM and markers or emptyList()
   local okG, gaps = pcall(M.gapsIn, model, view, project)
   scene.gaps = okG and gaps or emptyList()
-  local okN, notes = pcall(M.notes, model, view, project)
-  scene.notes = okN and notes or emptyList()
+  local ranged = ra and not view.chapter
+  if ranged then
+    scene.notes = rangeNotes(model, sel, project)
+  else
+    local okN, notes = pcall(M.notes, model, view, project)
+    scene.notes = okN and notes or emptyList()
+  end
   for _, n in ipairs(scene.notes) do
     if n.t and not n.p then n.p = call("playedAt", model, n.t) end
   end
   addMinis(scene, model, view, project, key, mode ~= "continent")
+  if ranged then View.clipRange(scene, model, ra, rb) end
 
   local lm, lx, ly = bookPosition()
   local cur
@@ -652,8 +803,21 @@ function View.scene(model, sel, opts)
   scene.yards = View.sceneYards(mode == "continent" and scene.contID or scene.mapID)
 
   local focus
-  if mode == "continent" and ((opts and opts.whole) or sel.continent) then
+  local fp = flight and opts.flightP
+  if flight and type(fp) == "table" and num(fp[1]) and num(fp[2]) then
+    -- the flight itself (with a margin), so route and arrow of the flight fill the map
+    local segs = {}
+    for _, s in ipairs(scene.route.segments) do
+      if (num(s.p) or 0) >= fp[1] and (num(s.p0) or 0) <= fp[2] then segs[#segs + 1] = s end
+    end
+    focus = View.bounds({ route = { segments = segs } }, nil, View.OVERVIEW_MIN)
+  end
+  if focus then
+    -- set above (flight)
+  elseif mode == "continent" and ((opts and opts.whole) or sel.continent) then
     focus = WHOLE
+  elseif mode == "continent" and ranged then
+    focus = View.bounds(scene, nil, View.OVERVIEW_MIN)
   elseif mode == "continent" and (view.chapter or view.zone) then
     local zone = view.zone or (model.chapters[view.chapter] and model.chapters[view.chapter].zoneID)
     focus = rectOf(zone, scene.contID)
@@ -666,13 +830,10 @@ function View.scene(model, sel, opts)
   scene.focus = focus or WHOLE
 
   local total = model.timeline and num(model.timeline.total) or 0
-  local c = view.chapter and model.chapters[view.chapter]
-  if c and num(c.p0) and num(c.p1) and c.p1 > c.p0 then
-    scene.range = { c.p0, c.p1 }
-  else
-    scene.range = { 0, total }
-  end
-  scene.chapter = view.chapter
+  scene.range = ra and { ra, rb } or { 0, total }
+  scene.chapter = (sel.chapter and model.chapters[sel.chapter]) and sel.chapter or nil
+  scene.act = sel.act
+  scene.flight = flight or nil
   scene.zoneFallback = wantZone and not sel.continent or nil
   scene.empty = (scene.route.count or 0) == 0 and #scene.markers == 0
   if scene.empty then

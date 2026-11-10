@@ -14,7 +14,6 @@ L.add("enUS", "p.Chronik", {
   diaryNone = "From the journal", ofMax = "OF %s", ringStart = "Off we go!", prevTip = "Previous day", nextTip = "Next day",
   toDiary = "Journal", toDiaryTip = "Read the journal", toDiaryTip2 = "Every play day as an entry, day by day",
   toMates = "Companions", toMatesTip = "View companions", toMatesTip2 = "Who traveled with you",
-  toDungeons = "Dungeons", toDungeonsTip = "View dungeons", toDungeonsTip2 = "Every run: when, how long, with whom, bosses, deaths and loot",
   toProfile = "Profile", toProfileTip = "Profile, level flow and journal excerpt",
   toMilestones = "Milestones", toMilestonesTip = "View milestones", toMilestonesTip2 = "Every ten levels a tally of the journey, at level 60 the final page",
 })
@@ -198,15 +197,25 @@ L.add("enUS", "p.Notizen", {
 })
 
 -- journal/pages/Quests.lua
+L.add("enUS", "p.Dungeons", {
+  subRuns = "Runs",
+  subRunsTip = "Every run: when, how long, with whom, bosses, deaths and loot",
+  subQuests = "Dungeon Quests",
+  subQuestsTip = "All dungeon quests and their quest chains (data: QuestieDB, WoW Forever only)",
+})
+
+L.add("enUS", "p.Plaene", {
+  subTodo = "To-Do",
+  subTodoTip = "Enter your own travel goals and tick them off",
+  subTrain = "Training",
+  subTrainTip = "What your class trainer teaches you at which level (WoW Forever only)",
+})
+
 L.add("enUS", "p.Quests", {
   subHistory = "History",
   subHistoryTip = "Completed quests with quest text, timeline and reward",
   subOpen = "Open",
   subOpenTip = "Quests you can accept right now, with a map of the quest givers (data: QuestieDB)",
-  subDungeons = "Dungeons",
-  subDungeonsTip = "All dungeon quests and their quest chains (data: QuestieDB)",
-  subTrain = "Training",
-  subTrainTip = "What your class trainer teaches you at which level (WoW Forever only)",
   subZones = "Zones",
   subZonesTip = "How far the quests of every zone are done, with the medal Zone Master (WoW Forever only)",
   pageOf = "Page %d of %d", prevPage = "Previous page", nextPage = "Next page", level = "Level %s",
@@ -317,7 +326,7 @@ L.add("enUS", "p.QuestsDungeons", {
   showQuests = "Quests", showMap = "Map", showQuestsTip = { "Quests", "All quests of the chosen dungeon" },
   showMapTip = { "Map", "Dungeon entrances; the number counts the available quests" },
   openDungeon = "Open dungeon", openDungeonTip = { "Open dungeon", "Quests on the left, map and details of the chosen quest on the right" },
-  toEntrance = "Entrance as To-Do", toEntranceTip = { "Entrance as To-Do", "Adds a place goal at the dungeon entrance (Journey -> To Do)." },
+  toEntrance = "Entrance as To-Do", toEntranceTip = { "Entrance as To-Do", "Adds a place goal at the dungeon entrance (Plans -> To-Do)." },
   todoEntrance = "Enter dungeon: %s",
   back = "To the dungeon overview", foreign = "Other faction/class",
   foreignTip = { "Other faction/class", "Also shows quests this character cannot accept" },
@@ -379,7 +388,7 @@ L.add("enUS", "p.QuestsOffen", {
   unplaced = "%d zones without a position on this map",
   pick = "Choose a quest on the left or click a ! on the map.",
   levelWord = "Level ", levelUnknown = "Level ?", minWord = "Requires level ",
-  toTodo = "Add as To-Do", toTodoTip = { "Add as To-Do", "Adds a place goal at the quest giver (Journey -> To Do)." },
+  toTodo = "Add as To-Do", toTodoTip = { "Add as To-Do", "Adds a place goal at the quest giver (Plans -> To-Do)." },
   todoDone = "To-Do added.", todoFail = "No To-Do added: ", todoNoPlace = "Quest giver without a map point",
   todoReasons = { voll = "To-do list is full", ["nicht-bereit"] = "To Do not ready yet", ["kein-plan"] = "To Do not available",
     ["kein-ort"] = "Quest giver without a map point" },
@@ -415,7 +424,7 @@ L.add("enUS", "p.QuestsLehrplan", {
   trainerNone = "No trainer known yet. Visit your class trainer once and they will show up here.",
   trainerFar = "%s · far away", trainerDist = "%s · %s", farOnly = "far away",
   meters = "%s m", km = "%s km",
-  toTodo = "As to-do", toTodoTip = { "As to-do", "Adds a place goal at the trainer (Journey -> To Do)." },
+  toTodo = "As to-do", toTodoTip = { "As to-do", "Adds a place goal at the trainer (Plans -> To-Do)." },
   todoDone = "To-do added.", todoFail = "No to-do added.",
   talentHead = "Talents",
   talentFree_one = "%s talent point is free.", talentFree_other = "%s talent points are free.",

@@ -22,10 +22,6 @@ local T = ns.Locale.ns("p.Quests", {
   subHistoryTip = "Abgeschlossene Quests mit Questtext, Lebenslauf und Belohnung",
   subOpen = "Offen",
   subOpenTip = "Quests, die Ihr jetzt annehmen könnt, mit Karte der Questgeber (Daten: QuestieDB)",
-  subDungeons = "Dungeons",
-  subDungeonsTip = "Alle Dungeon-Quests und ihre Questketten (Daten: QuestieDB)",
-  subTrain = "Lehrplan",
-  subTrainTip = "Was Euch der Klassenlehrer ab welcher Stufe beibringt (nur WoW Forever)",
   subZones = "Zonen",
   subZonesTip = "Wie weit die Quests jeder Zone erledigt sind, mit der Medaille Zonenkenner (nur WoW Forever)",
   pageOf = "Seite %d von %d", prevPage = "Vorige Seite", nextPage = "Nächste Seite", level = "Stufe %s",
@@ -815,7 +811,7 @@ local function buildRight(self, right)
 end
 
 function Quests.Build(self, left, right)
-  -- history in its own holders so the sub-view "Offen" (pages/QuestsOffen.lua) can hide it
+  -- history in its own holders so the sub-views "Offen" (pages/QuestsOffen.lua) and "Zonen" (pages/QuestsZonen.lua) can hide it
   local mainL, mainR = CreateFrame("Frame", nil, left), CreateFrame("Frame", nil, right)
   mainL:SetAllPoints(left)
   mainR:SetAllPoints(right)
@@ -828,7 +824,7 @@ function Quests.Build(self, left, right)
   self.filter = { name = "", area = nil, level = nil }
   if Journal.Live and Journal.Live.itemNames then
     self.names = Journal.Live.itemNames(mainR, function()
-      if self.openOpen or self.trainOpen or self.dungeonOpen then return end
+      if self.openOpen or self.zoneOpen then return end
       self:Render()
     end, Book.NAME_MAX)
   end
@@ -945,12 +941,13 @@ function Quests:ClosePopup()
 end
 
 function Quests:ToggleTable()
-  -- came from the Dungeons page ("Questtext lesen"): "Zurück" leads back there once, then everything is as usual
+  -- came from the tab Dungeons ("Questtext lesen"): "Zurück" leads back there once, then everything is as usual
   if self.returnTo and not self.tableOpen then
-    local to = self.returnTo
     self.returnTo, self.tableOpen = nil, true
-    self:ShowSub(to)
-    Pages.subChanged("quests")
+    local F = Journal.Frame
+    if F and type(F.jumpBack) == "function" and F.jumpBack("quests") then return end
+    self.drop = nil
+    self:Render()
     return
   end
   self.tableOpen = not self.tableOpen
@@ -1422,14 +1419,12 @@ function Quests.Refresh(self, data)
   end
   self:Render()
   if self.openView and self.openOpen then self.openView:Refresh() end
-  if self.trainView and self.trainOpen then self.trainView:Refresh() end
-  if self.dungeonView and self.dungeonOpen then self.dungeonView:Refresh() end
   if self.zoneView and self.zoneOpen then self.zoneView:Refresh() end
 end
 
--- sub-bookmarks (contract journal/Pages.lua): history · open (open quests, pages/QuestsOffen.lua) · dungeons · trainer plan ·
--- zones (pages/QuestsZonen.lua, last). Labels are read late
--- (the language is not yet fixed when the file loads)
+-- sub-bookmarks (contract journal/Pages.lua): history · open (open quests, pages/QuestsOffen.lua) · zones (pages/QuestsZonen.lua,
+-- WoW Forever only, last). The dungeon quests and the trainer plan live on their own tabs since I12 (pages/Dungeons.lua,
+-- pages/Plaene.lua). Labels are read late (the language is not yet fixed when the file loads)
 local function subTab(key, label, tip)
   return setmetatable({ key = key }, { __index = function(_, k)
     if k == "label" then return T[label] end
@@ -1439,31 +1434,23 @@ end
 Quests.subs = {
   subTab("historie", "subHistory", "subHistoryTip"),
   subTab("offen", "subOpen", "subOpenTip"),
-  subTab("dungeons", "subDungeons", "subDungeonsTip"),
-  subTab("lehrplan", "subTrain", "subTrainTip"),
   subTab("zonen", "subZones", "subZonesTip"),
 }
 
 function Quests:GetSub()
   if self.zoneOpen then return "zonen" end
-  if self.trainOpen then return "lehrplan" end
-  if self.dungeonOpen then return "dungeons" end
   return self.openOpen and "offen" or "historie"
 end
 
 function Quests:ShowSub(key)
   if key == self:GetSub() then return end
   self.returnTo = nil
-  -- zone overview (pages/QuestsZonen.lua): its own view over the table, like "Dungeons"
+  -- zone overview (pages/QuestsZonen.lua): its own view over the table, like "Offen"
   if key == "zonen" then
     local V = Journal.ZonesView
     if not (V and self.mainL) then return end
     if self.openView and self.openOpen then self.openView:Close() end
     self.openOpen = false
-    if self.trainView and self.trainOpen then self.trainView:Close() end
-    self.trainOpen = false
-    if self.dungeonView and self.dungeonOpen then self.dungeonView:Close() end
-    self.dungeonOpen = false
     if not self.zoneView then self.zoneView = V.new(self, self.holderL, self.holderR) end
     self.drop = nil
     if self.ui and self.ui.pop then self.ui.pop:Hide() end
@@ -1475,42 +1462,6 @@ function Quests:ShowSub(key)
   end
   if self.zoneView and self.zoneOpen then self.zoneView:Close() end
   self.zoneOpen = false
-  -- dungeon quests (pages/QuestsDungeons.lua): its own view over the table, like "Offen"
-  if key == "dungeons" then
-    local V = Journal.DungeonQuestsView
-    if not (V and self.mainL) then return end
-    if self.openView and self.openOpen then self.openView:Close() end
-    self.openOpen = false
-    if self.trainView and self.trainOpen then self.trainView:Close() end
-    self.trainOpen = false
-    if not self.dungeonView then self.dungeonView = V.new(self, self.holderL, self.holderR) end
-    self.drop = nil
-    if self.ui and self.ui.pop then self.ui.pop:Hide() end
-    self.mainL:Hide()
-    self.mainR:Hide()
-    self.dungeonOpen = true
-    self.dungeonView:Open()
-    return
-  end
-  if self.dungeonView and self.dungeonOpen then self.dungeonView:Close() end
-  self.dungeonOpen = false
-  -- trainer plan (pages/QuestsLehrplan.lua): its own view over the table, like "Offen"
-  if key == "lehrplan" then
-    local V = Journal.LehrplanView
-    if not (V and self.mainL) then return end
-    if self.openView and self.openOpen then self.openView:Close() end
-    self.openOpen = false
-    if not self.trainView then self.trainView = V.new(self, self.holderL, self.holderR) end
-    self.drop = nil
-    if self.ui and self.ui.pop then self.ui.pop:Hide() end
-    self.mainL:Hide()
-    self.mainR:Hide()
-    self.trainOpen = true
-    self.trainView:Open()
-    return
-  end
-  if self.trainView and self.trainOpen then self.trainView:Close() end
-  self.trainOpen = false
   if key == "offen" then
     local V = Journal.OpenQuestsView
     if not (V and self.mainL) then return end
@@ -1532,12 +1483,15 @@ function Quests:ShowSub(key)
   end
 end
 
--- "Questtext lesen" of the Dungeons page: the quest text in the history; "Zurück" leads back to the Dungeons page once
+-- "Questtext lesen" of the tab Dungeons (pages/Dungeons.lua, sub-bookmark "Dungeon-Quests"): the quest text in the history; the
+-- tab was switched by Frame.jump, "Zurück" leads back there once (Quests:ToggleTable -> Frame.jumpBack)
 function Quests:OpenFromDungeons(id)
   local q = self.book and self.book.byId[id]
   if not (q and (q.state == "done" or q.state == "abandoned")) then return false end
-  self:ShowSub("historie")
-  Pages.subChanged("quests")
+  if self:GetSub() ~= "historie" then
+    self:ShowSub("historie")
+    Pages.subChanged("quests")
+  end
   self:Select(id, true)
   self.returnTo = "dungeons"
   return true
@@ -1548,15 +1502,11 @@ end
 function Quests.OnHide(self)
   local ui = self.ui
   if not ui then return end
-  if self.trainView then
-    for _, r in ipairs(self.trainView.ui.rowsList.rows) do W.hideTip(r) end
-  end
   if self.openView then
     for _, r in ipairs(self.openView.ui.rowsList.rows) do W.hideTip(r) end
     self.openView.ui.pins:ReleaseAll()
     self.openView.pinData = nil
   end
-  if self.dungeonView then self.dungeonView:OnPageHide() end
   if self.zoneView then self.zoneView:OnPageHide() end
   if self.names then self.names.stop() end
   self.returnTo = nil
@@ -1581,29 +1531,14 @@ Quests.kit = { pager = newPager, airyArrow = airyArrow, label = label, sortButto
 Journal.QuestsPage = Quests -- handle for tests and the diagnostics (ui, book, sel, filter, sort)
 Pages.register("quests", Quests)
 
--- Another character's book (read only): "Offen", "Dungeons", "Lehrplan" and "Zonen" depend on the logged-in character, so only the
--- history stays (Pages.subs then returns no bookmarks and does not switch by itself): an open view makes way for it before the
--- redraw (Pages.setGuest calls this listener first).
+-- Another character's book (read only): "Offen" and "Zonen" depend on the logged-in character, so only the history stays (Pages.subs
+-- then returns no bookmarks and does not switch by itself): an open view makes way for it before the redraw (Pages.setGuest calls
+-- this listener first).
 if Pages.onGuestChange then
   Pages.onGuestChange(function(guid)
-    if guid ~= nil and (Quests.openOpen or Quests.dungeonOpen or Quests.trainOpen or Quests.zoneOpen) then
-      Quests:ShowSub("historie")
-    end
+    if guid ~= nil and (Quests.openOpen or Quests.zoneOpen) then Quests:ShowSub("historie") end
   end)
 end
-
--- Retail: the trainer plan (Lehrplan) exists only in WoW Forever, so its bookmark stays out ("Offen" stays: own retail source)
-Pages.hideSub("quests", "lehrplan", function()
-  local L = Journal.Lehrplan
-  return L ~= nil and type(L.active) == "function" and L.active() == false
-end)
-
--- Retail: the dungeon quests exist only in WoW Forever (no bookmark, nothing is loaded); the test mode keeps them like the model
-Pages.hideSub("quests", "dungeons", function()
-  local OQ = Journal.OpenQuests
-  if not (OQ and OQ.retailClient()) then return false end
-  return not (OQ.test() ~= nil or OQ.ALLOW_RETAIL)
-end)
 
 -- Retail: the zone overview exists only in WoW Forever like the zone share of the chapter card (journal/model/ZoneProgress.lua)
 Pages.hideSub("quests", "zonen", function()

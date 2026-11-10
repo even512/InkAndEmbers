@@ -7,13 +7,14 @@ L.add("enUS", "Locale", {
   auto = "Automatic (game language)",
   deDE = "Deutsch",
   enUS = "English",
-  tip = "Language of the travel journal. Automatic: German on a German client, English otherwise. Takes effect after /reload.",
+  ptBR = "Português (Brasil)",
+  tip = "Language of the travel journal. Automatic: German or Brazilian Portuguese on matching clients, English otherwise. Takes effect after /reload.",
   reloadLabel = "Apply language",
   reloadButton = "Save and reload",
   reloadTip = "Opens the save window (like /chronik save): saving reloads the interface, then the chosen language applies.",
   changed = "Language: %s. Takes effect after /reload (or /chronik save).",
   unchanged = "Language: %s.",
-  usage = "Language: /chronik language auto | de | en (current: %s).",
+  usage = "Language: /chronik language auto | de | en | ptbr (current: %s).",
 })
 
 L.add("enUS", "Names", {
@@ -60,8 +61,8 @@ L.add("enUS", "Core", {
   helpOpenTest = "/chronik open test - turns on Retail test mode (\"test off\" ends it)",
   helpLevelSlip = "/chronik level - preview the level-up note: what you can learn at the trainer (WoW Forever only)",
   helpMilestone = "/chronik milestone [level] - preview the narrator's tally of a milestone (level 10, 20, … 60; WoW Forever only)",
-  helpTrain = "/chronik training - your class training plan (\"Training\" tab under Quests, WoW Forever only); \"training status\" shows the state",
-  helpLanguage = "/chronik language - choose language: \"language auto\", \"language de\" or \"language en\" (takes effect after /reload)",
+  helpTrain = "/chronik training - your class training plan (\"Training\" tab under Plans, WoW Forever only); \"training status\" shows the state",
+  helpLanguage = "/chronik language - choose language: \"language auto\", \"language de\", \"language en\" or \"language ptbr\" (takes effect after /reload)",
   helpReset = "/chronik reset - reset the size and position of the travel journal",
   helpSave = "/chronik save - open the save window (saving reloads the interface)",
   helpBackup = "/chronik backup - state of the data safety: this character's backup copy, last save, how full the file is",

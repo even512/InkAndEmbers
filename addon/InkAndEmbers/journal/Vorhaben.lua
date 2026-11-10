@@ -1,5 +1,6 @@
--- "To Do" sub-page of the journey (internally Vorhaben): a real double page on the grid (docs/raster.md, Theme.GRID). The
--- "To Do" sub-bookmark at the bottom of the book (journal/Frame.lua) opens its own page pair that fully covers the map page.
+-- "To Do" sub-page of the tab Pläne (internally Vorhaben): a real double page on the grid (docs/raster.md, Theme.GRID). The window
+-- (journal/Frame.lua) builds the sheet over its page holders (Vorhaben.build); pages/Plaene.lua opens/closes it with the
+-- sub-bookmark "To Do".
 local _, ns = ...
 
 local Journal = ns.Journal
@@ -1973,12 +1974,7 @@ function Vorhaben.build(over)
   V.paperL, V.paperR = pl, pr
   V.panel = panel
 
-  D.escKeys(panel, function()
-    local Fr = Journal.Frame
-    if Fr and type(Fr.showSub) == "function" and Fr.showSub("karte") then return end
-    Vorhaben.close()
-  end)
-
+  -- no own Esc catcher: To Do is the first sub-bookmark of the tab Pläne, so Esc closes the book as on every first sub-page
   buildLeft(panel)
   buildRight(panel)
   layoutSlip(V.kind or "free")

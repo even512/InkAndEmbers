@@ -1,4 +1,4 @@
--- Dungeon quests ("Dungeons" under Quests, Forever only): pure logic, no frames. Data: EveNChronicleQuestData.dungeon of the data
+-- Dungeon quests ("Dungeon-Quests" under the tab Dungeons, Forever only): pure logic, no frames. Data: EveNChronicleQuestData.dungeon of the data
 -- addon InkAndEmbers_QuestData (Dungeons.lua, built by scripts/build-quest-data.mjs from QuestieDB zones/quest types), kept raw by
 -- journal/model/OpenQuests.lua and parsed here on the first call. Quests, givers, names and the availability rules are
 -- OpenQuests' (record/stateOf/statesOf/giversOf), so a quest means the same here as in "Offen". No rewards, no bosses, no loot.

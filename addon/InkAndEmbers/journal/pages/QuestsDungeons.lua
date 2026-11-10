@@ -1,4 +1,4 @@
--- Sub-view "Dungeons" of the Quests page (registered by pages/Quests.lua), WoW Forever only. Data: journal/model/DungeonQuests.lua.
+-- Sub-view "Dungeon-Quests" of the tab Dungeons (pages/Dungeons.lua; until I12 under Quests), WoW Forever only. Data: journal/model/DungeonQuests.lua.
 -- Goal: see at a glance which quests a dungeon has, which are done and which are missing, with their prerequisites.
 -- First view: left the dungeons (level span, "done/for you"), right ALREADY the quest sheet of the chosen dungeon (the one that
 -- fits the character); switch "Quests | Karte" shows the entrances instead. Second level ("Dungeon öffnen", double click, click on
@@ -46,7 +46,7 @@ local T = ns.Locale.ns("p.QuestsDungeons", {
   showQuests = "Quests", showMap = "Karte", showQuestsTip = { "Quests", "Alle Quests des gewählten Dungeons" },
   showMapTip = { "Karte", "Eingänge der Dungeons; die Zahl nennt die annehmbaren Quests" },
   openDungeon = "Dungeon öffnen", openDungeonTip = { "Dungeon öffnen", "Quests links, Karte und Einzelheiten der gewählten Quest rechts" },
-  toEntrance = "Eingang als To Do", toEntranceTip = { "Eingang als To Do", "Legt ein Ort-Ziel am Dungeon-Eingang an (Reise -> To Do)." },
+  toEntrance = "Eingang als To Do", toEntranceTip = { "Eingang als To Do", "Legt ein Ort-Ziel am Dungeon-Eingang an (Pläne -> To Do)." },
   todoEntrance = "Dungeon betreten: %s",
   back = "Zur Dungeon-Übersicht", foreign = "Andere Fraktion/Klasse",
   foreignTip = { "Andere Fraktion/Klasse", "Zeigt auch Quests, die dieser Charakter nicht annehmen kann" },
@@ -908,7 +908,7 @@ local function buildOverview(self, tab, tabR)
   ui.dgList.frame:SetPoint("TOPLEFT", f, "TOPLEFT", LX, -LIST_Y)
   local K = kit()
   if K and K.pager then ui.dgPager = K.pager(f, ui.dgList, LX, LW, CTRL_CY, { T.prevPage, T.nextPage }) end
-  D.escKeys(f, function() self.page:ShowSub("historie") Pages.subChanged("quests") end)
+  D.escKeys(f, function() Pages.escape(self.page.id or "dungeons") end) -- Esc -> "Durchläufe", the first sub-bookmark
 
   -- right page: the quests of the chosen dungeon at once
   local r = CreateFrame("Frame", nil, tabR)

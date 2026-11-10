@@ -1,7 +1,8 @@
 -- Chronik page: profile, level flow, diary by day, XP sources and forecast. Data from journal/model/Chronik.lua
 -- (display-ready texts); only frames and layout here.
--- The sub-views "Tagebuch", "Weggefährten" (with the switch "Gruppe | Am Feuer"), "Dungeons" and "Meilensteine" (pages/ChronikViews.lua,
--- pages/ChronikDungeons.lua, pages/ChronikMeilensteine.lua; Meilensteine only in WoW Forever) open via Page.subs; the overview
+-- The sub-views "Tagebuch", "Weggefährten" (with the switch "Gruppe | Am Feuer") and "Meilensteine" (pages/ChronikViews.lua,
+-- pages/ChronikMeilensteine.lua; Meilensteine only in WoW Forever) open via Page.subs (the dungeon runs moved to the tab Dungeons,
+-- pages/Dungeons.lua, I12); the overview
 -- sits in its own holders (mainL/mainR), which get hidden. No ticker, no OnUpdate; frames are created in Build, pools
 -- are bounded.
 local _, ns = ...
@@ -73,7 +74,6 @@ Page.TEXT = ns.Locale.ns("p.Chronik", {
   diaryNone = "Aus dem Tagebuch", ofMax = "VON %s", ringStart = "Auf geht's!", prevTip = "Tag davor", nextTip = "Tag danach",
   toDiary = "Tagebuch", toDiaryTip = "Das Tagebuch lesen", toDiaryTip2 = "Jeder Spieltag als Eintrag, Tag für Tag",
   toMates = "Weggefährten", toMatesTip = "Weggefährten ansehen", toMatesTip2 = "Wer mit Euch gereist ist",
-  toDungeons = "Dungeons", toDungeonsTip = "Dungeons ansehen", toDungeonsTip2 = "Jeder Durchlauf: wann, wie lange, mit wem, Bosse, Tode und Beute",
   toProfile = "Steckbrief", toProfileTip = "Steckbrief, Stufenfluss und Tagebuch-Auszug",
   toMilestones = "Meilensteine", toMilestonesTip = "Meilensteine ansehen", toMilestonesTip2 = "Alle zehn Stufen eine Bilanz der Reise, bei Stufe 60 der Abschluss",
 })
@@ -787,7 +787,6 @@ end
 function Page.OpenDiary(self) openSub(self, "diaryView", "DiaryView") end
 function Page.OpenCompanions(self) openSub(self, "matesView", "CompanionsView") end
 function Page.OpenFire(self) openSub(self, "fireView", "FireMatesView") end -- inside "Weggefährten" (switch "Am Feuer")
-function Page.OpenDungeons(self) openSub(self, "dungeonsView", "DungeonsView") end
 function Page.OpenMilestones(self) openSub(self, "milestonesView", "MilestonesView") end
 
 function Page:CloseSub()
@@ -801,7 +800,7 @@ function Page:CloseSub()
   if was then Pages.subChanged("chronik") end
 end
 
--- sub-bookmarks (contract journal/Pages.lua): overview · diary · companions · dungeons · milestones. Labels are read late (the language is not
+-- sub-bookmarks (contract journal/Pages.lua): overview · diary · companions · milestones. Labels are read late (the language is not
 -- yet fixed when the file loads)
 local function subTab(key, label, tip1, tip2)
   return setmetatable({ key = key }, { __index = function(_, k)
@@ -813,7 +812,6 @@ Page.subs = {
   subTab("steckbrief", "toProfile", "toProfile", "toProfileTip"),
   subTab("tagebuch", "toDiary", "toDiaryTip", "toDiaryTip2"),
   subTab("weggefaehrten", "toMates", "toMatesTip", "toMatesTip2"),
-  subTab("dungeons", "toDungeons", "toDungeonsTip", "toDungeonsTip2"),
   subTab("meilensteine", "toMilestones", "toMilestonesTip", "toMilestonesTip2"),
 }
 
@@ -827,7 +825,6 @@ function Page:GetSub()
   if self.sub and self.sub == self.diaryView then return "tagebuch" end
   -- the companions bookmark holds two views: the group (matesView) and the people at the fire (fireView)
   if self.sub and (self.sub == self.matesView or self.sub == self.fireView) then return "weggefaehrten" end
-  if self.sub and self.sub == self.dungeonsView then return "dungeons" end
   if self.sub and self.sub == self.milestonesView then return "meilensteine" end
   return "steckbrief"
 end
@@ -838,8 +835,6 @@ function Page:ShowSub(key)
     Page.OpenDiary(self)
   elseif key == "weggefaehrten" then
     Page.OpenCompanions(self)
-  elseif key == "dungeons" then
-    Page.OpenDungeons(self)
   elseif key == "meilensteine" then
     Page.OpenMilestones(self)
   else

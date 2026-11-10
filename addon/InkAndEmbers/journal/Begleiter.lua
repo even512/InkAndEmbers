@@ -426,12 +426,12 @@ function Begleiter.planItem(plan)
   local T = Begleiter.TEXT
   local name = shown(type(plan.label) == "string" and plan.label or plan.text, Begleiter.LINE_MAX) or ""
   local zone = mapName(plan.mapID)
-  local item = { kind = "card", key = "plan:" .. tostring(plan.id), always = true, open = "reise", sound = "todoDone",
+  local item = { kind = "card", key = "plan:" .. tostring(plan.id), always = true, open = "plaene", sound = "todoDone",
     hold = true, duration = Begleiter.PLAN_DURATION, maxAge = Begleiter.PLAN_MAX_AGE, icon = seal(), lines = {},
     head = T.planHead, title = fitted("title", T.planDonePre, name, ""), sub = zone }
   item.after = function()
     local F = Journal.Frame
-    if F and type(F.showSub) == "function" then F.showSub("vorhaben") end
+    if F and type(F.openTodo) == "function" then F.openTodo() end
   end
   local lines = item.lines
   local how = plan.how

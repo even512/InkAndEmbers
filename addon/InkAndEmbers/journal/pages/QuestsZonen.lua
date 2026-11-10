@@ -450,7 +450,7 @@ function View.new(page, left, right)
   ui.listL = newList(self, f, LX, ROWS_L, LW)
   local K = kit()
   if K and K.pager then ui.pagerL = K.pager(f, ui.listL, LX, LW, PAGER_L_CY, { T.prevPage, T.nextPage }) end
-  D.escKeys(f, function() self.page:ShowSub("historie") Pages.subChanged("quests") end)
+  D.escKeys(f, function() Pages.escape(self.page.id or "quests") end)
 
   -- right: rule and legend; below the other continent(s)
   local r = CreateFrame("Frame", nil, tabR)

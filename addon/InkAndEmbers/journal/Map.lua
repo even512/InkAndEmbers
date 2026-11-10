@@ -1183,6 +1183,34 @@ function Map.switchFinish(m)
   return sw ~= nil
 end
 
+-- K2 zone change while replaying: the new map (already drawn) fades in from Map.SWITCH_ALPHA over Map.SWITCH_FADE s. With
+-- reduced motion (or without the frame API) it just stands there. -> true if a fade runs
+function Map.fadeIn(m)
+  if m.reduceMotion or type(CreateFrame) ~= "function" or not m.viewport then
+    setFade(m, 1)
+    return false
+  end
+  if m.switching then return false end -- a zoom switch fades on its own
+  if not m.fadeFrame then
+    m.fadeFrame = CreateFrame("Frame", nil, m.viewport)
+    if m.viewport.HookScript then
+      m.viewport:HookScript("OnHide", function()
+        if m.fadeFrame then m.fadeFrame:SetScript("OnUpdate", nil) end
+        setFade(m, 1)
+      end)
+    end
+  end
+  local t = 0
+  setFade(m, Map.SWITCH_ALPHA)
+  m.fadeFrame:SetScript("OnUpdate", function(self, dt)
+    t = t + (tonumber(dt) or 0)
+    local f = min(1, t / Map.SWITCH_FADE)
+    setFade(m, Map.SWITCH_ALPHA + (1 - Map.SWITCH_ALPHA) * f)
+    if f >= 1 then self:SetScript("OnUpdate", nil) end
+  end)
+  return true
+end
+
 -- Perform the switch: with reduced motion (or without the frame API) hard, else fade out -> switch -> fade in. While fading
 -- out the wheel does nothing; if the scene changes meanwhile (new data, toggle) the switch is dropped.
 local function runSwitch(m, dir, target, make)
@@ -1854,6 +1882,15 @@ function Map.setProgress(m, p)
     end
   end
   local playing = p ~= huge
+  -- before the first drawn segment (K2: the click on an act/chapter jumps to its start): the arrow waits at the start point
+  if playing and not tipX then
+    for i, s in ipairs(m.segs) do
+      if s.p0 >= p then
+        tipX, tipY, tipIdx = s.x1, s.y1, i
+        break
+      end
+    end
+  end
   for _, e in ipairs(m.noteList or {}) do
     local vis = not playing or e.p <= p
     e.o.fs:SetShown(vis)

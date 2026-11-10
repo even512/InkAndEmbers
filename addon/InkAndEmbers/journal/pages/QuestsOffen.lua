@@ -50,7 +50,7 @@ local T = ns.Locale.ns("p.QuestsOffen", {
   unplaced = "%d Zonen ohne Lage auf dieser Karte",
   pick = "Wählt links eine Quest oder klickt ein ! auf der Karte.",
   levelWord = "Stufe ", levelUnknown = "Stufe ?", minWord = "ab Stufe ",
-  toTodo = "Als To Do", toTodoTip = { "Als To Do", "Legt ein Ort-Ziel am Questgeber an (Reise -> To Do)." },
+  toTodo = "Als To Do", toTodoTip = { "Als To Do", "Legt ein Ort-Ziel am Questgeber an (Pläne -> To Do)." },
   todoDone = "To Do angelegt.", todoFail = "Kein To Do angelegt: ", todoNoPlace = "Questgeber ohne Kartenpunkt",
   todoReasons = { voll = "To-Do-Liste ist voll", ["nicht-bereit"] = "To Do noch nicht bereit", ["kein-plan"] = "To Do nicht verfügbar",
     ["kein-ort"] = "Questgeber ohne Kartenpunkt" },

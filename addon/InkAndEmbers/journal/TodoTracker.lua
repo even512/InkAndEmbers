@@ -337,9 +337,8 @@ function TodoTracker.openBook()
   local Access, Frame = Journal.Access, Journal.Frame
   if not Access or not Frame then return false end
   if not Access.isOpen() and not Access.open() then return false end
-  Frame.showPage(Frame.HOME or "reise")
-  if Frame.currentSub and Frame.currentSub() ~= "vorhaben" then Frame.showSub("vorhaben") end
-  return true
+  if type(Frame.openTodo) == "function" then return Frame.openTodo() and true or false end -- tab Pläne, "To Do"
+  return false
 end
 
 local function setFont(fs, kind, size)

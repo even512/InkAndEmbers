@@ -1,4 +1,5 @@
--- Chronik sub-view "Dungeons", opened via the sub-bookmark (pages/Chronik.lua Page.subs); Esc leads back to the overview.
+-- Sub-view "Durchläufe" (dungeon runs) of the tab Dungeons, opened via its first sub-bookmark (pages/Dungeons.lua; until I12 it
+-- sat in the Chronik). The page passed to View.new is the Dungeons page module.
 -- Data: model/Dungeons.lua (runs folded from the instance visits) plus model/Companions.lua for the group. Left: list of the
 -- runs (newest first), right: the chosen run as a book page (when, how long, level, kills, bosses with failed attempts, group,
 -- deaths, finds, quests). All foreign text (instance, boss, player, item and quest names) goes through Sanitize.display.
@@ -460,7 +461,7 @@ function View.new(page, left, right)
   end
   W.NewPageHead(l, { side = "L" }):SetTexts(T.brand, T.page)
   W.NewPageHead(r, { side = "R" }):SetTexts("", T.page)
-  D.escKeys(l, function() page:CloseSub() end) -- Esc -> overview
+  -- no Esc catcher: "Durchläufe" is the first sub-bookmark of the tab Dungeons (I12), so Esc closes the book there
   local headL = D.NewSectionHead(l, T.title, { size = SZ.xl })
   headL:SetPoint("TOPLEFT", l, "TOPLEFT", IN_X, -(TITLE_Y - 6))
   self.count = font(l, "label", SZ.s, "sepia", "LEFT")

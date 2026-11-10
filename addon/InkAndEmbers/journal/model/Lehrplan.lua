@@ -132,6 +132,19 @@ function Lehrplan.resetCache()
   cache = {}
 end
 
+-- Hunter pet ability IDs (pets.<CLASS> in the data: Beast Training, taught by the pet trainer, not part of the class plan).
+-- Not shown anywhere yet; the Trainer collector uses them to tell a pet trainer window from a class trainer window.
+function Lehrplan.petIds(cls)
+  local D = ns.TrainerSpells
+  local text = type(cls) == "string" and type(D) == "table" and type(D.pets) == "table" and D.pets[cls] or nil
+  local out = {}
+  for line in gmatch(type(text) == "string" and text or "", "[^\n]+") do
+    local id = match(line, "^%d+\t(%d+)\t")
+    if id then out[#out + 1] = tonumber(id) end
+  end
+  return out
+end
+
 function Lehrplan.dataInfo()
   local D = ns.TrainerSpells
   if type(D) ~= "table" then return nil end

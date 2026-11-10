@@ -157,12 +157,12 @@ const VIEWS = {
   kampf: ["kampf", "", ""],
   tode: ["kampf", SUB("kampf", "tode")[2], SUB("kampf", "tode")[3]],
   quests: ["quests", "", ""],
-  offen: ["quests", OPEN_QUESTS_LUA(1420), 'NS.Journal.QuestsPage:ShowSub("historie")'],
+  offen: ["plaene", OPEN_QUESTS_LUA(1420), 'NS.Journal.PlaenePage:ShowSub("vorhaben")'], // I12: Offene Quests unter Plaene
   funde: ["schaetze", SUB("schaetze", "funde")[2], SUB("schaetze", "funde")[3]],
   quellen: ["schaetze", SUB("schaetze", "quellen")[2], SUB("schaetze", "quellen")[3]],
   notizen: ["notizen", "", ""],
   notizenedit: ["notizen", SUB("notizen", "edit")[2], SUB("notizen", "edit")[3]],
-  todo: ["reise", SUB("reise", "todo")[2], SUB("reise", "todo")[3]],
+  todo: ["plaene", SUB("plaene", "todo")[2], SUB("plaene", "todo")[3]], // I12: To Do unter Plaene
 };
 
 const pngSize = (file) => {

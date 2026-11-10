@@ -1,5 +1,65 @@
 # Changelog
 
+## 1.0.10
+
+**At a glance:** your journey is now told in **Acts and Chapters** with a real **table of contents**, the book has **9 tabs** with the new tabs Dungeons and Plans, the journey map can **reveal whole zones** and **hide its icons**, and the book now speaks **Brazilian Portuguese**. Plus fixes for elite screenshots and hunter pet training. **None of your recorded data changes.**
+
+### Your journey, reorganized: Acts and Chapters
+
+This is the biggest change in this update. Until now almost every zone change started a new chapter: a quick trip to the capital, a short stop in the next zone, a flight with a stopover. By level 20 that could add up to 30–40 chapters, many only a few minutes long, and the story of your journey got lost in them.
+
+**Nothing is lost.** Your recorded journey is not touched at all. Acts and chapters are worked out from it every time the book opens. Every kill, quest, death, screenshot and the full route are still there, they are only arranged differently.
+
+**Acts** are the big sections of your adventure, built around the zones where you spent the most time, for example "Act I · Dun Morogh, level 1–13". Travel and short trips before or between them belong to the act they lead into.
+
+**Chapters** are the zone visits inside an act. A visit only becomes a chapter if it carries some weight: at least 25 minutes, a level-up, a dungeon, a boss, a death, or 3 or more turned-in quests. Smaller visits are detours inside their chapter, and a short hop between two parts of the same chapter no longer splits it. In our test journey (level 21) this turned 36 chapters into 9 acts with 20 chapters.
+
+**A table of contents:** the journey opens on a new golden bookmark, **Contents**, the new default view (it replaces "Chapters"). The left page now reads like the contents of a real book: your acts with their wax seal, zone, levels and play time, and under the open act its chapters. On long journeys the acts are grouped into **volumes** (Volume I: level 1–20, Volume II: 21–40, Volume III: 41–60), so even at level 60 everything fits on one page without scrolling. Only the volume and act you are reading are unfolded.
+
+**How to use it:** click an act to unfold it, click a chapter to open it. A click only jumps to the start on the map, then press play or scrub the timeline yourself. The right page shows the chosen act or chapter with its numbers and, in WoW Forever, how much of the zone you have completed. Esc or a right-click goes from a chapter back to its act. The old notes on the map are gone, so the map stays clear.
+
+**The map follows you:** while playing or scrubbing, the map switches to the zone you are in and back again, and shows the continent with the flight path during flights, instead of the arrow running off the map. Pausing keeps the current zone. Whole Journey now counts real zone stays instead of chapters.
+
+### New book order: 9 tabs instead of 7
+
+The book had grown, and some pages sat where you wouldn't look for them: dungeons were split between Chronicle and Quests, and Training sat under Quests. The new order keeps looking back and planning ahead apart. **Nothing was removed, the pages only moved.**
+
+**Where did my page go?**
+
+Your dungeon runs: Chronicle › Dungeons is now **Dungeons › Runs**.
+
+Quests for a dungeon: Quests › Dungeons is now **Dungeons › Dungeon Quests**.
+
+Your To-Do list: Journey › To-Do is now **Plans › To-Do**.
+
+Training (spells to learn): Quests › Training is now **Plans › Training**.
+
+Open quests: stay at **Quests › Open**.
+
+**All tabs at a glance:** Journey (Contents, Whole Journey) · Chronicle (Profile, Journal, Companions, Milestones) · **Dungeons** (Runs, Dungeon Quests) · Combat · Quests (History, Open, Zones) · **Plans** (To-Do, Training) · Treasures (Overview, Gear finds, Gear Journey) · Moments · Notes.
+
+**Good to know:** map pins, the to-do tracker, the "To-Do done" note, `/chronik open` and `/chronik training` all lead to the new place. "Read quest text" in Dungeon Quests opens the quest history, and Esc or "Back" takes you back. In another character's book, Plans is hidden, Dungeons shows only the runs and Quests only the history. In Retail, Dungeons shows the runs, Plans only the To-Do, and Quests History and Open.
+
+### More new features
+
+**Reveal map:** a new checkbox "Reveal map" next to "Show fights" under the journey map (also in the settings, off by default) shows the whole zone uncovered instead of only the areas you explored yourself. Where the game has no map overlays for a zone, the explored areas stay as before.
+
+**Show icons:** a new checkbox "Show icons" on the continent map (also in the settings, on by default) hides all event icons and pins, such as deaths, level-ups, flight points, hearthstones, dungeons, moments and notes, so you can see just your route and where you are.
+
+**Brazilian Portuguese** translation by paulovnas (thank you!). It is selected automatically on a ptBR client and can be chosen anywhere with the language setting or `/chronik language ptbr` (takes effect after `/reload`). Newer texts that are not translated yet show in English. Tutorial illustrations and the bundled offline search names use the English versions.
+
+**Want Ink & Embers in your language?** Translations from players are very welcome, and the Portuguese one shows how well that works. All texts are plain Lua files in `addon/InkAndEmbers/locales/` (start from the `enUS_*.lua` files) on GitHub: github.com/even512/InkAndEmbers. Translate what you like and open a pull request there, or send the files via a CurseForge comment or a GitHub issue. Partial translations are fine, anything not translated yet simply shows in English. I build it in and credit you in the changelog.
+
+### Changes
+
+**Training data updated:** priest racial spells now show their correct trainer prices.
+
+### Fixes
+
+**No more screenshots for every elite:** elite kills no longer trigger an automatic screenshot or moment, because in elite areas every mob of the group produced one. Rares and bosses still do. The very first elite kill is still noted as "First elite foe" (without a screenshot).
+
+**Hunter pet training (WoW Forever):** the 45 pet abilities from Beast Training (Great Stamina, Natural Armor, the resistances, Growl) no longer show up in Training or on the To-Do as if they were class spells. Visiting the pet trainer no longer counts as a class trainer visit and no longer overwrites your class trainer's location. Thanks to Tairgire for the report. A separate "Pet training" section for hunters is planned.
+
 ## 1.0.9
 
 ### New
@@ -10,7 +70,7 @@
 - **Zone completed (WoW Forever):** every chapter card of the journey shows how many of the zone's quests you have done, e.g. "Zone completed: 62% (41/66)". The tooltip lists up to eight quests still open and the data source. Counted are the quests of your faction, race and class in that zone, also those you can only take later; group, dungeon, raid, repeatable, profession and reputation quests do not count, and zones with fewer than 10 countable quests show no share. At 100% the line turns gold with a small medal stamp; the whole journey card shows "Zones completed: 3 / 24". Not shown in Retail or in another character's book.
 - **New medal "Zone Master" (Quests & Lore):** bronze, silver and gold for 1, 4 and 10 completed zones; the tooltip lists them. Zones you have already completed are entered quietly at the first login after the update, without a flood of pop-ups. WoW Forever only.
 - **Zone overview (WoW Forever):** the Quests tab has a new last bookmark "Zones" with every zone that counts for your character, grouped by continent (the one your journey began on comes first) and sorted by level range, e.g. "Tirisfal Glades, Level 1-12, 100% · completed" or "Silverpine Forest, Level 10-22, 51% (27/52)". Each row has a progress bar; completed zones turn gold with the medal stamp, zones you have not entered yet stay pale. The top shows "Zones completed 4 / 30" and your progress towards the "Zone Master" medal. Hover a zone for its open quests, click it to jump to the "Open" bookmark of that zone. The numbers are the same as on the chapter cards. Not shown in Retail or in another character's book.
-- **Share with a link:** a new "Share" sticker on the journey card (and the row "Share your journey" in the "..." menu) leads to the web page where you can read your book on screen. "Save & show link" saves your journey (the interface reloads once, only on your click, through a secure /reload button) and after the reload the link window opens by itself - never during combat; "Without saving" shows it at once with the state of your last logout or reload. The link only carries the character's ID and the view (as a part after the #, which your browser never sends anywhere; no name, no realm); drag the file InkAndEmbers.lua onto the page and your character is already selected. Both windows ("Share your journey", "Link to the web page") and the save window use the light parchment of the other notes.
+- **Your journey on the web, ready to share:** press "Share" on the journey card and the book gives you a link to the Ink & Embers website. Open it, drop in your saved file and your whole adventure is laid out on one page: your route on the real maps, replayed step by step, your chronicle, medals, dungeons and milestones. From there you can turn your journey into a short video, a GIF or a picture in a few clicks and post it wherever you like, or print the whole book as a PDF. Everything happens in your browser, nothing is uploaded, and other players' names can be hidden with one switch.
 
 ### Changes
 - **Save reminder is now off by default:** the small "Save your journey?" window no longer pops up on its own. Turn on "Save reminder" (Options > AddOns > Ink & Embers > Miscellaneous) to get the old behaviour. WoW only writes your data on logout or reload, so after a crash everything since your last login is lost; the tooltip says so.

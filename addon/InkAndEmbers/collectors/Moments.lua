@@ -157,12 +157,16 @@ handlers.PLAYER_LEVEL_UP = function(self, level)
   queueShot(self, "levelup")
 end
 
--- rare, elite and boss as a moment and screenshot. Elite in instances is routine: only rare and boss there.
+-- rare and boss as a moment and screenshot. Elite is routine (whole elite areas): no moment, no screenshot;
+-- only the very first elite kill outside instances is noted as "first_elite" (no screenshot).
 handlers.FC_KILL = function(self, npcID, level, cls)
   cls = str(cls)
   local tag = Core.specialTag(cls, level)
   if not tag then return end
-  if tag == "elite" and call(IsInInstance) == true then return end
+  if tag == "elite" then
+    if call(IsInInstance) ~= true then first("first_elite", npcID, cls or tag) end
+    return
+  end
   moment("kill", npcID, cls or tag)
   first("first_" .. tag, npcID, cls or tag)
   queueShot(self, "kill")

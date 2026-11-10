@@ -1,5 +1,6 @@
 -- Collector 'Trainer' (WoW Forever only; on retail it stays idle): class trainer, Lehrplan and talent points.
--- 1. Silent visit collector: on TRAINER_SHOW/TRAINER_UPDATE (batched) the services of a CLASS trainer are read (name, rank text,
+-- 1. Silent visit collector: on TRAINER_SHOW/TRAINER_UPDATE (batched) the services of a CLASS trainer are read (a hunter pet
+--    trainer window - Beast Training - is never taken for one, see isPetWindow) (name, rank text,
 --    type, level, cost) into snapshots.trainerSpells["<name> #<rank>"] and the trainer's place (player position at the visit) into
 --    snapshots.trainers[npcID] (read by Journal.Lehrplan: nearest trainer). The service names offered as "available" go to
 --    snapshots.state.trainerVisit (level, names): the Lehrplan then knows which entries this trainer really offered.
@@ -15,7 +16,7 @@
 -- 4. Level-up note: after PLAYER_LEVEL_UP the narrator note (journal/Begleiter.lua, showNote) glides in from the left and speaks in
 --    flowing text (6 random variants per case): congratulation with the player name, what is learnable (up to 3 spell names),
 --    total cost (or what is missing), nearest trainer, free talent points (then no talent toast at the level-up). Nothing
---    learnable: the note still comes (next level with new spells). Click: opens the book at Quests -> Lehrplan and closes the note
+--    learnable: the note still comes (next level with new spells). Click: opens the book at Pläne -> Lehrplan and closes the note
 --    (in combat: chat hint, note stays); the small x only closes. In combat it waits for PLAYER_REGEN_ENABLED, an open
 --    welcome note first. Setting levelSlip (default on); /chronik stufe shows it as a preview.
 -- Only reading APIs, each in pcall with secret-value guards; nothing is bought or clicked.
@@ -259,6 +260,22 @@ function Trainer.readServices()
 end
 
 -- class trainer? at least one service (no profession) whose name is a spell of the own class plan
+-- Pet trainer (hunter Beast Training): its window never counts as class trainer (no trainerVisit, no trainer place)
+local function petNames()
+  local LP = L()
+  local p = LP and LP.player()
+  if not (p and type(LP.petIds) == "function") then return nil end
+  local set, n = {}, 0
+  for _, id in ipairs(LP.petIds(p.class)) do
+    local info = LP.spellInfo(id)
+    if info and not info.missing and info.name then
+      set[info.name] = true
+      n = n + 1
+    end
+  end
+  return n > 0 and set or nil
+end
+
 local function classNames()
   local LP = L()
   local p = LP and LP.player()
@@ -272,7 +289,39 @@ local function classNames()
   return set
 end
 
+-- C_Trainer.GetTrainerType() == Enum.TrainerType.Pet (only where both exist; pcall, secret-safe)
+local function petWindowType()
+  local CT = rawget(_G, "C_Trainer")
+  if type(CT) ~= "table" or isSecret(CT) or type(CT.GetTrainerType) ~= "function" then return false end
+  local E = rawget(_G, "Enum")
+  local TT = type(E) == "table" and not isSecret(E) and E.TrainerType or nil
+  local petType = type(TT) == "table" and not isSecret(TT) and num(TT.Pet) or nil
+  if not petType then return false end
+  local r = callAll(CT.GetTrainerType)
+  return r ~= nil and num(r[1]) == petType
+end
+
+-- Pet trainer window: the window type says Pet, or (fallback) its rows name pet abilities and no row names a class spell
+function Trainer.isPetWindow(services)
+  if petWindowType() then return true end
+  local pets = petNames()
+  if not pets then return false end
+  local classSet = classNames() or {}
+  local anyPet = false
+  for _, s in ipairs(services) do
+    if not s.profession and s.name then
+      if pets[s.name] then
+        anyPet = true
+      elseif classSet[s.name] then
+        return false
+      end
+    end
+  end
+  return anyPet
+end
+
 function Trainer.isClassTrainer(services)
+  if Trainer.isPetWindow(services) then return false end
   local set = classNames()
   if not set then return false end
   for _, s in ipairs(services) do
@@ -745,7 +794,7 @@ function Trainer.levelSlipContent(level)
   return out
 end
 
--- Click on the note: open the book at Quests -> Lehrplan. In combat the book stays shut (chat hint) and the note stays. Returns
+-- Click on the note: open the book at Pläne -> Lehrplan. In combat the book stays shut (chat hint) and the note stays. Returns
 -- false = keep the note (also when the page could not be opened: chat hint), otherwise Begleiter closes it.
 function Trainer.openLehrplan()
   if inCombat() then
@@ -887,7 +936,7 @@ function Trainer.diagLine()
     free ~= nil and free or T.unknown, self.shape and T("diagShape", self.shape) or ""))
 end
 
--- /chronik lehrplan [status]: open the page (Quests -> Lehrplan) or print the state line
+-- /chronik lehrplan [status]: open the page (Pläne -> Lehrplan) or print the state line
 function Trainer.slash(rest)
   local print_ = Core.print
   local LP = L()

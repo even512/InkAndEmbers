@@ -1087,7 +1087,14 @@ const BOOK_KEY = (rgba, w, h) => keyNeutralEdge(rgba, w, h);
 // (tile) bis vor das Bandende, dann das Original ab Quellspalte tail (hinter dem Wort, mit Schwalbenschwanz); darauf das Wort in
 // Gold (Blackletter "Old English Text MT", Verlauf und Praegeschatten wie die Stickerei). Danach faerbt BOOKMARKS_KEY die Zelle um:
 // alles ausser dem Gold (Farbton 30..65 Grad, gesaettigt) bekommt den Farbton hue (Petrol), Helligkeit und Saettigung skaliert.
-export const BOOKMARK_IDS = ["reise", "chronik", "kampf", "quests", "schaetze", "momente", "notizen"];
+// I12 (Buch neu ordnen): BOOKMARK_IDS = Zellen der Hauptreiter (Media/BookmarksBronze.tga, Theme.BOOKMARK_CELL), nicht die
+// Reiter-Reihenfolge (Pages.ORDER). Zellen 7 und 8 (dungeons, plaene) kommen aus einer zweiten Quelle (TAB_BAND_CROP2). Die
+// Unter-Lesezeichen (Media/Bookmarks.tga) haben nur die ersten sieben Zellen (SUB_BOOKMARK_IDS); dungeons/plaene leihen sich dort
+// eine vorhandene Farbe (Theme.SUB_BOOKMARK_CELL).
+export const BOOKMARK_IDS = ["reise", "chronik", "kampf", "quests", "schaetze", "momente", "notizen", "dungeons", "plaene"];
+export const SUB_BOOKMARK_IDS = BOOKMARK_IDS.slice(0, 7);
+/** Reihenfolge der Reiter im Buch (= Pages.ORDER / Theme.TABS), unabhaengig von den Zellen */
+export const TAB_ORDER = ["reise", "chronik", "dungeons", "kampf", "quests", "plaene", "schaetze", "momente", "notizen"];
 export const BOOKMARK_MID_Y = [192.5, 427.5, 664.5, 902.5, 1137, 1371];
 export const BOOKMARK_SYNTH = {
   notizen: { from: 0, word: "Notizen", tail: 1560, tile: [925, 1215], center: 300, size: 58, hue: 190, sat: 0.78, val: 0.56,
@@ -1131,7 +1138,7 @@ const BOOKMARKS_HTML = () => {
   const z = a.cellW / c.w;
   const src = artUrl(c.file);
   const bg = (srcX, y0) => `background:#fff url(${src}) ${-srcX * z}px ${-y0 * z}px / ${c.srcW * z}px ${c.srcH * z}px no-repeat`;
-  const cells = BOOKMARK_IDS.map((id, i) => {
+  const cells = SUB_BOOKMARK_IDS.map((id, i) => {
     const syn = BOOKMARK_SYNTH[id];
     if (syn) return synthCell(i, syn, z, bg);
     const y0 = Math.round(BOOKMARK_MID_Y[i] - c.h / 2);
@@ -1164,15 +1171,15 @@ function synthCell(i, syn, z, bg) {
 // Weiss freistellen, Zelle fuer Zelle (Flood-Fill vom Zellenrand aus), dann die Kante einziehen; unter den sechs Zellen bleibt alles leer
 const BOOKMARKS_KEY = (rgba, w, h) => {
   const a = BOOKMARK_ATLAS;
-  for (let i = 0; i < BOOKMARK_IDS.length; i++) {
+  for (let i = 0; i < SUB_BOOKMARK_IDS.length; i++) {
     const cell = new Uint8Array(a.cellW * a.cellH * 4);
     for (let y = 0; y < a.cellH; y++) cell.set(rgba.subarray(((i * a.cellH + y) * w) * 4, ((i * a.cellH + y) * w + a.cellW) * 4), y * a.cellW * 4);
     keyWhite(cell, a.cellW, a.cellH, { from: 706, to: 748 });
-    const syn = BOOKMARK_SYNTH[BOOKMARK_IDS[i]];
+    const syn = BOOKMARK_SYNTH[SUB_BOOKMARK_IDS[i]];
     if (syn) recolorBookmark(cell, a.cellW, a.cellH, syn);
     for (let y = 0; y < a.cellH; y++) rgba.set(cell.subarray(y * a.cellW * 4, (y + 1) * a.cellW * 4), ((i * a.cellH + y) * w) * 4);
   }
-  for (let y = BOOKMARK_IDS.length * a.cellH; y < h; y++) for (let x = 0; x < w; x++) rgba[(y * w + x) * 4 + 3] = 0;
+  for (let y = SUB_BOOKMARK_IDS.length * a.cellH; y < h; y++) for (let x = 0; x < w; x++) rgba[(y * w + x) * 4 + 3] = 0;
   return erodeEdge(rgba, w, h, 1, { keep: "left" });
 };
 
@@ -1191,22 +1198,44 @@ export const TAB_BAND_CROP = {
   file: "bookmarks_bronze.jpg", srcW: 2400, srcH: 1792, h: 236, margin: 4, cap: 272,
   rows: [[34, 261, 2235], [285, 511, 2235], [535, 761, 2234], [783, 1009, 2234], [1030, 1255, 2232], [1280, 1507, 2225], [1530, 1757, 2221]],
 };
+// I12: zweite Quelle fuer die Zellen 7 (dungeons, Tor, goldene Naht) und 8 (plaene, Schriftrolle, cremefarbene Naht):
+// art/journal/bookmarks_bronze_neu2.jpg (2752 x 1536, Gemini, Magenta-Grund, freigegeben 09.11.2026). Gemessen 09.11.2026
+// (PIL, gleiche Regel min(R, B) - G < 120): Laschen y 304..732 / 793..1205 (Hoehe 429 / 413 inkl. Kappe, Lederband 389 / 367),
+// links ab x 62, rechte Kappenkante x 2691 / 2690; Kappe 443 / 441 breit. Die Laschen sind hier groesser und verschieden hoch:
+// je Zeile wird mit s = Laschenhoehe / baseH (228 = Hoehe der alten Laschen inkl. Kappe) skaliert, Zuschnitt h * s um die Mitte,
+// rechts margin * s hinter der Kappe. So sitzen Kappe und Lederband im selben Verhaeltnis in der 480 x 102-Zelle wie bei den alten.
+export const TAB_BAND_CROP2 = {
+  file: "bookmarks_bronze_neu2.jpg", srcW: 2752, srcH: 1536, baseH: 228,
+  rows: [[304, 732, 2691], [793, 1205, 2690]],
+};
+/** Quelle der Zelle i: { file, srcW, srcH, row, s } (Zellen 0..6 alte Quelle mit s = 1, ab 7 TAB_BAND_CROP2) */
+export function tabBandSource(i) {
+  const n = TAB_BAND_CROP.rows.length;
+  if (i < n) return { file: TAB_BAND_CROP.file, srcW: TAB_BAND_CROP.srcW, srcH: TAB_BAND_CROP.srcH, row: TAB_BAND_CROP.rows[i], s: 1 };
+  const c2 = TAB_BAND_CROP2, row = c2.rows[i - n];
+  if (!row) return null;
+  return { file: c2.file, srcW: c2.srcW, srcH: c2.srcH, row, s: (row[1] - row[0] + 1) / c2.baseH };
+}
 /** Zuschnitt (Quellpixel) der Lasche i -> { x, y, w, h } */
 export function tabBandCrop(i) {
   const c = TAB_BAND_CROP, a = TAB_BAND_ATLAS;
-  const [y0, y1, right] = c.rows[i];
-  const w = (c.h * a.cellW) / a.cellH;
-  return { x: right + c.margin - w, y: (y0 + y1) / 2 - c.h / 2, w, h: c.h };
+  const src = tabBandSource(i);
+  const [y0, y1, right] = src.row;
+  const h = c.h * src.s;
+  const w = (h * a.cellW) / a.cellH;
+  return { x: right + c.margin * src.s - w, y: (y0 + y1) / 2 - h / 2, w, h };
 }
 /** linke Kante der Kappe als Anteil der Zellenbreite (0..1), fuer die Beschriftung links davon (Frame.TAB.capU) */
 export const tabBandCapU = () => 1 - (TAB_BAND_CROP.cap + TAB_BAND_CROP.margin) / tabBandCrop(0).w;
 const TAB_BAND_HTML = () => {
-  const a = TAB_BAND_ATLAS, c = TAB_BAND_CROP;
-  const src = artUrl(c.file);
+  const a = TAB_BAND_ATLAS;
+  const urls = {};
   const cells = BOOKMARK_IDS.map((id, i) => {
+    const src = tabBandSource(i);
     const r = tabBandCrop(i);
     const z = a.cellH / r.h;
-    return `<div style="position:absolute;left:0;top:${i * a.cellH}px;width:${a.cellW}px;height:${a.cellH}px;overflow:hidden;background:#f0f url(${src}) ${-r.x * z}px ${-r.y * z}px / ${c.srcW * z}px ${c.srcH * z}px no-repeat"></div>`;
+    urls[src.file] = urls[src.file] || artUrl(src.file);
+    return `<div style="position:absolute;left:0;top:${i * a.cellH}px;width:${a.cellW}px;height:${a.cellH}px;overflow:hidden;background:#f0f url(${urls[src.file]}) ${-r.x * z}px ${-r.y * z}px / ${src.srcW * z}px ${src.srcH * z}px no-repeat"></div>`;
   });
   return page(a.w, a.h, `<div style="position:absolute;inset:0;background:#f0f"></div>` + cells.join(""));
 };
@@ -1218,6 +1247,134 @@ const TAB_BAND_KEY = (rgba, w, h) => {
     rgba[(y * w + x) * 4 + 3] = 0;
   }
   return rgba;
+};
+
+// K2 Nachtrag (Spieltest 10.11.2026): Akt-Zettel. Gemini-Bilder, freigegeben 10.11.2026, Magenta-Grund:
+//   art/journal/act_card.jpg (2752 x 1536): Pergamentkarte mit Doppelrand, links ein grosses leeres rotes Wachssiegel.
+//   art/journal/act_seals_1-10.jpg, _11-20, _21-30 (je 2752 x 1536, 5 x 2 Raster): Siegel mit eingepraegten roemischen Zahlen.
+// Gemessen 10.11.2026 (PIL): Karte (Nicht-Magenta, min(R, B) - G < 120) x 155..2596, y 140..1412 inkl. Schlagschatten; Wachs des
+// Kartensiegels (R - G > 50, Helligkeit < 160) x 218..1107, y 294..1201 (Mitte 662,5 / 747,5; 890 x 908). Zahlensiegel: Wachs je
+// 469..471 x 474..476, Mitten x 343 / 859 / 1375 / 1890 / 2406, y 390 / 1142 (alle drei Boegen gleich, +-2 px). Das Kartensiegel ist
+// 1,90-mal so gross wie ein Zahlensiegel.
+// K4 (Inhaltsverzeichnis statt Zettel): die Karte selbst wird nicht mehr gebraucht, nur ihr leeres Siegel. Media/ActSeals.tga 1024 x 512: 8 x 4 Zellen zu 128 px, Zelle i (0..29) = Siegel i + 1 (Zuschnitt
+// 520 x 520 um die Wachsmitte), Zelle 30 = das leere Kartensiegel (Zuschnitt 520 * 1,90 um seine Mitte, Papier per Wachsmaske
+// weggenommen) als Rueckfall ab Akt XXXI (journal/Contents.lua praegt dann die Zahl ein).
+export const ACT_CARD = { file: "act_card.jpg", srcW: 2752, srcH: 1536, crop: { x: 150, y: 135, w: 2450, h: 1285 }, w: 512, h: 256,
+  seal: { cx: 662.5, cy: 747.5, scale: 1.9 } };
+export const ACT_SEALS = {
+  files: ["act_seals_1-10.jpg", "act_seals_11-20.jpg", "act_seals_21-30.jpg"], srcW: 2752, srcH: 1536,
+  xs: [343, 859, 1375, 1890, 2406], ys: [390, 1142], side: 520, cell: 128, cols: 8, w: 1024, h: 512, empty: 30,
+};
+/** Zelle i des Siegel-Atlas -> { file, x, y, side } (Quellpixel) */
+export function actSealCrop(i) {
+  const s = ACT_SEALS;
+  if (i === s.empty) {
+    const c = ACT_CARD.seal, side = s.side * c.scale;
+    return { file: ACT_CARD.file, x: c.cx - side / 2, y: c.cy - side / 2, side, srcW: ACT_CARD.srcW, srcH: ACT_CARD.srcH };
+  }
+  const f = Math.floor(i / 10), k = i % 10;
+  const cx = s.xs[k % 5], cy = s.ys[Math.floor(k / 5)];
+  return { file: s.files[f], x: cx - s.side / 2, y: cy - s.side / 2, side: s.side, srcW: s.srcW, srcH: s.srcH };
+}
+const ACT_SEALS_HTML = () => {
+  const s = ACT_SEALS, urls = {};
+  const cells = [];
+  for (let i = 0; i <= s.empty; i++) {
+    const r = actSealCrop(i), z = s.cell / r.side;
+    urls[r.file] = urls[r.file] || artUrl(r.file);
+    const x = (i % s.cols) * s.cell, y = Math.floor(i / s.cols) * s.cell;
+    cells.push(`<div style="position:absolute;left:${x}px;top:${y}px;width:${s.cell}px;height:${s.cell}px;overflow:hidden;background:#f0f url(${urls[r.file]}) ${-r.x * z}px ${-r.y * z}px / ${r.srcW * z}px ${r.srcH * z}px no-repeat"></div>`);
+  }
+  return page(s.w, s.h, `<div style="position:absolute;inset:0;background:#f0f"></div>` + cells.join(""));
+};
+const ACT_SEALS_KEY = (rgba, w, h) => {
+  const s = ACT_SEALS;
+  keyMagenta(rgba, w, h);
+  // leeres Siegel aus der Karte: Papier weg (Wachsmaske weich: rot und dunkel genug), nur das Wachs bleibt
+  const ex = (s.empty % s.cols) * s.cell, ey = Math.floor(s.empty / s.cols) * s.cell;
+  const clamp = (v) => Math.max(0, Math.min(1, v));
+  for (let y = ey; y < ey + s.cell; y++) for (let x = ex; x < ex + s.cell; x++) {
+    const o = (y * w + x) * 4;
+    const r = rgba[o], g = rgba[o + 1], b = rgba[o + 2];
+    // dazu ein Kreis um die Siegelmitte: die Doppellinie des Kartenrands links vom Siegel faellt weg
+    const dx = x - ex - s.cell / 2 + 0.5, dy = y - ey - s.cell / 2 + 0.5;
+    const ring = clamp((s.cell * 0.485 - Math.sqrt(dx * dx + dy * dy)) / 2);
+    const a = clamp((r - g - 35) / 25) * clamp((185 - (r + g + b) / 3) / 30) * ring;
+    rgba[o + 3] = Math.round(rgba[o + 3] * a);
+  }
+  // unbenutzte Zellen durchsichtig
+  for (let i = s.empty + 1; i < s.cols * (s.h / s.cell); i++) {
+    const x0 = (i % s.cols) * s.cell, y0 = Math.floor(i / s.cols) * s.cell;
+    for (let y = y0; y < y0 + s.cell; y++) for (let x = x0; x < x0 + s.cell; x++) rgba[(y * w + x) * 4 + 3] = 0;
+  }
+  return rgba;
+};
+
+// K4: Unter-Lesezeichen "Inhalt" der Reise (10.11.2026, Gemini, freigegeben): hängendes goldenes Band mit Kordelrand, Knoten
+// und Quaste, die Schrift ist eingestickt (DE "Inhalt", EN "Contents"). art/journal/subbookmark_contents_de.jpg / _en.jpg, je
+// 1792 x 2400, Magenta-Grund. Gemessen 10.11.2026 (PIL, Nicht-Magenta min(R, B) - G < 120): Band x 380..1412 (1033 breit), oberer
+// Rand y 350, Schrift y ~860..1070, Spitze bis y ~1675 (Knoten), Quaste bis y 2182. Zuschnitt x 360..1433, y 345..2195 (1073 x 1850),
+// breitentreu: Inhalt oben in der Textur (Rest durchsichtig). Magenta per keyMagenta freigestellt. journal/Frame.lua zeigt das Band
+// ohne eigene Beschriftung (der Tooltip bleibt).
+// Moiré (Spieltest 10.11.): die feine Gewebestruktur ergab beim Verkleinern im Spiel waagerechte Streifen. Daher fast 1:1 zur
+// Quelle gerendert (rw 1024 x rh 2048), dort freigestellt und erst dann mit Flaechenmittel (8 x 8, vormultipliertes Alpha) auf
+// 128 x 256 verkleinert, danach ein leichter Weichzeichner (Binomial 1-2-1, ~0,7 px); im Spiel wird das Band 66 px breit gezeigt
+// (~2:1, kein weiteres starkes Verkleinern durch den Client).
+export const SUB_CONTENTS = { files: { DE: "subbookmark_contents_de.jpg", EN: "subbookmark_contents_en.jpg" }, srcW: 1792, srcH: 2400,
+  crop: { x: 360, y: 345, w: 1073, h: 1850 }, w: 128, h: 256, rw: 1024, rh: 2048 };
+const SUB_CONTENTS_HTML = (lang) => () => {
+  const c = SUB_CONTENTS, r = c.crop, z = c.rw / r.w;
+  return page(c.rw, c.rh, `<div style="position:absolute;inset:0;background:#f0f"></div><div style="position:absolute;left:0;top:0;width:${c.rw}px;height:${Math.round(r.h * z)}px;overflow:hidden;background:#f0f url(${artUrl(c.files[lang])}) ${-r.x * z}px ${-r.y * z}px / ${c.srcW * z}px ${c.srcH * z}px no-repeat"></div>`);
+};
+/** Flaechenmittel-Verkleinerung um den ganzzahligen Faktor f mit vormultipliertem Alpha (keine dunklen/rosa Raender) */
+export function boxDown(rgba, w, h, f) {
+  const W = Math.floor(w / f), H = Math.floor(h / f);
+  const out = new Uint8Array(W * H * 4);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let r = 0, g = 0, b = 0, a = 0;
+    for (let dy = 0; dy < f; dy++) for (let dx = 0; dx < f; dx++) {
+      const o = ((y * f + dy) * w + (x * f + dx)) * 4;
+      const al = rgba[o + 3];
+      r += rgba[o] * al; g += rgba[o + 1] * al; b += rgba[o + 2] * al; a += al;
+    }
+    const o = (y * W + x) * 4;
+    if (a > 0) { out[o] = Math.round(r / a); out[o + 1] = Math.round(g / a); out[o + 2] = Math.round(b / a); }
+    out[o + 3] = Math.round(a / (f * f));
+  }
+  return out;
+}
+/** leichter Weichzeichner 1-2-1 (horizontal und vertikal), vormultipliert */
+export function soften(rgba, w, h) {
+  const pm = new Float32Array(w * h * 4);
+  for (let i = 0; i < w * h; i++) {
+    const a = rgba[i * 4 + 3] / 255;
+    pm[i * 4] = rgba[i * 4] * a; pm[i * 4 + 1] = rgba[i * 4 + 1] * a; pm[i * 4 + 2] = rgba[i * 4 + 2] * a; pm[i * 4 + 3] = rgba[i * 4 + 3];
+  }
+  const pass = (src, dx, dy) => {
+    const dst = new Float32Array(src.length);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const xa = Math.max(0, x - dx), xb = Math.min(w - 1, x + dx), ya = Math.max(0, y - dy), yb = Math.min(h - 1, y + dy);
+      for (let c = 0; c < 4; c++) {
+        dst[(y * w + x) * 4 + c] = (src[(ya * w + xa) * 4 + c] + 2 * src[(y * w + x) * 4 + c] + src[(yb * w + xb) * 4 + c]) / 4;
+      }
+    }
+    return dst;
+  };
+  const s = pass(pass(pm, 1, 0), 0, 1);
+  const out = new Uint8Array(rgba.length);
+  for (let i = 0; i < w * h; i++) {
+    const a = s[i * 4 + 3];
+    out[i * 4 + 3] = Math.round(a);
+    if (a > 0) for (let c = 0; c < 3; c++) out[i * 4 + c] = Math.max(0, Math.min(255, Math.round(s[i * 4 + c] * 255 / a)));
+  }
+  return out;
+}
+const SUB_CONTENTS_KEY = (rgba, w, h) => {
+  const c = SUB_CONTENTS;
+  keyMagenta(rgba, w, h);
+  const ch = Math.round(c.crop.h * w / c.crop.w);
+  for (let y = ch; y < h; y++) for (let x = 0; x < w; x++) rgba[(y * w + x) * 4 + 3] = 0;
+  return soften(boxDown(rgba, w, h, w / c.w), c.w, c.h);
 };
 
 // Kartenzeichen: 4 x 4 Zellen zu 64 px, Reihenfolge = Theme.ATLAS (journal/Theme.lua)
@@ -2156,6 +2313,11 @@ export const TEXTURES = [
   { name: "Bookmarks", w: 512, h: 1024, html: BOOKMARKS_HTML, post: BOOKMARKS_KEY, source: "art/journal/" + BOOKMARK_CROP.file },
   { name: "BookmarksBronze", w: TAB_BAND_ATLAS.w, h: TAB_BAND_ATLAS.h, html: TAB_BAND_HTML, post: TAB_BAND_KEY, source: "art/journal/" + TAB_BAND_CROP.file },
   { name: "Markers", w: 256, h: 256, html: MARKERS_HTML },
+  // K4: Unter-Lesezeichen "Inhalt" (Band mit eingestickter Schrift, je Sprache eine Textur)
+  { name: "SubContentsDE", w: SUB_CONTENTS.w, h: SUB_CONTENTS.h, rw: SUB_CONTENTS.rw, rh: SUB_CONTENTS.rh, html: SUB_CONTENTS_HTML("DE"), post: SUB_CONTENTS_KEY, source: "art/journal/" + SUB_CONTENTS.files.DE },
+  { name: "SubContentsEN", w: SUB_CONTENTS.w, h: SUB_CONTENTS.h, rw: SUB_CONTENTS.rw, rh: SUB_CONTENTS.rh, html: SUB_CONTENTS_HTML("EN"), post: SUB_CONTENTS_KEY, source: "art/journal/" + SUB_CONTENTS.files.EN },
+  // K2/K4: Siegel-Atlas mit eingepraegten roemischen Zahlen I..XXX (Inhaltsverzeichnis der Akte)
+  { name: "ActSeals", w: ACT_SEALS.w, h: ACT_SEALS.h, html: ACT_SEALS_HTML, post: ACT_SEALS_KEY, source: "art/journal/" + ACT_SEALS.files[0] },
   // N1: Pinnadel einer Notiz (Reise-Karte, Notizliste): roter Glaskopf mit Glanz, Stahlnadel schraeg nach unten links, die Spitze
   // sitzt in der unteren linken Ecke (Anker im Spiel: Theme.NOTE_PIN.tipX/tipY), weicher Schatten. Ungetoent, voll deckend.
   { name: "NotePin", w: 64, h: 64, html: NOTE_PIN_HTML },

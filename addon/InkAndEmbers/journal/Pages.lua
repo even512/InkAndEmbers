@@ -25,6 +25,8 @@
 --                               the logged-in character (live data or writing); Pages.subs and Pages.tabs (row.hidden)
 --                               already leave them out, Pages.show refuses a hidden page ("nur-eigen"). The journey
 --                               sub-bookmarks live in Frame (Frame.SUBTABS_REISE): the UI filters them with guestAllows.
+--   Pages.escape(id)           Esc in a sub-view of tab id: back to where a cross-tab jump came from (Frame.jumpBack), otherwise
+--                               to the first visible sub-bookmark of the tab
 local _, ns = ...
 
 local Journal = ns.Journal or {}
@@ -34,7 +36,7 @@ local Pages = {}
 Journal.Pages = Pages
 
 Pages.HOME = "reise"
-Pages.ORDER = { "reise", "chronik", "kampf", "quests", "schaetze", "momente", "notizen" }
+Pages.ORDER = { "reise", "chronik", "dungeons", "kampf", "quests", "plaene", "schaetze", "momente", "notizen" }
 Pages.TEXT = ns.Locale.ns("Pages", {
   building = "Tinte trocknet …",
   empty = "Noch keine Einträge in dieser Chronik.",
@@ -43,8 +45,10 @@ Pages.TEXT = ns.Locale.ns("Pages", {
   soon = "kommt bald",
   tab_reise = "Reise",
   tab_chronik = "Chronik",
+  tab_dungeons = "Dungeons",
   tab_kampf = "Kampf",
   tab_quests = "Quests",
+  tab_plaene = "Pläne",
   tab_schaetze = "Schätze",
   tab_momente = "Momente",
   tab_notizen = "Notizen",
@@ -57,13 +61,29 @@ Pages.errors = 0
 local KNOWN = {}
 for i, id in ipairs(Pages.ORDER) do KNOWN[id] = i end
 
--- Twinks: what another character's book leaves out (live data of the logged-in character or writing into the SV)
-Pages.GUEST_HIDDEN = { notizen = true }
+-- Twinks: what another character's book leaves out (live data of the logged-in character or writing into the SV). Pläne (to-dos,
+-- training) belongs wholly to the logged-in character; Dungeons keeps only the runs, Quests only the history (no open quests, zones).
+Pages.GUEST_HIDDEN = { notizen = true, plaene = true }
 Pages.GUEST_HIDDEN_SUBS = {
-  reise = { vorhaben = true },
-  quests = { offen = true, dungeons = true, lehrplan = true, zonen = true },
+  dungeons = { quests = true },
+  quests = { offen = true, zonen = true },
   schaetze = { anprobe = true }, -- the model is the logged-in character (SetUnit "player")
 }
+
+-- I12 (book reordered, 9 tabs): where the sub-pages of the old order live now. Pages.resolve(id, sub) -> id, sub of the new place
+-- (unchanged when nothing moved), so an old call or an old saved marker never leads into the void.
+Pages.MOVED = {
+  reise = { vorhaben = { "plaene", "vorhaben" } },
+  quests = { lehrplan = { "plaene", "lehrplan" }, dungeons = { "dungeons", "quests" } },
+  plaene = { offen = { "quests", "offen" } }, -- the open quests were under Pläne for a day (09.11.2026), now back under Quests
+  chronik = { dungeons = { "dungeons", "laeufe" } },
+}
+function Pages.resolve(id, sub)
+  local m = type(id) == "string" and Pages.MOVED[id]
+  local to = m and type(sub) == "string" and m[sub]
+  if to then return to[1], to[2] end
+  return id, sub
+end
 
 local guestGuid = nil
 local guestFns = {}
@@ -301,6 +321,18 @@ function Pages.showSub(id, key)
   end
   Pages.subChanged(id)
   return true
+end
+
+-- Esc in a sub-view (I12): a cross-tab jump leads back once (Frame.jumpBack), otherwise the first sub-bookmark of the tab
+function Pages.escape(id)
+  local F = Journal.Frame
+  if F and type(F.jumpBack) == "function" then
+    local ok, done = pcall(F.jumpBack, id)
+    if not ok then note(done) elseif done then return true end
+  end
+  local list = Pages.subs(id)
+  if not list then return false end
+  return Pages.showSub(id, list[1].key)
 end
 
 function Pages.onSubChange(fn)

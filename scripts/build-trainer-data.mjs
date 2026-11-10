@@ -2,15 +2,17 @@
 //
 // Aufruf:  node scripts/build-trainer-data.mjs --src <ordner> [--out <ordner>] [--unpinned] [--help]
 //   --src       lokaler Stand von https://github.com/fusionpit/WhatsTraining (Branch "master") im gepinnten Commit
-//               (PINNED_COMMIT unten). Gelesen werden nur LICENSE und Classes/Camelot/<Klasse>.lua + QuestSpells.lua.
+//               (PINNED_COMMIT unten). Gelesen werden nur LICENSE und Classes/Camelot/<Klasse>.lua + HunterPets.lua + QuestSpells.lua.
 //   --out       Zielordner. Standard: addon\InkAndEmbers\data (Datei TrainerSpells.lua + LICENSE-WhatsTraining.txt)
 //   --unpinned  Quelldateien duerfen vom gepinnten Stand abweichen (SHA-256); der Kopf der Ausgabe nennt das dann.
 // Exit-Codes: 0 = ok, 1 = Fehler (Quelle fehlt/unlesbar, Hash weicht ab, Ergebnis unplausibel, unbekannte Option)
 //
 // Ergebnis (reproduzierbar: sortiert, ohne Zeitstempel):
-//   TrainerSpells.lua  ns.TrainerSpells = { source, commit, spells = { [KLASSE] = "<zeilen>" }, groups = {...}, quests = {...} }
+//   TrainerSpells.lua  ns.TrainerSpells = { source, commit, spells = { [KLASSE] = "<zeilen>" }, pets = { HUNTER = "<zeilen>" }, groups = {...}, quests = {...} }
 //     spells: je Zauber eine Zeile "<stufe>\t<id>\t<kupfer>\t<vorgaenger,...>\t<talent-id>\t<fraktion A|H>\t<volk-id>"
 //             (leere Felder = keine Angabe), sortiert nach Stufe, dann Reihenfolge der Quelle
+//     pets:   Jaeger-Tierfaehigkeiten (Beast Training, class.petAbilityIds in HunterPets.lua), gleiches Zeilenformat wie spells;
+//             diese IDs stehen NICHT in spells.HUNTER (Tierausbilder, kein Klassenlehrer)
 //     groups: Ranggruppen, die sich im Zauberbuch ersetzen ("overriddenGroups"): "<id,id,...>;<id,...>"
 //     quests: Zauber aus Klassenquests: je Zeile "<id>\t<stufe>\t<voelker,...>\t<quests,...>\t<gebiete,...>"
 //   LICENSE-WhatsTraining.txt  der Lizenztext der Quelle (MIT, unveraendert)
@@ -28,8 +30,8 @@ import luaparse from "luaparse";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const DEFAULT_OUT = path.join(ROOT, "addon", "InkAndEmbers", "data");
-export const PINNED_COMMIT = "172a18a7055731d9e6d04ebfdbb5f19b5ac57255";
-export const PINNED_DATE = "2026-11-05";
+export const PINNED_COMMIT = "e7cca31746f853025b2429331715da2f7a9b14f4";
+export const PINNED_DATE = "2026-11-09";
 export const SOURCE_URL = "https://github.com/fusionpit/WhatsTraining/tree/master/Classes/Camelot";
 export const CLASSES = ["DRUID", "HUNTER", "MAGE", "PALADIN", "PRIEST", "ROGUE", "SHAMAN", "WARLOCK", "WARRIOR"];
 const FILE_OF = { DRUID: "Druid", HUNTER: "Hunter", MAGE: "Mage", PALADIN: "Paladin", PRIEST: "Priest", ROGUE: "Rogue",
@@ -39,16 +41,17 @@ export const SOURCE_SHA256 = {
   LICENSE: "64c4e54df59cc6516ddffd512abb053e7cee2e064d2af53ce5ada164be4a67fa",
   "Classes/Camelot/Druid.lua": "a7e1e1c396054982e57393cdc2c88b82c81ba9283ea3d50316e160d494c870ef",
   "Classes/Camelot/Hunter.lua": "f59906a497e649012f3fc6ab4654d27ed91e0920cfbabc173e791f5014595734",
+  "Classes/Camelot/HunterPets.lua": "94166ba1c57cbc008448c1b516233bcf9d3116db97a0d4b085b6a65c4fa9cf0f",
   "Classes/Camelot/Mage.lua": "1a36177de4ed5aafb96a862a284e804f1a3cac818ac2d79136fb64fb6859a794",
   "Classes/Camelot/Paladin.lua": "0114021808896ef896b77f42106e9ebdd350a8953aed5711a4e51622283df9a1",
-  "Classes/Camelot/Priest.lua": "d283f18ac0b4ce836ab523c29eb2b6e98bdf8044421746618ef709e065f72d09",
+  "Classes/Camelot/Priest.lua": "cc67119a0247f9c24d2c18a424935484746865b6da8452390f415eb73993a5a9",
   "Classes/Camelot/Rogue.lua": "134d482e20a766e844c1bc1da56d91feae67fdefb8e59f8b9d96f869d7592539",
   "Classes/Camelot/Shaman.lua": "20c180d59af1dde44c2ab648955b221f2771e4ae0424ee130f0840689f4972bc",
   "Classes/Camelot/Warlock.lua": "f1d16dbb32888ebc039b6761e282d9ed60b31915790d4ad05612a01946d0a869",
   "Classes/Camelot/Warrior.lua": "31a56c69bfc43ba5f0e68e11999c3f4e6a47edd7a40df526082b0626416b00cf",
   "Classes/Camelot/QuestSpells.lua": "0f26c61f566330ed3abb3e17b88df966752b2b2f365b3cbf0a00e1c674d3be5f",
 };
-export const LIMITS = { id: 2147483647, level: 60, cost: 10000000, perClassMin: 40, perClassMax: 400, srcBytes: 256 * 1024, outBytes: 128 * 1024 };
+export const LIMITS = { id: 2147483647, level: 60, cost: 10000000, perClassMin: 40, perClassMax: 400, petMin: 20, petMax: 100, srcBytes: 256 * 1024, outBytes: 128 * 1024 };
 
 const HELP = `InkAndEmbers: Lehrplan-Daten (Klassenlehrer-Zauber) aus "What's Training?" erzeugen
 
@@ -195,6 +198,38 @@ export function parseClassFile(text, cls = "?") {
   return { spells, groups };
 }
 
+/** HunterPets.lua -> sortierte Liste der Tierfaehigkeiten-IDs (class.petAbilityIds = { [id] = true, ... }) */
+export function parsePetIds(text) {
+  const { fields } = readAssignments(text);
+  const t = fields["class.petAbilityIds"];
+  if (!t || typeof t !== "object" || Array.isArray(t)) throw new Error("HUNTER: class.petAbilityIds fehlt");
+  const ids = [];
+  for (const [k, v] of Object.entries(t)) {
+    const id = Number(k);
+    if (!isId(id) || v !== true) throw new Error("HUNTER: ungueltiger Eintrag in petAbilityIds");
+    ids.push(id);
+  }
+  if (ids.length < LIMITS.petMin || ids.length > LIMITS.petMax) throw new Error(`HUNTER: unplausible Anzahl Tierfaehigkeiten (${ids.length})`);
+  return ids.sort((a, b) => a - b);
+}
+
+/** Zauberliste der Klasse in { spells, pets } trennen: pets = Zeilen mit einer ID aus petIds (Reihenfolge der Quelle bleibt) */
+export function splitPets(spells, petIds) {
+  const set = new Set(petIds);
+  const found = new Set();
+  const rest = [];
+  const pets = [];
+  for (const s of spells) {
+    if (set.has(s.id)) {
+      pets.push(s);
+      found.add(s.id);
+    } else rest.push(s);
+  }
+  for (const id of set) if (!found.has(id)) throw new Error(`HUNTER: Tierfaehigkeit ${id} steht nicht in Hunter.lua`);
+  if (rest.length < LIMITS.perClassMin) throw new Error(`HUNTER: unplausible Anzahl Klassenzauber (${rest.length})`);
+  return { spells: rest, pets };
+}
+
 /** QuestSpells.lua -> { [KLASSE]: [{ id, level, races, quests, areas }] } */
 export function parseQuestSpells(text) {
   const { fields, locals } = readAssignments(text);
@@ -236,14 +271,15 @@ function luaString(s) {
   return '"' + s.replace(/\t/g, "\\t").replace(/\n/g, "\\n") + '"';
 }
 
-export function render({ classes, quests, commit, pinned }) {
+export function render({ classes, quests, commit, pinned, pets = { HUNTER: [] } }) {
   const lines = [];
   lines.push("-- Lehrplan data: class trainer spells for WoW Forever. GENERATED by scripts/build-trainer-data.mjs, do not edit by hand.");
-  lines.push("-- Source: \"What's Training?\" by Sveng/fusionpit, branch \"master\", Classes/Camelot/*.lua");
+  lines.push("-- Source: \"What's Training?\" by Sveng/fusionpit, branch \"master\", Classes/Camelot/*.lua (incl. HunterPets.lua)");
   lines.push(`-- (${SOURCE_URL}), commit ${commit}${pinned ? "" : " (UNPINNED: source differs from the pinned hashes)"}.`);
   lines.push("-- Licensed under the MIT License, Copyright (c) 2019 - full text in data/LICENSE-WhatsTraining.txt (unchanged).");
   lines.push("-- Changes: converted to a compact text format (one line per spell); nothing added.");
   lines.push("-- spells[CLASS]: \"<level>\\t<spellID>\\t<copper>\\t<required ids,>\\t<talent id>\\t<faction A|H>\\t<race id>\"");
+  lines.push("-- pets.HUNTER: hunter pet abilities (Beast Training), same line format as spells; not part of spells.HUNTER");
   lines.push("-- groups[CLASS]: ranks that replace each other in the spellbook, \"id,id;id,id\"");
   lines.push("-- quests[CLASS]: spells from class quests, \"<spellID>\\t<level>\\t<race ids,>\\t<quest ids,>\\t<area ids,>\"");
   lines.push("local _, ns = ...");
@@ -251,6 +287,9 @@ export function render({ classes, quests, commit, pinned }) {
   lines.push(`  source = "WhatsTraining", commit = "${commit.slice(0, 12)}", date = "${PINNED_DATE}", license = "MIT",`);
   lines.push("  spells = {");
   for (const cls of CLASSES) lines.push(`    ${cls} = ${luaString(spellLines(classes[cls].spells))},`);
+  lines.push("  },");
+  lines.push("  pets = {");
+  lines.push(`    HUNTER = ${luaString(spellLines(pets.HUNTER))},`);
   lines.push("  },");
   lines.push("  groups = {");
   for (const cls of CLASSES) {
@@ -297,19 +336,25 @@ export function readSources(src, { unpinned = false } = {}) {
     pinned = pinned && f.ok;
     classes[cls] = parseClassFile(f.text, cls);
   }
+  const hp = read("Classes/Camelot/HunterPets.lua");
+  pinned = pinned && hp.ok;
+  const split = splitPets(classes.HUNTER.spells, parsePetIds(hp.text));
+  classes.HUNTER = { ...classes.HUNTER, spells: split.spells };
+  const pets = { HUNTER: split.pets };
   const q = read("Classes/Camelot/QuestSpells.lua");
   pinned = pinned && q.ok;
-  return { license: license.text, classes, quests: parseQuestSpells(q.text), pinned };
+  return { license: license.text, classes, pets, quests: parseQuestSpells(q.text), pinned };
 }
 
 export async function build({ src, out = DEFAULT_OUT, unpinned = false }) {
   const s = readSources(src, { unpinned });
-  const text = render({ classes: s.classes, quests: s.quests, commit: PINNED_COMMIT, pinned: s.pinned });
+  const text = render({ classes: s.classes, pets: s.pets, quests: s.quests, commit: PINNED_COMMIT, pinned: s.pinned });
   if (Buffer.byteLength(text) > LIMITS.outBytes) throw new Error(`Ergebnis zu gross (${Buffer.byteLength(text)} B)`);
   await mkdir(out, { recursive: true });
   await writeAtomic(path.join(out, "TrainerSpells.lua"), text);
   await writeAtomic(path.join(out, "LICENSE-WhatsTraining.txt"), s.license.endsWith("\n") ? s.license : s.license + "\n");
   const counts = Object.fromEntries(CLASSES.map((c) => [c, s.classes[c].spells.length]));
+  counts.HUNTER_PETS = s.pets.HUNTER.length;
   return { counts, bytes: Buffer.byteLength(text), pinned: s.pinned, out };
 }
 

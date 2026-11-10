@@ -1,4 +1,4 @@
--- Sub-view "Lehrplan" of the Quests page (registered by pages/Quests.lua; WoW Forever only): the class trainer plan.
+-- Sub-view "Lehrplan" of the tab Pläne (pages/Plaene.lua; until I12 under Quests; WoW Forever only): the class trainer plan.
 -- Left: filter (now · upcoming · learned · all), page arrows and the spell list (icon, name and rank, level, cost, state).
 -- Right: what is learnable now with the total cost against the gold in the bag, the next levels, the nearest known trainer
 -- (from own visits; "Als To Do" places a to-do at them), free talent points and the training fees paid so far.
@@ -44,7 +44,7 @@ local T = ns.Locale.ns("p.QuestsLehrplan", {
   trainerNone = "Noch kein Lehrer bekannt. Besucht Euren Klassenlehrer einmal, dann steht er hier.",
   trainerFar = "%s · weit weg", trainerDist = "%s · %s", farOnly = "weit weg",
   meters = "%s m", km = "%s km",
-  toTodo = "Als To Do", toTodoTip = { "Als To Do", "Legt ein Ort-Ziel beim Lehrer an (Reise -> To Do)." },
+  toTodo = "Als To Do", toTodoTip = { "Als To Do", "Legt ein Ort-Ziel beim Lehrer an (Pläne -> To Do)." },
   todoDone = "To Do angelegt.", todoFail = "Kein To Do angelegt.",
   talentHead = "Talente",
   talentFree_one = "%s Talentpunkt ist frei.", talentFree_other = "%s Talentpunkte sind frei.",
@@ -291,7 +291,7 @@ function View.new(page, left, right)
   ui.tableR = tabR
   buildLeft(self, tab)
   buildRight(self, tabR)
-  D.escKeys(tab, function() page:ShowSub("historie") Pages.subChanged("quests") end)
+  D.escKeys(tab, function() Pages.escape(page.id or "plaene") end) -- Esc -> "To Do", the first sub-bookmark of Pläne
   tab:Hide()
   tabR:Hide()
   return self
@@ -444,13 +444,13 @@ function View:Close()
   ui.tableR:Hide()
 end
 
--- /chronik lehrplan: open the book, tab Quests, sub-bookmark "Lehrplan". The book stays closed in combat.
+-- /chronik lehrplan: open the book, tab Pläne, sub-bookmark "Lehrplan". The book stays closed in combat.
 function LP.openPage()
   local A, F = Journal.Access, Journal.Frame
   if not (A and F and type(F.showPage) == "function") then return false end
   if type(A.isOpen) == "function" and type(A.open) == "function" and not A.isOpen() then pcall(A.open) end
-  if not F.showPage("quests") then return false end
-  local P = Journal.QuestsPage
+  if not F.showPage("plaene") then return false end
+  local P = Journal.PlaenePage
   if P and P:GetSub() ~= "lehrplan" and type(F.showSub) == "function" then F.showSub("lehrplan") end
   if P and P.trainView and P.trainOpen then P.trainView:Refresh() end
   return P ~= nil and P.trainOpen == true

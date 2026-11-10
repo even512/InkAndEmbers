@@ -61,8 +61,11 @@ Theme.HAS_MAP_KILL = true
 Theme.BOOK_SLICE = { w = 1888, h = 1275, margin = 48, ring = 72, corner = 160, spine0 = 884, spine1 = 1005 }
 
 -- Parchment per tab: one page pair per tab, split at the fold from one image (Media/Page_<tab>_L/_R, SPREAD_CROPS in
--- scripts/render-media.mjs). Unknown tabs get the journey parchment.
+-- scripts/render-media.mjs). Unknown tabs get the journey parchment. Tabs without an own page pair borrow one (Theme.PAPER_OF,
+-- I12): Dungeons sits on the Chronik parchment (its runs came from there), Pläne on the Quests parchment (to-dos, training).
+Theme.PAPER_OF = { dungeons = "chronik", plaene = "quests" }
 function Theme.paper(id)
+  id = Theme.PAPER_OF[id] or id
   local known = false
   for _, tab in ipairs(Theme.TABS) do
     if tab.id == id then known = true end
@@ -154,8 +157,10 @@ end
 local TT = ns.Locale.ns("Theme", {
   tab_reise = "Reise",
   tab_chronik = "Chronik",
+  tab_dungeons = "Dungeons",
   tab_kampf = "Kampf",
   tab_quests = "Quests",
+  tab_plaene = "Pläne",
   tab_schaetze = "Schätze",
   tab_momente = "Momente",
   tab_notizen = "Notizen",
@@ -169,8 +174,10 @@ end
 Theme.TABS = {
   tab("reise", true),
   tab("chronik"),
+  tab("dungeons"),
   tab("kampf"),
   tab("quests"),
+  tab("plaene"),
   tab("schaetze"),
   tab("momente"),
   tab("notizen"),
@@ -232,18 +239,21 @@ function Theme.sealLayers(seal, tier)
     { tex = Theme.TEX.momentIcons, coords = { Theme.momentIconCoords(icon) }, scale = Theme.SEAL_ICON_SCALE }
 end
 
--- Bookmark atlas (Media/Bookmarks.tga, 512 x 1024): seven cells of 512 x 96 stacked, one per tab id (not per order). Matches
--- BOOKMARK_IDS/BOOKMARK_ATLAS in render-media.mjs; cell ratio 512 : 96 = Frame.TAB.w : h.
+-- Cell per tab id (not per order) of the main tabs (Media/BookmarksBronze.tga, BOOKMARK_IDS in render-media.mjs): 0..6 from the
+-- first Gemini image, 7 (dungeons) and 8 (plaene) from the second (TAB_BAND_CROP2).
+Theme.BOOKMARK_CELL = { reise = 0, chronik = 1, kampf = 2, quests = 3, schaetze = 4, momente = 5, notizen = 6, dungeons = 7, plaene = 8 }
+-- Sub-bookmark atlas (Media/Bookmarks.tga, 512 x 1024): seven cells of 512 x 96 stacked (SUB_BOOKMARK_IDS/BOOKMARK_ATLAS in
+-- render-media.mjs; cell ratio 512 : 96). The two newer tabs borrow a colour there: Dungeons the Kampf ribbon, Pläne the Reise one.
 Theme.BOOKMARK_ATLAS = { w = 512, h = 1024, cellW = 512, cellH = 96 }
-Theme.BOOKMARK_CELL = { reise = 0, chronik = 1, kampf = 2, quests = 3, schaetze = 4, momente = 5, notizen = 6 }
+Theme.SUB_BOOKMARK_CELL = { reise = 0, chronik = 1, kampf = 2, quests = 3, schaetze = 4, momente = 5, notizen = 6, dungeons = 2, plaene = 0 }
 function Theme.bookmarkCoords(id)
-  local i = Theme.BOOKMARK_CELL[id]
+  local i = Theme.SUB_BOOKMARK_CELL[id]
   if i == nil then return nil end
   local a = Theme.BOOKMARK_ATLAS
   return 0, 1, i * a.cellH / a.h, (i + 1) * a.cellH / a.h
 end
 
--- Main tabs "Forever bronze" (Media/BookmarksBronze.tga, 512 x 1024): seven leather tabs with bronze cap of 480 x 102 stacked,
+-- Main tabs "Forever bronze" (Media/BookmarksBronze.tga, 512 x 1024): nine leather tabs with bronze cap of 480 x 102 stacked,
 -- one cell per tab id as Theme.BOOKMARK_CELL (sub-bookmarks stay on Media/Bookmarks.tga). Matches TAB_BAND_ATLAS in
 -- render-media.mjs; ratio 480 : 102 = Frame.TAB.w : h.
 Theme.TAB_BAND_ATLAS = { w = 512, h = 1024, cellW = 480, cellH = 102 }
@@ -669,6 +679,19 @@ end
 for _, id in ipairs(Theme.NARRATORS) do Theme.TEX["narratorBG_" .. id] = MEDIA .. "NarratorBG_" .. id end -- circle backdrop behind the pop-out figure
 function Theme.narratorTex(id)
   return type(id) == "string" and Theme.TEX["narrator_" .. id] or nil
+end
+-- K2/K4 act seals (scripts/render-media.mjs ACT_SEALS, Gemini, approved 10.11.2026): atlas 1024 x 512, 8 x 4 cells of
+-- 128 px, cell i = wax seal with the embossed number i + 1 (I..XXX), cell 30 = the empty seal (from act XXXI on, the table of
+-- contents presses the number in). cellWax: wax width inside a cell.
+Theme.TEX.actSeals = MEDIA .. "ActSeals"
+-- K4: sub-bookmark "Inhalt" as a painted band with the word embroidered (scripts/render-media.mjs SUB_CONTENTS; DE / EN)
+Theme.TEX.subContentsDE = MEDIA .. "SubContentsDE"
+Theme.TEX.subContentsEN = MEDIA .. "SubContentsEN"
+Theme.ACT_SEALS = { texW = 1024, texH = 512, cell = 128, cols = 8, count = 30, empty = 30, cellWax = 115.7 }
+function Theme.actSealCoords(i)
+  local S = Theme.ACT_SEALS
+  local x, y = (i % S.cols) * S.cell, math.floor(i / S.cols) * S.cell
+  return x / S.texW, (x + S.cell) / S.texW, y / S.texH, (y + S.cell) / S.texH
 end
 Theme.TEX.diarySticker = MEDIA .. "DiarySticker"
 Theme.TEX.diaryTape = MEDIA .. "DiaryTape"

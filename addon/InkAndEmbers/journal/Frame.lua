@@ -90,11 +90,11 @@ Frame.SUBTAB.fit = {
   { scale = 0.74, pad = 4, gap = 3, minW = 30 },
 }
 Frame.SUBTABS_OUT = Frame.SUBTAB.out + Frame.SUBTAB.pull + Frame.SUBTAB.hover
--- most sub-bookmarks of one tab: Chronik has five (Steckbrief, Tagebuch, Weggefährten, Dungeons, Meilensteine)
+-- most sub-bookmarks of one tab: Chronik has four (Steckbrief, Tagebuch, Weggefährten, Meilensteine); one slot spare
 Frame.SUBTABS_MAX = 5
 -- Journey subpages from left to right: total journey · chapter journey (= zone map, key "karte", the default view on open
--- even though it sits in the middle) · to-do (key "vorhaben"). The other tabs register theirs via Pages.subs. Label and
--- tooltip come from Frame.TEXT when read (sub_<key>, subTip_<key>; the language is only known at ADDON_LOADED).
+-- even though it sits last). The To Do moved to the tab Pläne (I12, pages/Plaene.lua). The other tabs register theirs via
+-- Pages.subs. Label and tooltip come from Frame.TEXT when read (sub_<key>, subTip_<key>; the language is only known at ADDON_LOADED).
 local function subtabDef(key)
   return setmetatable({ key = key }, { __index = function(_, k)
     if k == "label" then return Frame.TEXT["sub_" .. key] end
@@ -102,15 +102,27 @@ local function subtabDef(key)
     return nil
   end })
 end
-Frame.SUBTABS_REISE = { subtabDef("gesamt"), subtabDef("karte"), subtabDef("vorhaben") }
+-- K4 (10.11.): "Inhalt" first (default view, key "karte"), then the total journey
+Frame.SUBTABS_REISE = { subtabDef("karte"), subtabDef("gesamt") }
+Frame.SUBTABS_REISE[1].art = "contents"
+-- K4: the sub-bookmark "Inhalt" is a painted hanging band (Media/SubContentsDE|EN, scripts/render-media.mjs SUB_CONTENTS) with the
+-- word embroidered: no label from the code (the tooltip stays). Texture 256 x 512 (band 256 x 441 at the top), shown 66 px wide
+-- (0.0615 px per source pixel); top = how far its top sits above the bottom of the cover, so the page edge (24 px above it) cuts
+-- just above the word; the band ends a little below the other ribbons and the tassel hangs lower. out = what hangs below the cover
+-- (for the screen clamp).
+-- dim / hover: the gold band is dimmed much less than the cloth ribbons (playtest 10.11.: inactive it must stay golden)
+Frame.SUB_BAND = { w = 66, h = 132, top = 53, content = 114, page = 24, dim = 0.82, hover = 0.93 }
+Frame.SUB_BAND.out = Frame.SUB_BAND.content - Frame.SUB_BAND.top + Frame.SUBTAB.pull
 -- Fixed small deviation per tab id (no randomness): dx = sticks out +/- px (max 3), dy = offset down px (max 2), deg = tilt
 -- (positive: counter-clockwise, max 2). Neighbours keep room: ribbon gap 12 px minus offset difference (max 4) minus both tilt
 -- swings (each max 2.4) stays above 3 px.
 Frame.TAB_WOBBLE = {
   reise = { dx = 2, dy = 1, deg = 1.5 },
   chronik = { dx = -2, dy = -1, deg = -1.0 },
+  dungeons = { dx = 1, dy = 0, deg = 1.2 },
   kampf = { dx = 3, dy = 2, deg = 2.0 },
   quests = { dx = -3, dy = -1, deg = -1.5 },
+  plaene = { dx = -1, dy = 0, deg = -1.2 },
   schaetze = { dx = 2, dy = 1, deg = 1.0 },
   momente = { dx = -2, dy = -2, deg = -2.0 },
   notizen = { dx = 1, dy = 1, deg = 1.5 },
@@ -123,10 +135,15 @@ Frame.DEFAULT_MAX_HEIGHT = 0.9
 Frame.TEXT = ns.Locale.ns("Frame", {
   sub_gesamt = "Gesamtreise",
   subTip_gesamt = "Die ganze Route auf der Kontinentkarte, links die Gesamtwerte und die Stationen der Reise",
-  sub_karte = "Kapitelreise",
-  subTip_karte = "Die Zonenkarte mit der Route und den Kapiteln (Standardansicht)",
-  sub_vorhaben = "To Do",
-  subTip_vorhaben = "Eigene Reiseziele eintragen und abhaken",
+  sub_karte = "Inhalt",
+  subTip_karte = "Inhaltsverzeichnis der Reise: Bände, Akte und Kapitel mit der Zonenkarte (Standardansicht)",
+  -- K2: acts as the first level, their chapters as the second
+  actUpper = "AKT %s",
+  actStory = "%s Kapitel: %s",
+  headAct = "Akt %s",
+  -- K4: right page head of a chosen act/chapter ("Akt I · Stufe 1–13 · 17 Std. 52 Min. · 39 Quests")
+  headQuests = "%s Quests",
+  headChapters = "%s Kapitel",
   row_played = "Spielzeit",
   row_levels = "Stufe",
   row_kills = "Kills",
@@ -143,12 +160,16 @@ Frame.TEXT = ns.Locale.ns("Frame", {
   zonesTipTitle = "Abgeschlossene Zonen",
   zonesTipLine = "In %s von %s Zonen sind alle zählbaren Quests erledigt.",
   zonesTipRule = "Gezählt werden Zonen mit mindestens %s zählbaren Quests.",
-  tabTip_reise = "Karte mit Eurer Route, Kapitel für Kapitel, und Eure To Dos.",
-  tabTip_chronik = "Steckbrief, Stufenfluss, Tagebuch, Weggefährten samt Lagerfeuer-Gästen und Dungeons.",
+  tabTip_reise = "Karte mit Eurer Route, als ganze Reise und Akt für Akt.",
+  tabTip_chronik = "Steckbrief, Stufenfluss, Tagebuch, Weggefährten samt Lagerfeuer-Gästen und Meilensteine.",
+  tabTip_chronikRetail = "Steckbrief, Stufenfluss, Tagebuch und Weggefährten.",
+  tabTip_dungeons = "Jeder Dungeon-Durchlauf mit Bossen, Gruppe und Beute, dazu alle Dungeon-Quests mit ihren Ketten.",
+  tabTip_dungeonsRetail = "Jeder Dungeon-Durchlauf mit Bossen, Gruppe und Beute.",
   tabTip_kampf = "Kills, Gegner, knappe Siege und Tode.",
-  tabTip_quests = "Abgeschlossene Quests mit Questtext und Belohnung, offene Quests der Zone, der Lehrplan und die Zonenübersicht.",
+  tabTip_quests = "Abgeschlossene Quests mit Questtext und Belohnung, offene Quests der Zone und die Zonenübersicht.",
   tabTip_questsRetail = "Abgeschlossene Quests mit Questtext und Belohnung und die offenen Quests der Zone.",
-  tabTip_chronikRetail = "Steckbrief, Stufenfluss, Tagebuch, Weggefährten und Dungeons.",
+  tabTip_plaene = "Eure To Dos und der Lehrplan.",
+  tabTip_plaeneRetail = "Eure To Dos.",
   tabTip_notizen = "Eure eigenen Notizen, gern mit einem Pin auf der Karte.",
   tabTip_schaetze = "Gold im Beutel, Haushaltsbuch, Goldfluss und Ausrüstung.",
   tabTip_momente = "Album der besonderen Augenblicke, Spielzeit-Uhr und Bibliothek.",
@@ -177,12 +198,16 @@ Frame.TEXT = ns.Locale.ns("Frame", {
   settingsTip = "Öffnet Optionen -> AddOns -> Ink & Embers: Buch, Karte, To Do, Notizen, Einblendungen, Medaillen und Klänge.",
   continent = "Kontinent",
   continentTip = "Kontinentkarte mit der ganzen Route",
-  rightTip = "Rechtsklick auf die Karte: erst Zoom aufheben, dann Kontinent",
+  rightTip = "Rechtsklick auf die Karte: erst Zoom aufheben, dann Kontinent; in einem Akt oder Kapitel eine Ebene zurück",
   zone = "Zone",
   zoneTip = "Aufgedeckte Zonenkarte mit der Route",
   colors = "Karten in Originalfarben",
   kills = "Kämpfe zeigen",
   killsTip = "Erlegte Gegner (gekreuzte Schwerter) auf der Karte zeigen oder ausblenden",
+  reveal = "Karte aufdecken",
+  icons = "Symbole zeigen",
+  iconsTip = "Ereignis-Symbole auf der Kontinentkarte (Tode, Stufen, Flugpunkte, Ruhesteine, Instanzen, Momente, Notizen) zeigen oder ausblenden; Route und Pfeil bleiben",
+  revealTip = "Ganze Zone zeigen, nicht nur selbst erkundete Gebiete",
   bookHead = "INK & EMBERS",
   bookHeadRight = "ATLAS",
   reset = "Reisejournal: Größe und Position auf Standard zurückgesetzt.",
@@ -228,7 +253,7 @@ end
 
 local function safeDate(fmt, t)
   if type(t) ~= "number" or t ~= t or t == huge or t == -huge then return "" end
-  local ok, s = pcall(date, fmt, t)
+  local ok, s = pcall(date, fmt, floor(t)) -- whole seconds: a scrubbed position is fractional (strict date() in Lua 5.3)
   return (ok and type(s) == "string") and s or ""
 end
 
@@ -511,6 +536,10 @@ end
 function Frame.setCard(c)
   local card = J.card
   if not card then return end
+  if J.tocOn then -- K4: the table of contents holds the left page (its figures sit in the right head and the tooltips)
+    card:Hide()
+    return
+  end
   if not c then
     card:Hide()
     return
@@ -533,7 +562,8 @@ function Frame.setCard(c)
     card:Show()
     return
   end
-  card.label:SetText(c.total and Frame.TEXT.totalLabel or Frame.TEXT("chapterUpper", c.roman or ""))
+  card.label:SetText(c.total and Frame.TEXT.totalLabel
+    or (c.isAct and Frame.TEXT("actUpper", c.roman or "")) or Frame.TEXT("chapterUpper", c.roman or ""))
   Frame.setCardTitle(card, c.zoneName or Frame.TEXT.underway)
   Frame.fitCardLine(card, c.subtitle or c.label or "")
   card.story:SetText(c.story or "")
@@ -635,32 +665,99 @@ function Frame.updateZoneRow()
   zr.value:SetTextColor(Journal.Widgets.color(info.complete and "gold" or "ink"))
   local stamp = info.complete and info.kind == "zone"
   if stamp then
-    local Chronik = Journal.Chronik
-    local seal = Chronik and Chronik.SEAL_BY_ID and Chronik.SEAL_BY_ID.zone_master
-    local motif, ring = Theme.sealLayers(seal, zoneStampTier())
     local w = strWidth(zr.value, info.value) -- right-aligned value: the stamp sits just left of its text
     zr.ring:ClearAllPoints()
     zr.ring:SetPoint("RIGHT", zr.frame, "RIGHT", -(w + 6), 0)
-    for _, pair in ipairs({ { zr.motif, motif }, { zr.ring, ring } }) do
-      local t, layer = pair[1], pair[2]
-      if layer and layer.tex then
-        t:SetTexture(layer.tex)
-        local co = layer.coords
-        if co then t:SetTexCoord(co[1], co[2], co[3], co[4]) else t:SetTexCoord(0, 1, 0, 1) end
-        local px = floor(Frame.ZONE_STAMP * (layer.scale or 1) + 0.5)
-        t:SetSize(px, px)
-        local col = layer.color or { 1, 1, 1 }
-        t:SetVertexColor(col[1], col[2], col[3], 1)
-        t:Show()
-      else
-        t:Hide()
-      end
-    end
+    Frame.paintStamp(zr.motif, zr.ring)
   else
     zr.motif:Hide()
     zr.ring:Hide()
   end
   zr.frame:Show()
+end
+
+-- the stamp of the medal "Zonenkenner" (earned tier, else bronze) on two textures; the caller places the ring, the motif centres on it
+function Frame.paintStamp(motifTex, ringTex)
+  local Chronik = Journal.Chronik
+  local seal = Chronik and Chronik.SEAL_BY_ID and Chronik.SEAL_BY_ID.zone_master
+  local motif, ring = Theme.sealLayers(seal, zoneStampTier())
+  for _, pair in ipairs({ { motifTex, motif }, { ringTex, ring } }) do
+    local t, layer = pair[1], pair[2]
+    if layer and layer.tex then
+      t:SetTexture(layer.tex)
+      local co = layer.coords
+      if co then t:SetTexCoord(co[1], co[2], co[3], co[4]) else t:SetTexCoord(0, 1, 0, 1) end
+      local px = floor(Frame.ZONE_STAMP * (layer.scale or 1) + 0.5)
+      t:SetSize(px, px)
+      local col = layer.color or { 1, 1, 1 }
+      t:SetVertexColor(col[1], col[2], col[3], 1)
+      t:Show()
+    else
+      t:Hide()
+    end
+  end
+end
+
+-- K4: zone progress in the head of the right page (chapter: its zone, act: the anchor zone), right end of the title line
+function Frame.buildHeadZone(tb)
+  local z = CreateFrame("Frame", nil, tb)
+  z:SetSize(160, 20)
+  z:SetPoint("TOPRIGHT", tb, "TOPRIGHT", 0, -6)
+  z.value = Theme.fontString(z, "label", 12, Theme.C.ink, "OVERLAY", "RIGHT")
+  z.value:SetPoint("RIGHT", z, "RIGHT", 0, 0)
+  z.value:SetWordWrap(false)
+  z.ring = z:CreateTexture(nil, "ARTWORK", nil, 1)
+  z.motif = z:CreateTexture(nil, "ARTWORK", nil, 2)
+  z.motif:SetPoint("CENTER", z.ring, "CENTER", 0, 0)
+  z.ring:Hide()
+  z.motif:Hide()
+  z:EnableMouse(true)
+  z:SetScript("OnEnter", function(self)
+    local lines, colors = Frame.zoneTip(self.info)
+    if lines and Journal.Widgets then Journal.Widgets.tip(self, lines, colors) end
+  end)
+  z:SetScript("OnLeave", function(self) if Journal.Widgets then Journal.Widgets.hideTip(self) end end)
+  z:Hide()
+  return z
+end
+
+-- zone of the chosen act/chapter for the zone progress; nil without a selection in the table of contents
+function Frame.tocZone()
+  local model = J.model
+  local a = J.tocOn and J.sel.act and model and model.acts[J.sel.act]
+  if not a then return nil end
+  local c = J.sel.chapter and model.chapters[J.sel.chapter]
+  return (c and c.zoneID) or a.zoneID
+end
+
+-- -> width used (0 = hidden)
+function Frame.updateHeadZone()
+  local z = J.headZone
+  if not z then return 0 end
+  local zone = Frame.tocZone()
+  local info = zone and Frame.zoneRowInfo({ zoneID = zone }) or nil
+  z.info = info
+  if not info then
+    z:Hide()
+    return 0
+  end
+  local text = info.label .. " " .. info.value
+  z.value:SetText(text)
+  z.value:SetTextColor(Journal.Widgets.color(info.complete and "gold" or "ink"))
+  local w = strWidth(z.value, text)
+  local stamp = info.complete and info.kind == "zone"
+  if stamp then
+    z.ring:ClearAllPoints()
+    z.ring:SetPoint("RIGHT", z, "RIGHT", -(w + 6), 0)
+    Frame.paintStamp(z.motif, z.ring)
+    w = w + 6 + Frame.ZONE_STAMP
+  else
+    z.ring:Hide()
+    z.motif:Hide()
+  end
+  z:SetWidth(w)
+  z:Show()
+  return w
 end
 
 function Frame.updateTabs()
@@ -689,12 +786,15 @@ function Frame.updateTabs()
   Frame.updateSubTabs()
 end
 
+Frame.TAB_TIP_IDS = { reise = true, chronik = true, dungeons = true, kampf = true, quests = true, plaene = true, schaetze = true,
+  momente = true, notizen = true }
 Frame.TAB_TIP = setmetatable({}, { __index = function(_, id)
-  if id == "reise" or id == "chronik" or id == "kampf" or id == "quests" or id == "schaetze" or id == "momente" or id == "notizen" then
-    -- Retail: no campfire guests (switch "Am Feuer" hidden) and no Lehrplan
+  if Frame.TAB_TIP_IDS[id] then
+    -- Retail: no campfire guests (switch "Am Feuer" hidden) and none of the WoW Forever parts (Lehrplan, Zonen, Dungeon-Quests)
     local ms, lp = Journal.MapSpace, Journal.Lehrplan
     local noFire = id == "chronik" and ms ~= nil and type(ms.fireTalkHidden) == "function" and ms.fireTalkHidden() == true
-    local noPlan = id == "quests" and lp ~= nil and type(lp.active) == "function" and lp.active() == false
+    local noPlan = (id == "quests" or id == "plaene" or id == "dungeons") and lp ~= nil and type(lp.active) == "function"
+      and lp.active() == false
     return Frame.TEXT["tabTip_" .. id .. ((noFire or noPlan) and "Retail" or "")]
   end
   return nil
@@ -806,25 +906,20 @@ end
 
 function Frame.subList(id)
   if id == Frame.HOME then
-    if guestNow() then -- another character's book: no To Do (it belongs to the logged-in character)
+    if guestNow() then -- another character's book: only what Pages.guestAllows leaves
       local P, out = Journal.Pages, {}
       for _, s in ipairs(Frame.SUBTABS_REISE) do
-        if s.key ~= "vorhaben" or Journal.Vorhaben then
-          if not P or P.guestAllows(Frame.HOME, s.key) then out[#out + 1] = s end
-        end
+        if not P or P.guestAllows(Frame.HOME, s.key) then out[#out + 1] = s end
       end
       return out
     end
-    if Journal.Vorhaben then return Frame.SUBTABS_REISE end
-    return { Frame.SUBTABS_REISE[1], Frame.SUBTABS_REISE[2] }
+    return Frame.SUBTABS_REISE
   end
   local P = Journal.Pages
   return P and P.subs and P.subs(id) or nil
 end
 
 function Frame.reiseSub()
-  local V = Journal.Vorhaben
-  if V and V.isOpen() then return "vorhaben" end
   if Frame.isTotal() then return "gesamt" end
   return "karte"
 end
@@ -837,28 +932,38 @@ function Frame.currentSub()
 end
 
 local function showReiseSub(key)
-  local V = Journal.Vorhaben
-  if key == "vorhaben" then
-    if V and not V.isOpen() then V.open() end
-    return
-  end
-  if V and V.isOpen() then V.close() end
   local total = Frame.isTotal()
   if (key == "gesamt") ~= total then
     J.sel, J.contWhole = {}, false
     J.mapMode = key == "gesamt" and "continent" or "zone"
+    Frame.clearFollow() -- the replay's zone/flight view never carries over into the other sub-page
+    J.tocBand = nil
     Frame.refresh()
   end
 end
 
+local function inList(list, key)
+  for _, s in ipairs(list or {}) do
+    if s.key == key then return true end
+  end
+  return false
+end
+
 function Frame.showSub(key)
   local list = Frame.subList(J.page)
-  if not (J.frame and J.frame:IsShown() and list and type(key) == "string") then return false end
-  local known = false
-  for _, s in ipairs(list) do
-    if s.key == key then known = true end
+  if not (J.frame and J.frame:IsShown() and type(key) == "string") then return false end
+  -- a sub-page of the old order (I12, e.g. "vorhaben" on Reise): follow it to its new tab instead of doing nothing
+  if not inList(list, key) then
+    local P = Journal.Pages
+    local id, sub = J.page, key
+    if P and type(P.resolve) == "function" then id, sub = P.resolve(J.page, key) end
+    if id == J.page or not Frame.showPage(id) then return false end
+    list = Frame.subList(J.page)
+    -- the tab changed: that counts as done even if it has no sub-bookmarks here (Retail, guest book) or already shows the sub-page
+    if not inList(list, sub) or sub == Frame.currentSub() then return true end
+    key = sub
   end
-  if not known or key == Frame.currentSub() then return false end
+  if not list or key == Frame.currentSub() then return false end
   if J.page == Frame.HOME then
     showReiseSub(key)
   else
@@ -871,6 +976,34 @@ function Frame.showSub(key)
   if Journal.Sound then pcall(Journal.Sound.play, "page") end
   Frame.updateSubTabs()
   return true
+end
+
+-- Cross-tab jump (I12: Lehrplan-/Dungeon-Sprünge, Dungeon-Quest -> Questtext): shows tab id (and sub-bookmark sub) and remembers
+-- where it came from; Frame.jumpBack(id) leads back there once, as long as the target still shows that sub-bookmark.
+function Frame.jump(id, sub)
+  local fromId, fromSub = J.page, Frame.currentSub()
+  if not Frame.showPage(id) then return false end
+  if sub and Frame.currentSub() ~= sub then Frame.showSub(sub) end
+  if sub and Frame.subList(J.page) and Frame.currentSub() ~= sub then return false end
+  J.returnTo = (fromId and fromId ~= id) and { at = id, atSub = Frame.currentSub(), id = fromId, sub = fromSub } or nil
+  return true
+end
+
+function Frame.jumpBack(id)
+  local r = J.returnTo
+  if not (r and r.at == id and J.page == id and J.frame and J.frame:IsShown()) then return false end
+  J.returnTo = nil
+  if r.atSub and Frame.currentSub() ~= r.atSub then return false end
+  if not Frame.showPage(r.id) then return false end
+  if r.sub and Frame.currentSub() ~= r.sub then Frame.showSub(r.sub) end
+  return true
+end
+
+-- To Do of the tab Pläne (pins on the map, tracker, companion note)
+function Frame.openTodo()
+  if not Frame.showPage("plaene") then return false end
+  if Frame.currentSub() ~= "vorhaben" then Frame.showSub("vorhaben") end
+  return Frame.currentSub() == "vorhaben"
 end
 
 function Frame.updateSubEsc()
@@ -944,6 +1077,7 @@ function Frame.updateSubTabs()
       local tw = (D and D.measure(b.text)) or 0
       if tw <= 0 then tw = #b.sub.label * 7 * f.scale end
       widths[i] = math.max(f.minW, floor(tw + 2 * f.pad + 0.5))
+      if b.sub.art then widths[i] = Frame.SUB_BAND.w end
       x = x + widths[i] + (i < #shown and f.gap or 0)
     end
     step = f
@@ -956,11 +1090,23 @@ function Frame.updateSubTabs()
     local current = s.key == cur
     local lift = (not current and b.hover) and k.hover or 0
     local extra = current and k.pull or lift
-    b:SetSize(w, k.under + k.out)
-    b:ClearAllPoints()
-    b:SetPoint("TOPLEFT", b.owner, "BOTTOMLEFT", x, k.under - extra)
-    if b.SetHitRectInsets then b:SetHitRectInsets(0, 0, math.max(0, k.under - extra - k.edge), 0) end
     local v = current and 1 or (b.hover and 0.8 or k.dim)
+    local art = Frame.subArt(b, s)
+    if art then
+      local B = Frame.SUB_BAND
+      b:SetSize(w, B.h)
+      b:ClearAllPoints()
+      b:SetPoint("TOPLEFT", b.owner, "BOTTOMLEFT", x, B.top - extra)
+      -- clickable from the page edge down (the part under the page is not the band's)
+      if b.SetHitRectInsets then b:SetHitRectInsets(0, 0, math.max(0, B.top - extra - B.page), B.h - B.content) end
+      local va = current and 1 or (b.hover and B.hover or B.dim)
+      b.art:SetVertexColor(va, va, va)
+    else
+      b:SetSize(w, k.under + k.out)
+      b:ClearAllPoints()
+      b:SetPoint("TOPLEFT", b.owner, "BOTTOMLEFT", x, k.under - extra)
+      if b.SetHitRectInsets then b:SetHitRectInsets(0, 0, math.max(0, k.under - extra - k.edge), 0) end
+    end
     b.body:SetVertexColor(v, v, v)
     b.tip:SetVertexColor(v, v, v)
     b.text:SetTextColor(SUB_LABEL[1], SUB_LABEL[2], SUB_LABEL[3], current and 1 or 0.82)
@@ -969,6 +1115,30 @@ function Frame.updateSubTabs()
     x = x + w + step.gap
   end
   Frame.updateSubEsc()
+end
+
+-- painted band instead of ribbon + label (sub.art, only "Inhalt" on the journey): texture by the book's language (German -> DE,
+-- else EN). -> true while the band shows on button b
+function Frame.subArt(b, s)
+  local on = s and s.art == "contents" and J.page == Frame.HOME
+  if not b.art then
+    if not on then return false end
+    local t = b:CreateTexture(nil, "ARTWORK")
+    t:SetPoint("TOPLEFT", b, "TOPLEFT", 0, 0)
+    t:SetSize(Frame.SUB_BAND.w, Frame.SUB_BAND.h)
+    b.art = t
+  end
+  if on then
+    local L = ns.Locale
+    local tex = (L and L.active == "deDE") and Theme.TEX.subContentsDE or Theme.TEX.subContentsEN
+    if b.art.texFile ~= tex then
+      b.art:SetTexture(tex)
+      b.art.texFile = tex
+    end
+  end
+  b.art:SetShown(on and true or false)
+  for _, t in ipairs({ b.body, b.tip, b.bodyShadow, b.tipShadow, b.text }) do t:SetShown(not on) end
+  return on and true or false
 end
 
 local function buildSubTabs(f)
@@ -1177,9 +1347,8 @@ function Frame.resetLayout()
 end
 
 local function releaseHome()
-  if J.vorhaben and Journal.Vorhaben then pcall(Journal.Vorhaben.close) end
-  if Journal.Vorhaben and Journal.Vorhaben.cancelPick then pcall(Journal.Vorhaben.cancelPick, true) end
   View.setActive(false)
+  Frame.clearFollow() -- closing the book or leaving the journey: next time the map starts from the selection again
   if J.st then J.st.playing = false end
   J.openT0 = nil
   Playback.stopTicking(J.pb)
@@ -1202,6 +1371,7 @@ end
 
 local function applyPage(id)
   local P = Journal.Pages
+  J.returnTo = nil -- a page change by hand forgets a cross-tab jump (Frame.jump sets it again afterwards)
   J.page = id
   local left, right = Theme.paper(id)
   J.paperL:SetTexture(left)
@@ -1231,10 +1401,12 @@ end
 
 -- Another character's book opens or closes (Pages.onGuestChange, fired before the pages redraw): the journey view starts from
 -- scratch for the other character, the To Do sheet closes, band and button follow, and a page that the guest book leaves out
--- (Notizen) gives way to the journey map (Pages.setGuest itself only redraws pages that stay allowed).
+-- (Notizen, Pläne) gives way to the journey map (Pages.setGuest itself only redraws pages that stay allowed).
 function Frame.onGuestChange(guid)
   deps()
   J.sel, J.contWhole, J.mapMode = {}, false, "zone"
+  Frame.clearFollow()
+  J.actCardsFor, J.actCards, J.tocBand = nil, nil, nil
   J.zoneCards, J.stationsFor, J.stationList, J.stationSel, J.axisModel = nil, nil, nil, nil, nil
   if J.st then J.st.playing = false end
   if J.pb then Playback.stopTicking(J.pb) end
@@ -1298,7 +1470,7 @@ function Frame.build()
   f:SetFrameStrata("HIGH")
   f:SetToplevel(true)
   f:SetClampedToScreen(true)
-  if f.SetClampRectInsets then f:SetClampRectInsets(0, Frame.TABS_OUT, 0, -Frame.SUBTABS_OUT) end
+  if f.SetClampRectInsets then f:SetClampRectInsets(0, Frame.TABS_OUT, 0, -math.max(Frame.SUBTABS_OUT, Frame.SUB_BAND.out)) end
   f:EnableMouse(true)
   f:SetMovable(true)
   f:SetDontSavePosition(true) -- the addon manages the position itself (EveNChronicleDB.ui.pos), not layout-local.txt
@@ -1349,7 +1521,7 @@ function Frame.build()
   map.onView = safe(function() Frame.layoutControls() end)
   map.onPin = safe(function(id)
     if type(id) == "string" and string.match(id, "^todo:") then
-      Frame.showSub("vorhaben")
+      Frame.openTodo()
       return
     end
     Frame.openNote(id)
@@ -1368,6 +1540,15 @@ function Frame.build()
   pgRight:SetFrameLevel(pageLevel)
   pgRight:Hide()
   J.pageLeft, J.pageRight = pgLeft, pgRight
+  -- To Do sheet (journal/Vorhaben.lua) of the tab Pläne: over the whole double page, above the page holders; hidden unless the
+  -- sub-bookmark "To Do" is shown (pages/Plaene.lua opens and closes it, and closes it when the tab is left)
+  if Journal.Vorhaben then
+    J.vorhaben = Journal.Vorhaben.build(pgLeft)
+    Journal.Vorhaben.onChange = function()
+      local Pg = Journal.Pages
+      if Pg and Pg.subChanged then Pg.subChanged("plaene") end
+    end
+  end
   local P = Journal.Pages
   if P then
     P.attach(pgLeft, pgRight)
@@ -1383,6 +1564,22 @@ function Frame.build()
   local W = Journal.Widgets
 
   local card, tableEnd = buildCard(over)
+  -- K4: table of contents of the acts and chapters (journal/Contents.lua), on the left page instead of the value card
+  local Cn = Journal.Contents
+  if Cn then
+    J.contents = Cn.create(over, Frame.LEFT.x, Frame.CARD_Y, Frame.LEFT.w, Frame.CONTENTS_BOTTOM - Frame.CARD_Y, {
+      onBand = safe(function(b) Frame.openBand(b) end),
+      onAct = safe(function(n) Frame.selectAct(n) end),
+      onChapter = safe(function(i) Frame.selectChapter(i) end),
+      -- zone progress of the line's zone in its tooltip (act: anchor zone)
+      tipExtra = function(kind, index)
+        local model = J.model
+        local e = model and (kind == "act" and model.acts[index] or model.chapters[index])
+        local info = e and Frame.zoneRowInfo({ zoneID = e.zoneID })
+        return info and { info.label .. ": " .. info.value } or nil
+      end,
+    })
+  end
   J.card = card
   local noteBox = CreateFrame("Frame", nil, over)
   noteBox:SetPoint("TOPLEFT", over, "TOPLEFT", Frame.NOTE.x, -Frame.NOTE.y)
@@ -1425,10 +1622,7 @@ function Frame.build()
   end)
   tnh:SetScript("OnLeave", function(self) if Journal.Widgets then Journal.Widgets.hideTip(self) end end)
   J.titleNameHover = tnh
-  if Journal.Vorhaben then
-    J.vorhaben = Journal.Vorhaben.build(over)
-    Journal.Vorhaben.onChange = function() Frame.updateSubTabs() end
-  end
+  J.headZone = Frame.buildHeadZone(tb)
 
   local D = W.Diary
   local ctrl = CreateFrame("Frame", nil, over)
@@ -1448,6 +1642,13 @@ function Frame.build()
   D.escKeys(subEsc, safe(function() Frame.showSub("karte") end))
   subEsc:Hide()
   J.subEsc = subEsc
+  -- K4: inside a chapter Esc leads back to its act (invisible catcher; the table of contents is the navigation)
+  local levelEsc = CreateFrame("Frame", nil, over)
+  levelEsc:SetSize(1, 1)
+  levelEsc:SetPoint("TOPLEFT", over, "TOPLEFT", 0, 0)
+  D.escKeys(levelEsc, safe(function() Frame.back() end))
+  levelEsc:Hide()
+  J.levelEsc = levelEsc
   local cont = D.NewToggle(ctrl, { size = Frame.CTRL_SIZE, gap = 14, onChange = safe(function(key)
     J.mapMode = "continent"
     Frame.select({ continent = key })
@@ -1461,7 +1662,8 @@ function Frame.build()
     },
     value = "zone",
     onChange = safe(function(key)
-      if J.scene and key ~= J.scene.mode then Frame.toggleMapMode() elseif J.scene then updateMode(J.scene) end
+      -- compared with the chosen mode: a flight while replaying shows the continent although the zone map is chosen (K2)
+      if J.scene and key ~= J.mapMode then Frame.toggleMapMode() elseif J.scene then updateMode(J.scene) end
     end) })
   mode.frame:SetPoint("LEFT", ctrl, "LEFT", -3, 0)
   mode.frame:Hide()
@@ -1473,6 +1675,17 @@ function Frame.build()
     onChange = safe(function(on) Frame.setShowKills(on) end) })
   kb:Hide()
   J.killBox = kb
+  local rb = D.NewCheck(ctrl, Frame.TEXT.reveal, { size = Frame.CTRL_SIZE, checked = Frame.revealShown(),
+    tip = { Frame.TEXT.reveal, Frame.TEXT.revealTip },
+    onChange = safe(function(on) Frame.setRevealMap(on) end) })
+  rb:Hide()
+  J.revealBox = rb
+  -- continent map: show/hide all event symbols (route and arrow always stay); setting showIcons like showKills
+  local ib = D.NewCheck(ctrl, Frame.TEXT.icons, { size = Frame.CTRL_SIZE, checked = Frame.iconsShown(),
+    tip = { Frame.TEXT.icons, Frame.TEXT.iconsTip },
+    onChange = safe(function(on) Frame.setShowIcons(on) end) })
+  ib:Hide()
+  J.iconBox = ib
   local stale = Theme.fontString(ctrl, "label", S.s or 12, Theme.C.sepia, "OVERLAY", "RIGHT")
   stale:SetPoint("RIGHT", ctrl, "RIGHT", 0, 0)
   stale:SetText(Frame.TEXT.stale)
@@ -1516,7 +1729,7 @@ function Frame.build()
     onScrubStart = safe(function() Frame.scrubStart() end),
     onScrubEnd = safe(function(aborted) Frame.scrubEnd(aborted) end),
     onChapter = safe(function(i)
-      if i == 0 then Frame.selectTotal() else Frame.select(J.sel.chapter == i and nil or { chapter = i }) end
+      if i == 0 then Frame.selectTotal() else Frame.selectChapter(i) end
     end),
     -- If a tick throws, playback ends (otherwise the error would occur 60 times per second)
     onUpdate = function(dt)
@@ -1528,10 +1741,7 @@ function Frame.build()
   }, { compact = true, speedW = T.speedW, navOut = true, grid = { x = T.GRID.x, y = T.GRID.y, w = T.GRID.w, rows = T.GRID.rows,
     gapY = T.GRID.gapY, parent = over } })
   local navY = Frame.CARD_Y + 36 + 7
-  J.pb.nav.frame:ClearAllPoints()
-  J.pb.nav.frame:SetPoint("RIGHT", over, "TOPLEFT", Frame.LEFT.x + Frame.LEFT.w + 4, -navY)
-  J.pb.range:ClearAllPoints()
-  J.pb.range:SetPoint("RIGHT", J.pb.nav.frame, "LEFT", -6, 0)
+  -- K2 (playtest 10.11.): the page turner of the stickers sits directly under the sticker grid (Playback.layoutGrid)
   J.st = Playback.new(View.peek("speed"))
   if Stations then
     local SA = Frame.STATIONS
@@ -1610,6 +1820,7 @@ function Frame.build()
     self:UnregisterEvent("UI_SCALE_CHANGED")
     self:UnregisterEvent("DISPLAY_SIZE_CHANGED")
     J.pendingScale = nil
+    J.returnTo = nil -- a cross-tab jump never outlives the open book
     local P = Journal.Pages
     if P then pcall(P.close or P.hide) end -- closing the book always goes back to the own book (frees a guest)
     if Journal.Twinks then pcall(Journal.Twinks.onClose) end
@@ -1662,14 +1873,68 @@ local function chapterIndexAt(p)
 end
 
 function Frame.isTotal()
-  return J.mapMode == "continent" and not (J.sel.chapter or J.sel.zone)
+  return J.mapMode == "continent" and not (J.sel.chapter or J.sel.zone or J.sel.act)
 end
+
+-- K2 levels of the zone map ("Akte"): "acts" = the acts as stickers (default), "act" = one act, its chapters as stickers,
+-- "chapter" = one chapter of that act
+function Frame.level()
+  if J.sel.chapter then return "chapter" end
+  if J.sel.act then return "act" end
+  return "acts"
+end
+
+-- act index at axis position p (end / nil: the last act); nil without acts
+local function actIndexAt(p)
+  local model = J.model
+  local acts = model and model.acts
+  if type(acts) ~= "table" or #acts == 0 then return nil end
+  if J.sel.act and acts[J.sel.act] then return J.sel.act end
+  if p == huge or not p then return #acts end
+  local t = View.timeAt(model, View.fromAxis(model, p))
+  local n = t and View.actAt(model, t)
+  if type(n) ~= "number" or not acts[n] then return #acts end
+  return n
+end
+
+-- Card of an act (cached per model; right head and continent title): label "AKT I", title the anchor zone, subtitle "Stufe 1–13 · 17 Std.",
+-- story "5 Kapitel: Dun Morogh, Loch Modan, …" (zone names of its chapters in order, repeats merged), values like a chapter.
+function Frame.actCard(model, n)
+  if type(model) ~= "table" or type(model.acts) ~= "table" then return nil end
+  if J.actCardsFor ~= model then J.actCardsFor, J.actCards = model, {} end
+  local c = J.actCards[n]
+  if c then return c end
+  local a = model.acts[n]
+  if not a then return nil end
+  local names, last = {}, nil
+  for _, i in ipairs(a.chapters or {}) do
+    local ch = model.chapters[i]
+    local nm = ch and ch.zoneName
+    if nm and nm ~= last then names[#names + 1] = nm end
+    last = nm or last
+  end
+  local story = Frame.TEXT("actStory", int(#(a.chapters or {})), table.concat(names, ", "))
+  local S = ns.Sanitize
+  if S and S.display then story = S.display(story, 160) or story end
+  c = { isAct = true, index = "a" .. int(n), actIndex = n, roman = a.roman, title = a.title,
+    zoneName = a.zoneName, zoneID = a.zoneID, subtitle = a.subtitle, story = story, stats = a.stats,
+    levelFrom = a.levelFrom, levelTo = a.levelTo, t0 = a.t0, t1 = a.t1, p0 = a.p0, p1 = a.p1 }
+  J.actCards[n] = c
+  return c
+end
+
 
 local function zoneChapterIndex(zone)
   local chapters = J.model and J.model.chapters
   if type(chapters) ~= "table" or type(zone) ~= "number" then return nil end
   for i = #chapters, 1, -1 do
     if chapters[i] and chapters[i].zoneID == zone then return i end
+  end
+  -- visited only as a detour (K2: short visits without weight): the chapter that holds it, not "unexplored"
+  for i = #chapters, 1, -1 do
+    for _, d in ipairs(chapters[i] and chapters[i].detours or {}) do
+      if d.zoneID == zone then return i end
+    end
   end
   return nil
 end
@@ -1691,6 +1956,13 @@ local function cardFor(p)
   if not model then return nil end
   if type(J.sel.zone) == "number" and not J.sel.chapter then return zoneCard(J.sel.zone) end
   if (p == huge or p == nil) and model.total and Frame.isTotal() then return model.total end
+  if J.sel.chapter then return model.chapters[J.sel.chapter] end
+  -- K2: the zone map shows acts (the chosen act, else the act at the playback position); the total journey keeps its chapters
+  if not Frame.isTotal() then
+    local n = actIndexAt(p)
+    local c = n and Frame.actCard(model, n)
+    if c then return c end
+  end
   local ci = chapterIndexAt(p)
   return ci and model.chapters[ci]
 end
@@ -1739,7 +2011,7 @@ end
 local function updateTitle(scene)
   local model = J.model
   local cont = scene.contID and View.mapName(scene.contID)
-  local c = scene.chapter and model.chapters[scene.chapter]
+  local c = (scene.chapter and model.chapters[scene.chapter]) or (scene.act and Frame.actCard(model, scene.act)) or nil
   if scene.mode == "zone" then
     J.titleLabel:SetText(c and (cont or Frame.TEXT.overview) or Frame.TEXT.journeyUpper)
     J.titleName:SetText(View.mapName(scene.zoneID) or (c and c.zoneName) or Frame.TEXT.overview)
@@ -1751,8 +2023,16 @@ local function updateTitle(scene)
     J.titleName:SetText(cont or (scene.mapID and View.mapName(scene.mapID)) or Frame.TEXT.overview)
   end
   J.titleStats:SetText(model.header and model.header.stats or "")
+  -- K4: a chosen act/chapter names itself in the head ("Kapitel III · Dun Morogh"), below the shown map and its figures
+  local head = Frame.tocHead(scene)
+  if head then
+    J.titleName:SetText(head.title)
+    J.titleLabel:SetText(head.label or "")
+    J.titleStats:SetText(head.stats or "")
+  end
+  local zw = Frame.updateHeadZone()
   -- 28 pt title: shrinks down to 18 pt before it would be cut; full text on hover when it had to shrink
-  local size = Journal.Widgets.fitLine(J.titleName, Frame.TITLE_W, 18)
+  local size = Journal.Widgets.fitLine(J.titleName, Frame.TITLE_W - (zw > 0 and (zw + 12) or 0), 18)
   local cut = size and (size < (J.titleName.fitBase or size) or (tonumber(J.titleName:GetStringWidth()) or 0) > Frame.TITLE_W)
   J.titleNameFull = cut and J.titleName:GetText() or nil
   if J.titleNameHover then J.titleNameHover:EnableMouse(cut and true or false) end
@@ -1778,7 +2058,8 @@ Frame.CONT_MAX = 4
 local function updateContinents(scene)
   local model = J.model
   local list = model.continents or {}
-  local show = scene.mode == "continent" and not (J.sel.chapter or J.sel.zone) and #list > 1 and not scene.empty
+  local show = scene.mode == "continent" and not (J.sel.chapter or J.sel.zone or J.sel.act) and not scene.flight and #list > 1
+    and not scene.empty
   local t = J.contToggle
   if show then
     local items = {}
@@ -1796,7 +2077,7 @@ function updateMode(scene)
   local t = J.modeToggle
   local show = false
   if not scene.empty or scene.mode == "zone" then
-    if scene.mode == "zone" then
+    if scene.mode == "zone" or scene.flight then
       show = true
     elseif J.mapMode == "continent" and View.zoneFor(J.model, J.sel) and View.zoneArt(View.zoneFor(J.model, J.sel)) then
       show = true
@@ -1808,8 +2089,17 @@ function updateMode(scene)
   t.frame:SetShown(show)
   for _, b in ipairs(t.buttons) do b:SetShown(show) end
   if J.killBox then
-    J.killBox:SetShown(not scene.empty and scene.mode ~= "continent")
+    J.killBox:SetShown(not scene.empty and (scene.mode ~= "continent" or scene.flight) and true or false)
     J.killBox:SetChecked(Frame.killsShown(), true)
+  end
+  if J.revealBox then
+    J.revealBox:SetShown(not scene.empty and (scene.mode ~= "continent" or scene.flight) and true or false)
+    J.revealBox:SetChecked(Frame.revealShown(), true)
+  end
+  if J.iconBox then
+    -- wherever the continent map shows (total journey, the continent view of the contents page), not during a replayed flight
+    J.iconBox:SetShown(not scene.empty and scene.mode == "continent" and not scene.flight)
+    J.iconBox:SetChecked(Frame.iconsShown(), true)
   end
 end
 
@@ -1826,6 +2116,48 @@ function Frame.setShowKills(on)
   if J.model then Frame.refresh(true) end
   return on
 end
+function Frame.iconsShown()
+  deps()
+  return View.peek("showIcons") ~= false
+end
+
+function Frame.setShowIcons(on)
+  deps()
+  on = on and true or false
+  View.set("showIcons", on)
+  if J.iconBox then J.iconBox:SetChecked(on, true) end
+  if J.model then Frame.refresh(true) end
+  return on
+end
+
+-- continent map without symbols: markers, gaps, level-ups, kill marks and the note/to-do pins go; the margin notes keep their
+-- text but lose the number on the map. Route and arrow stay.
+function Frame.stripIcons(scene)
+  if scene.mode ~= "continent" or Frame.iconsShown() then return scene end
+  scene.markers, scene.gaps, scene.levelUps, scene.kills, scene.pins = {}, {}, {}, nil, {}
+  local notes = {}
+  for i, n in ipairs(scene.notes or {}) do
+    notes[i] = { text = n.text, kind = n.kind, p = n.p, t = n.t, score = n.score }
+  end
+  scene.notes = notes
+  scene.iconsHidden = true
+  return scene
+end
+
+function Frame.revealShown()
+  deps()
+  return View.peek("revealMap") == true
+end
+
+function Frame.setRevealMap(on)
+  deps()
+  on = on and true or false
+  View.set("revealMap", on)
+  if J.revealBox then J.revealBox:SetChecked(on, true) end
+  if J.model then Frame.refresh(true) end
+  return on
+end
+
 function Frame.setMapColor(value)
   deps()
   if value ~= "original" then value = "sepia" end
@@ -1841,8 +2173,14 @@ local function width(o) return tonumber(o:GetWidth()) or 0 end
 function Frame.layoutControls()
   local ctrl = J.ctrl
   if not ctrl then return 0 end
-  local showBack = (J.sel.chapter or J.sel.zone or (J.map and Map.zoomed(J.map))) and J.model ~= nil and true or false
+  -- inside an act/chapter the table of contents navigates (Esc via J.levelEsc: chapter -> act); Back stays for a zone picked on
+  -- the continent, the zoom and a replay's zone on the overview
+  local inAct = J.sel.act ~= nil and J.tocOn and true or false
+  local showBack = (not inAct) and (J.sel.chapter or J.sel.zone or J.sel.act or J.showZone or J.showCont
+    or (J.map and Map.zoomed(J.map))) and J.model ~= nil and true or false
+  Frame.backLabel()
   J.back:SetShown(showBack)
+  if J.levelEsc then J.levelEsc:SetShown(inAct and J.sel.chapter ~= nil and J.model ~= nil and J.page == Frame.HOME) end
   if J.leftHead then J.leftHead.left:SetShown(not showBack) end
   local n = showBack and 1 or 0
   if J.contToggle.frame:IsShown() then
@@ -1859,8 +2197,28 @@ function Frame.layoutControls()
     kb:ClearAllPoints()
     kb:SetPoint("LEFT", ctrl, "LEFT", lx, 0)
   end
+  -- "Reveal map" sits right of "Show fights" (both only in the zone view); the "updating" hint on the right gives way when
+  -- the two would touch
+  local rb, used = J.revealBox, lx
+  if rb and rb:IsShown() then
+    rb:ClearAllPoints()
+    local rx = lx + ((kb and kb:IsShown()) and (width(kb) + 16) or 0)
+    rb:SetPoint("LEFT", ctrl, "LEFT", rx, 0)
+    used = rx + width(rb)
+  end
+  local sh = J.staleHint
+  if sh then
+    local room = width(ctrl) - (tonumber(sh:GetStringWidth()) or 0) - 8
+    sh:SetShown(J.staleOn and not (rb and rb:IsShown() and width(ctrl) > 0 and used > room) and true or false)
+  end
   J.contToggle.frame:ClearAllPoints()
   J.contToggle.frame:SetPoint("LEFT", ctrl, "LEFT", lx, 0)
+  local ib = J.iconBox
+  if ib and ib:IsShown() then
+    ib:ClearAllPoints()
+    local cx = lx + (J.contToggle.frame:IsShown() and (width(J.contToggle.frame) + 16) or 0)
+    ib:SetPoint("LEFT", ctrl, "LEFT", cx, 0)
+  end
   Frame.updateSubEsc()
   Frame.updateHere()
   return n
@@ -1907,6 +2265,11 @@ function Frame.updateHere()
 end
 
 function Frame.rightClick()
+  -- K2: inside an act or chapter the right click leads one level back (as the Back tooltip says); only the acts overview
+  -- keeps the map toggle (unzoom, then continent)
+  if J.sel.chapter and J.sel.act then return Frame.back() and "back" or nil end
+  -- K4: on an act the right click only removes a zoom (Kapitel -> Akt -> nichts; the table of contents navigates)
+  if J.sel.act then return (J.map and Map.resetView(J.map)) and "unzoom" or nil end
   local scene = J.scene
   if scene and scene.mode == "zone" then
     if J.map and Map.resetView(J.map) then return "unzoom" end
@@ -1916,18 +2279,41 @@ function Frame.rightClick()
   return Frame.back() and "back" or nil
 end
 
+-- label and tooltip of "Back" (only outside an act/chapter since K4)
+function Frame.backLabel()
+  local b = J.back
+  if not b then return nil end
+  local TX = Frame.TEXT
+  if b.labelText ~= TX.back and b.SetLabel then b:SetLabel(TX.back) end
+  if type(b.diaryOpts) == "table" then b.diaryOpts.tip = { TX.backTitle, TX.backTip } end
+  return TX.back
+end
+
+-- Back (button, Esc, right click, double click): chapter -> its act, act -> the acts, zone -> overview, then the zoom, then
+-- the zone a replay moved to -> the default view
 function Frame.back()
-  if J.sel.chapter or J.sel.zone then
+  local model = J.model
+  if J.sel.chapter and J.sel.act and model and model.acts and model.acts[J.sel.act] then
+    Frame.select({ act = J.sel.act })
+    return true
+  end
+  if J.sel.chapter or J.sel.zone or J.sel.act then
     Frame.select(nil)
     return true
   end
   if J.map and Map.resetView(J.map) then return true end
+  if J.showZone or J.showCont then
+    Frame.clearFollow()
+    Frame.refresh()
+    return true
+  end
   return false
 end
 
 function Frame.render(status, model, stale)
   if not J.frame or J.page ~= Frame.HOME then return end
-  J.staleHint:SetShown(stale and true or false)
+  J.staleOn = stale and true or false
+  J.staleHint:SetShown(J.staleOn)
   if status ~= "ready" or not model then
     J.model, J.scene = nil, nil
     J.map.viewport:Hide()
@@ -1941,6 +2327,8 @@ function Frame.render(status, model, stale)
     J.modeToggle.frame:Hide()
     J.contToggle.frame:Hide()
     J.titleBox:Hide()
+    J.tocOn = false
+    if J.contents and Journal.Contents then Journal.Contents.setShown(J.contents, false) end
     J.ctrl:Hide()
     if J.worldLink then J.worldLink:Hide() end
     J.noteBox:Hide()
@@ -1955,7 +2343,14 @@ function Frame.render(status, model, stale)
   showMessage(nil)
   local hadModel = J.model ~= nil
   if J.model ~= model then
+    local selBefore = J.sel
     if J.sel.chapter and not (model.chapters and model.chapters[J.sel.chapter]) then J.sel = {} end
+    -- K2: act numbers can shift when a chapter grows into an anchor; a chosen act that is gone (or no longer holds the chosen
+    -- chapter) falls back to the acts
+    local acts = model.acts
+    if J.sel.act and not (type(acts) == "table" and acts[J.sel.act]) then J.sel = {} end
+    if J.sel.chapter and J.sel.act and model.chapters[J.sel.chapter].act ~= J.sel.act then J.sel = {} end
+    if J.sel ~= selBefore then Frame.clearFollow() end -- the selection was dropped: its replay view goes too
   end
   J.model = model
   J.titleBox:Show()
@@ -1984,8 +2379,15 @@ end
 function Frame.refresh(keepPlay)
   local model = J.model
   if not J.frame or not model then return end
-  local scene = View.scene(model, J.sel, { mode = J.mapMode, whole = J.contWhole })
+  -- J.showZone / J.showCont: the zone (or, during a flight, the continent) the replay is in (K2 zone change, Frame.followZone)
+  local scene = View.scene(model, J.sel, { mode = J.showCont and "continent" or J.mapMode, whole = J.contWhole,
+    zone = J.showZone, continent = J.showCont, flightP = J.showFlightP })
   J.scene = scene
+  if scene.flight then
+    J.curKey = J.showKey
+  else
+    J.curKey = scene.mode == "zone" and scene.zoneID and ("z:" .. int(scene.zoneID)) or nil
+  end
   local art, aspect, outlines, clip
   if scene.mode == "zone" then
     art, clip = scene.art, scene.clip
@@ -1996,11 +2398,16 @@ function Frame.refresh(keepPlay)
     aspect = View.mapAspect(scene.mapID)
   end
   J.st.speed = View.peek("speed") or J.st.speed
-  local wasPlaying, oldP = J.st.playing, J.st.p
+  local wasPlaying, oldP, oldP1 = J.st.playing, J.st.p, J.st.p1
   local function axis(p) return View.toAxis(model, p) end
   local r0, r1 = axis(scene.range[1]), axis(scene.range[2])
   Playback.setRange(J.st, r0, r1)
   if keepPlay then Playback.resume(J.st, oldP, wasPlaying) end
+  -- K2: a paused position inside the range (e.g. the start an act/chapter click jumped to) survives a redraw with new data
+  -- (only a real pause before the old end: at the end the view stays "everything", also when live data move the end)
+  local paused = keepPlay and not wasPlaying and type(oldP) == "number" and type(oldP1) == "number" and oldP < oldP1
+    and oldP < r1 and oldP >= r0
+  if paused then J.st.p = oldP end
   Playback.stopTicking(J.pb)
   if J.axisModel ~= model then
     J.axisModel, J.axisLevels = model, {}
@@ -2011,17 +2418,15 @@ function Frame.refresh(keepPlay)
   Playback.setTicks(J.pb, Playback.ticks(J.axisLevels, r0, r1, J.pb.trackW))
   Playback.setLevelMarks(J.pb, Playback.levelFracs(J.axisLevels, r0, r1))
   local total = Frame.isTotal()
-  local ci = chapterIndexAt(huge)
-  local selected = J.sel.chapter or ((not total) and ci or nil)
-  if type(J.sel.zone) == "number" and not J.sel.chapter then selected = zoneChapterIndex(J.sel.zone) end
-  Playback.setChapters(J.pb, model.chapters, selected, nil, false)
-  Playback.setGridShown(J.pb, not total)
+  Playback.setGridShown(J.pb, false) -- K4: no stickers; acts and chapters are in the table of contents (Frame.updateContents)
+  Frame.updateContents()
   Frame.updateStations(total)
   Frame.setCard(cardFor(J.st.playing and Playback.mapP(J.st) or huge))
   updateTitle(scene)
   updateContinents(scene)
   updateMode(scene)
   scene.pins = Frame.notePins(scene)
+  Frame.stripIcons(scene)
   J.stats = Map.render(J.map, scene, { art = art, aspect = aspect, outlines = outlines, clip = clip, axis = axis,
     color = View.peek("mapColor"), showKills = Frame.killsShown(), reduceMotion = View.peek("reduceMotion"), obstacles = Frame.obstacles(),
     keepView = keepPlay, when = function(t) return View.formatWhen(model, t) end })
@@ -2032,6 +2437,8 @@ function Frame.refresh(keepPlay)
   if J.st.playing then
     Map.setProgress(J.map, Playback.mapP(J.st))
     Playback.startTicking(J.pb)
+  elseif paused then
+    Map.setProgress(J.map, Playback.mapP(J.st))
   end
 end
 
@@ -2042,7 +2449,7 @@ function Frame.notePins(scene)
   if not (N and N.onMap and scene and type(scene.project) == "function") then return out end
   -- another character's book: neither the notes nor the To Do pins of the logged-in character (Pages.guestAllows)
   local notesOk = not P or P.guestAllows("notizen")
-  local todoOk = not P or P.guestAllows(Frame.HOME, "vorhaben")
+  local todoOk = not P or P.guestAllows("plaene")
   local okList, list = true, {}
   if notesOk then okList, list = pcall(N.onMap) end
   if not okList or type(list) ~= "table" then return out end
@@ -2075,15 +2482,113 @@ local function notesChanged()
 end
 if Journal.Notes and Journal.Notes.onChange then Journal.Notes.onChange(notesChanged) end
 
+function Frame.clearFollow()
+  J.showZone, J.showCont, J.showFlightP, J.showKey = nil, nil, nil, nil
+end
+
+-- sel = nil | { act = n } | { chapter = i } (its act is added) | { act = n, chapter = i } | { zone = id } | { continent = id }.
+-- An act or chapter does NOT play (10.11.): the map jumps to its start (zone of the first station, timeline at the start,
+-- arrow on the start point); play or scrub from there.
 function Frame.select(sel)
-  J.sel = sel or {}
-  if J.sel.chapter or J.sel.zone then J.mapMode = "zone" end
+  sel = sel or {}
+  local model = J.model
+  if sel.chapter and not sel.act and model and model.chapters and model.chapters[sel.chapter] then
+    sel = { chapter = sel.chapter, act = model.chapters[sel.chapter].act }
+  end
+  J.sel = sel
+  J.tocBand = nil -- the table of contents opens the volume of the new selection
+  J.tocFollow = true
+  if J.sel.chapter or J.sel.zone or J.sel.act then J.mapMode = "zone" end
   J.contWhole = J.mapMode == "continent" and J.sel.continent ~= nil
+  Frame.clearFollow()
+  local t0 = model and (J.sel.chapter or J.sel.act) and View.selStart(model, J.sel) or nil
+  local want = t0 and Frame.playTarget(t0)
+  if want then J.showZone, J.showCont, J.showFlightP, J.showKey = want.zone, want.cont, want.fp, want.key end
   Frame.refresh()
+  if t0 and J.model then
+    local st = J.st
+    st.p, st.playing = st.p0, false
+    Playback.stopTicking(J.pb)
+    Frame.hideLevelHint()
+    Map.setProgress(J.map, Playback.mapP(st))
+    updateTimeline()
+  end
+end
+
+function Frame.selectAct(n)
+  local acts = J.model and J.model.acts
+  if not (type(acts) == "table" and acts[n]) then return false end
+  Frame.select({ act = n })
+  if Journal.Sound then pcall(Journal.Sound.play, "page") end
+  return true
+end
+
+function Frame.selectChapter(i)
+  local chapters = J.model and J.model.chapters
+  if not (type(chapters) == "table" and chapters[i]) then return false end
+  Frame.select({ chapter = i, act = chapters[i].act or J.sel.act })
+  if Journal.Sound then pcall(Journal.Sound.play, "page") end
+  return true
+end
+
+-- K2 zone change: what the replay at epoch t shows. A flight (TF -> TL): its continent if that map has art, else the zone of
+-- departure; otherwise the main zone at t (Model.zoneAt: flown-over zones and border flicker skipped), if it has zone art.
+-- -> { key, zone } | { key, cont, fp = { p0, p1 } } | nil (keep the map)
+local artOk, contOk = {}, {}
+local function hasZoneArt(z)
+  if artOk[z] == nil then artOk[z] = View.zoneArt(z) ~= nil end
+  return artOk[z]
+end
+local function hasContArt(c)
+  if contOk[c] == nil then contOk[c] = View.mapArt(c) ~= nil end
+  return contOk[c]
+end
+function Frame.resetArtCache() artOk, contOk = {}, {} end
+
+function Frame.playTarget(t)
+  local model = J.model
+  if not model or type(t) ~= "number" then return nil end
+  local z = View.zoneAtTime(model, t)
+  local f0, f1 = View.flightAt(model, t)
+  if f0 then
+    local cont = View.continentOf(z)
+    local p0, p1 = View.playedAt(model, f0), View.playedAt(model, f1)
+    if cont and hasContArt(cont) and type(p0) == "number" and type(p1) == "number" then
+      return { key = "c:" .. int(cont) .. ":" .. int(f0), cont = cont, fp = { p0, p1 } }
+    end
+  end
+  if z and hasZoneArt(z) then return { key = "z:" .. int(z), zone = z } end
+  return nil
+end
+
+-- While playing and scrubbing (act, chapter, and the acts level): if the position lies in another zone than the map shows,
+-- the map switches there (only on a change, never per frame), and back. Not on the total journey, a zone picked on the
+-- continent, the chosen continent map, or without zone art (Retail fallback). Pause/stop keeps the zone. -> true on a switch
+function Frame.followZone(p)
+  local model, scene = J.model, J.scene
+  if not (model and scene) or p == nil or p == huge then return false end
+  if Frame.isTotal() or J.sel.zone or J.sel.continent or J.mapMode ~= "zone" then return false end
+  if scene.mode ~= "zone" and not scene.flight then return false end
+  local t = View.timeAt(model, View.fromAxis(model, p))
+  local want = t and Frame.playTarget(t)
+  if not want or want.key == J.curKey then return false end
+  J.showZone, J.showCont, J.showFlightP, J.showKey = want.zone, want.cont, want.fp, want.key
+  local st = J.st
+  local keepP, playing = st.p, st.playing
+  Frame.refresh(true)
+  st.p = max(st.p0, math.min(keepP, st.p1))
+  st.playing = (playing and st.p < st.p1) and true or false
+  if st.playing then Playback.startTicking(J.pb) end
+  Map.setProgress(J.map, Playback.mapP(st))
+  updateTimeline()
+  Map.fadeIn(J.map)
+  J.switches = (J.switches or 0) + 1
+  return true
 end
 
 function Frame.selectTotal()
   J.sel = {}
+  Frame.clearFollow()
   if Frame.isTotal() then
     J.mapMode = "zone"
   else
@@ -2095,6 +2600,7 @@ function Frame.selectTotal()
 end
 
 function Frame.toggleMapMode()
+  Frame.clearFollow()
   if J.mapMode == "zone" then
     J.mapMode = "continent"
     J.sel = J.sel.continent and J.sel or {}
@@ -2112,8 +2618,8 @@ end
 -- map: any zone, even without travel traces). -> { id, name, mapID = continent } or nil
 function Frame.hoverZone(vx, vy)
   local scene, model = J.scene, J.model
-  if not scene or not model or scene.mode ~= "continent" or not scene.contID then return nil end
-  if J.sel.chapter or J.sel.zone then return nil end
+  if not scene or not model or scene.mode ~= "continent" or not scene.contID or scene.flight then return nil end
+  if J.sel.chapter or J.sel.zone or J.sel.act then return nil end
   local z = View.zoneInfoAt(scene.contID, vx, vy)
   if not z then return nil end
   z.mapID = scene.contID
@@ -2143,7 +2649,7 @@ function Frame.zoomTarget(dir, vx, vy)
     local z = Frame.hoverZone(vx, vy)
     if not z then return nil end
     zone, cont = z.id, scene.contID
-    art = View.zoneArt(zone)
+    art = View.zoneArt(zone, View.peek("revealMap") == true)
     if not art then return nil end
   elseif dir == "out" then
     if scene.mode ~= "zone" then return nil end
@@ -2220,11 +2726,94 @@ function Frame.updateStations(on, fromReady)
   return true
 end
 
+-- K4 table of contents ------------------------------------------------------------------------------------------------
+Frame.CONTENTS_BOTTOM = 604
+
+-- the left page shows the table of contents on the sub-page "Akte" (not the total journey, not a zone picked on the continent)
+function Frame.tocActive()
+  local model = J.model
+  return J.page == Frame.HOME and model ~= nil and not Frame.isTotal() and not J.sel.zone and not J.sel.continent
+    and not model.empty and type(model.acts) == "table" and #model.acts > 0
+end
+
+-- accordion: the volume of the chosen (else the current, last) act is open, or the volume clicked last; the chosen act, else the
+-- current one when its volume is open
+function Frame.tocState()
+  local model = J.model
+  local C = Journal.Contents
+  local cur = (J.sel.act and model.acts[J.sel.act]) and J.sel.act or #model.acts
+  local curBand = C.bandOf(model.acts[cur] and model.acts[cur].levelFrom)
+  local band = J.tocBand or curBand
+  return { band = band, act = (band == curBand) and cur or nil, selAct = J.sel.act, selChapter = J.sel.chapter, follow = J.tocFollow }
+end
+
+function Frame.updateContents()
+  local C, ui = Journal.Contents, J.contents
+  if not (C and ui) then return false end
+  local on = Frame.tocActive()
+  J.tocOn = on
+  if not on then
+    C.setShown(ui, false)
+    return false
+  end
+  C.set(ui, J.model, Frame.tocState())
+  J.tocFollow = nil -- the scroll fallback follows the selection once (select/open), never on a live redraw
+  C.setShown(ui, true)
+  if J.card then J.card:Hide() end
+  return true
+end
+
+function Frame.openBand(b)
+  if not J.model then return false end
+  J.tocBand = b
+  J.tocFollow = true
+  Frame.updateContents()
+  Frame.placeNotes()
+  if Journal.Sound then pcall(Journal.Sound.play, "page") end
+  return true
+end
+
+-- margin notes: under the value card as before; with the table of contents right under its last line, if they fit
+function Frame.placeNotes()
+  local nb = J.noteBox
+  if not nb then return end
+  local y = Frame.NOTE.y
+  local show = J.model ~= nil
+  if J.tocOn and J.contents then
+    y = Frame.CARD_Y + (J.contents.height or 0) + 10
+    show = show and y + Frame.NOTE.h <= Frame.CONTENTS_BOTTOM
+  end
+  nb:ClearAllPoints()
+  nb:SetPoint("TOPLEFT", J.over, "TOPLEFT", Frame.NOTE.x, -y)
+  nb:SetShown(show and true or false)
+end
+
+-- head of the right page for a chosen act/chapter: { title, label (the shown map), stats } or nil
+function Frame.tocHead(scene)
+  local model = J.model
+  local a = J.tocOn and J.sel.act and model and model.acts[J.sel.act]
+  if not a then return nil end
+  local C = Journal.Contents
+  local c = J.sel.chapter and model.chapters[J.sel.chapter]
+  local e = c or a
+  local st = e.stats or {}
+  local bits = {}
+  if c then bits[#bits + 1] = Frame.TEXT("headAct", a.roman or "") end
+  bits[#bits + 1] = C.TEXT("levels", C.span(e.levelFrom, e.levelTo))
+  if st.playedText then bits[#bits + 1] = st.playedText end
+  bits[#bits + 1] = Frame.TEXT("headQuests", int(st.quests))
+  if not c then bits[#bits + 1] = Frame.TEXT("headChapters", int(#(a.chapters or {}))) end
+  local shown = scene and ((scene.mode == "zone" and View.mapName(scene.zoneID)) or (scene.contID and View.mapName(scene.contID)))
+  return { title = c and C.TEXT("chapter", c.roman or int(J.sel.chapter), c.zoneName or "") or (a.title or ""),
+    label = shown or nil, stats = table.concat(bits, " · ") }
+end
+
 function Frame.placeLower()
   local notes = J.map and J.map.noteList and #J.map.noteList or 0
   local G, SA, free = Frame.TIMELINE.GRID, Frame.STATIONS, Frame.LOWER_FREE
   local top = notes > 0 and G.y or Frame.NOTE.y
   if J.pb then Playback.placeGrid(J.pb, G.x, top, notes > 0 and G.rows or free.gridRows) end
+  Frame.placeNotes()
   if J.stations and Stations then Stations.place(J.stations, J.over, SA.x, top, notes > 0 and SA.rows or free.stationRows) end
   return top
 end
@@ -2276,6 +2865,7 @@ function Frame.togglePlay()
     Playback.stopTicking(J.pb)
     Frame.hideLevelHint()
   end
+  Frame.followZone(Playback.mapP(J.st))
   Map.setProgress(J.map, Playback.mapP(J.st))
   local c = cardFor(Playback.mapP(J.st))
   if c and J.card.shown ~= c.index then Frame.setCard(c) end
@@ -2297,6 +2887,7 @@ end
 function Frame.seek(frac)
   if not J.model then return end
   Playback.seek(J.st, frac)
+  Frame.followZone(Playback.mapP(J.st))
   Map.setProgress(J.map, Playback.mapP(J.st))
   local c = cardFor(Playback.mapP(J.st))
   if c and J.card.shown ~= c.index then Frame.setCard(c) end
@@ -2341,6 +2932,7 @@ function Frame.tick(dt)
   local before = st.p
   Playback.step(st, dt)
   local p = Playback.mapP(st)
+  Frame.followZone(p)
   Map.setProgress(J.map, p)
   local hit = Playback.crossed(J.axisLevels, before, st.p)
   if hit then Frame.showLevelHint(hit.level) end

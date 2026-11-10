@@ -32,13 +32,15 @@ import { createVm, ROOT, ADDON_DIR } from "../tests/helpers/wow-vm.mjs";
 import { KEEPOUT_LUA_HELPER, findOverlaps, formatOverlaps, keepoutFor, PAGE_W } from "../tests/helpers/keepout.mjs";
 import { decodePng, encodePng, KEEPOUT, renderSpreadRaw } from "./render-media.mjs";
 
-export const TABS = ["reise", "chronik", "kampf", "quests", "schaetze", "momente", "notizen"];
-const TAB_LABEL = { reise: "Reise", chronik: "Chronik", kampf: "Kampf", quests: "Quests", schaetze: "Schätze", momente: "Momente", notizen: "Notizen" };
+// I12: neun Reiter (Pages.ORDER); Dungeons und Plaene haengen bestehende Unteransichten neu auf
+export const TABS = ["reise", "chronik", "dungeons", "kampf", "quests", "plaene", "schaetze", "momente", "notizen"];
+const TAB_LABEL = { reise: "Reise", chronik: "Chronik", dungeons: "Dungeons", kampf: "Kampf", quests: "Quests", plaene: "Pläne", schaetze: "Schätze",
+  momente: "Momente", notizen: "Notizen" };
 const DUNGEONS_CLOSE = `
-  local P = NS.Journal.QuestsPage
-  local DV = P.dungeonView
+  local P = NS.Journal.DungeonsPage
+  local DV = P.questsView
   DV.level, DV.mode, DV.all, DV.key, DV.sel, DV.chains, DV.scrollDg = 1, "quests", false, nil, nil, {}, nil
-  P:ShowSub("historie")
+  P:ShowSub("laeufe")
   C_QuestLog.IsQuestFlaggedCompleted, C_QuestLog.GetNumQuestLogEntries = DV_SAVED.flagged, DV_SAVED.n
   NS.Journal.OpenQuests.invalidate()`;
 const ZONES_CLOSE = `
@@ -46,11 +48,16 @@ const ZONES_CLOSE = `
   C_QuestLog.IsQuestFlaggedCompleted, C_QuestLog.GetNumQuestLogEntries = ZV_SAVED.flagged, ZV_SAVED.n
   NS.Journal.ZoneProgress.BUDGET_MS = ZV_SAVED.budget
   NS.Journal.OpenQuests.invalidate()`;
-// Unteransichten: [reiter, name, Lua zum Oeffnen, Lua zum Schliessen]
+// Unteransichten: [reiter, name, Lua zum Oeffnen, Lua zum Schliessen, Sperrflaechen (optional: Reiter, dessen Papier die Ansicht
+// selbst mitbringt; das To Do legt das Reise-Pergament ueber die ganze Doppelseite)]
 export const SUBVIEWS = [
   ["reise", "gesamt", "NS.Journal.Frame.selectTotal()", "NS.Journal.Frame.selectTotal()"],
+  // K2: ein Akt (seine Kapitel als Sticker) und ein Kapitel darin, jeweils zur Haelfte abgespielt
+  ["reise", "akt", "NS.Journal.Frame.selectAct(1) NS.Journal.Frame.seek(0.5)", "NS.Journal.Frame.select(nil)"],
+  ["reise", "kapitel", "local F = NS.Journal.Frame F.selectAct(1) F.selectChapter(F.state.model.acts[1].last) F.seek(0.5)",
+    "NS.Journal.Frame.select(nil)"],
   // T2: To-Do-Seite mit Zielen (Probedaten ohne Sammler: Gegner mit Fortschritt, Gegenstand, Ort mit Entfernung, frei), Zettel auf "Gegner"
-  ["reise", "todo", 'local now = time() local L = { ' +
+  ["plaene", "todo", 'local now = time() local L = { ' +
     '{ id = 1, kind = "kill", text = "Gescheckter Eber", need = 10, have = 4, progress = "4/10", created = now - 3 * 86400 }, ' +
     '{ id = 2, kind = "item", text = "Hasenpfote", need = 8, have = 3, progress = "3/8", created = now - 2 * 86400 }, ' +
     '{ id = 3, kind = "place", text = "Der alte Brunnen", mapID = 1411, x = 0.5, y = 0.5, dist = 140, created = now - 86400 }, ' +
@@ -60,9 +67,9 @@ export const SUBVIEWS = [
     'list = function(f) local o = {} for _, p in ipairs(L) do if f == nil or f == "all" or (f == "open") == (p.done == nil) then o[#o + 1] = p end end return o end } ' +
     'NS.Journal.Frame.showSub("vorhaben") NS.Journal.Vorhaben.setKind("kill") ' +
     'NS.Journal.Vorhaben.pickTarget({ value = 3098, rec = { id = 3098, name = "Gescheckter Eber", level = 5 } }) NS.Journal.Vorhaben.refresh()',
-    'NS.Journal.Vorhaben.setKind("free") NS.Journal.Frame.showSub("karte")'],
+    'NS.Journal.Vorhaben.setKind("free")', "reise"],
   // To Do Archiv (erledigte, Zurueckholen/Loeschen) mit offener Rueckfrage "endgueltig loeschen?" an der ersten Zeile
-  ["reise", "todo-archiv", 'local now = time() local L = { ' +
+  ["plaene", "todo-archiv", 'local now = time() local L = { ' +
     '{ id = 1, kind = "kill", text = "Gescheckter Eber", need = 10, have = 4, progress = "4/10", created = now - 3 * 86400 }, ' +
     '{ id = 5, kind = "kill", text = "Murloc-Fischer", need = 5, have = 5, progress = "5/5", created = now - 5 * 86400, done = now - 7200 }, ' +
     '{ id = 6, kind = "free", text = "Mit dem Zeppelin fliegen", created = now - 6 * 86400, done = now - 86400 }, ' +
@@ -70,11 +77,11 @@ export const SUBVIEWS = [
     'NS.Plans = { TEXT_MAX = 120, MAX = 200, nearby = function() return {} end, label = function(p) return p.text end, ' +
     'list = function(f) local o = {} for _, p in ipairs(L) do if f == nil or f == "all" or (f == "open") == (p.done == nil) then o[#o + 1] = p end end return o end } ' +
     'NS.Journal.Frame.showSub("vorhaben") local V = NS.Journal.Vorhaben V.setView("archive") V.askDelete(5, V.state.rows[1])',
-    'NS.Journal.Vorhaben.cancelDelete() NS.Journal.Vorhaben.setView("open") NS.Journal.Frame.showSub("karte")'],
+    'NS.Journal.Vorhaben.cancelDelete() NS.Journal.Vorhaben.setView("open")', "reise"],
   // To Do: Kartenfenster "Ort waehlen" ueber der Seite (Beobachtung 30.10.), Pinnadel gesetzt
-  ["reise", "todo-ort", 'NS.Journal.Frame.showSub("vorhaben") local V = NS.Journal.Vorhaben V.setKind("place") ' +
+  ["plaene", "todo-ort", 'NS.Journal.Frame.showSub("vorhaben") local V = NS.Journal.Vorhaben V.setKind("place") ' +
     'V.state.zone = 1411 V.state.edit:SetText("Der alte Brunnen") V.startPick() V.pickAt(0.42, 0.55)',
-    'NS.Journal.Vorhaben.cancelPick() NS.Journal.Vorhaben.state.zone = nil NS.Journal.Vorhaben.setKind("free") NS.Journal.Frame.showSub("karte")'],
+    'NS.Journal.Vorhaben.cancelPick() NS.Journal.Vorhaben.state.zone = nil NS.Journal.Vorhaben.setKind("free")', "reise"],
   // Zonenansicht einer Zone ohne Reisedaten ("Unentdecktes Kapitel" + gekritzelter Satz), Reise-Feinschliff
   ["reise", "unentdeckt", "NS.Journal.Frame.select({ zone = 1438 })", "NS.Journal.Frame.select(nil)"],
   ["kampf", "tode", "NS.Journal.KampfPage.OpenDeath(NS.Journal.KampfPage, 1)", "NS.Journal.KampfPage.CloseDeath(NS.Journal.KampfPage)"],
@@ -97,15 +104,15 @@ export const SUBVIEWS = [
   ["quests", "offen-durotar", () => OPEN_QUESTS_LUA(1411), 'NS.Journal.QuestsPage:ShowSub("historie")'],
   ["quests", "offen-unterstadt", () => OPEN_QUESTS_LUA(1458), 'NS.Journal.QuestsPage:ShowSub("historie")'],
   // Dungeons (Unter-Lesezeichen "Dungeons", nur Forever): echtes Datenaddon, Untoter Paladin, Fortschritt aus den Stufen (DUNGEONS_LUA)
-  ["quests", "dungeons", () => DUNGEONS_LUA(24), DUNGEONS_CLOSE],
-  ["quests", "dungeons-karte", () => DUNGEONS_LUA(24, 'DV:SetMode("map")'), DUNGEONS_CLOSE],
-  ["quests", "dungeons-seite", () => DUNGEONS_LUA(24, 'DV:OpenDungeon("721")'), DUNGEONS_CLOSE],
-  ["quests", "dungeons-scholomance", () => DUNGEONS_LUA(58, 'DV:SelectDungeon("2057")'), DUNGEONS_CLOSE],
+  ["dungeons", "quests", () => DUNGEONS_LUA(24), DUNGEONS_CLOSE],
+  ["dungeons", "quests-karte", () => DUNGEONS_LUA(24, 'DV:SetMode("map")'), DUNGEONS_CLOSE],
+  ["dungeons", "quests-seite", () => DUNGEONS_LUA(24, 'DV:OpenDungeon("721")'), DUNGEONS_CLOSE],
+  ["dungeons", "quests-scholomance", () => DUNGEONS_LUA(58, 'DV:SelectDungeon("2057")'), DUNGEONS_CLOSE],
   // 106er-Kette (Fraktionen zusammen, "Alle"): zugeklappt mit Deckel, dann die ganze Kette nach einem Klick auf den Deckel
-  ["quests", "dungeons-brs", () => DUNGEONS_LUA(58, 'DV:SetAll(true) DV:OpenDungeon("1583") DV_LONG()'), DUNGEONS_CLOSE],
-  ["quests", "dungeons-brs-offen", () => DUNGEONS_LUA(58, 'DV:SetAll(true) DV:OpenDungeon("1583") DV_LONG() local it = DV_MORE() if it then DV:OnItem(it) end'), DUNGEONS_CLOSE],
+  ["dungeons", "quests-brs", () => DUNGEONS_LUA(58, 'DV:SetAll(true) DV:OpenDungeon("1583") DV_LONG()'), DUNGEONS_CLOSE],
+  ["dungeons", "quests-brs-offen", () => DUNGEONS_LUA(58, 'DV:SetAll(true) DV:OpenDungeon("1583") DV_LONG() local it = DV_MORE() if it then DV:OnItem(it) end'), DUNGEONS_CLOSE],
   // Lehrplan (Unter-Lesezeichen "Lehrplan", nur Forever): Untoter Paladin Stufe 20, ein Teil gelernt, ein Lehrer bekannt, Talentpunkt frei
-  ["quests", "lehrplan", () => LEHRPLAN_LUA, 'NS.Journal.QuestsPage:ShowSub("historie") LEHRPLAN_RESTORE()'],
+  ["plaene", "lehrplan", () => LEHRPLAN_LUA, 'NS.Journal.PlaenePage:ShowSub("vorhaben") LEHRPLAN_RESTORE()'],
   // Zonen (Unter-Lesezeichen "Zonen", nur Forever): echtes Datenaddon, Untoter Paladin Stufe 24, Tirisfal ganz erledigt (Stempel)
   ["quests", "zonen", () => ZONES_LUA(24), ZONES_CLOSE],
   ["schaetze", "funde", "NS.Journal.SchaetzePage:OpenFunde()", "NS.Journal.SchaetzePage:CloseFunde()"],
@@ -161,9 +168,9 @@ export const DUNGEONS_LUA = (level, after = "") => `${QUEST_DATA_LUA()}
   end
   C_QuestLog.GetNumQuestLogEntries = function() return 0, 0 end
   OQ.invalidate()
-  local P = NS.Journal.QuestsPage
-  P:ShowSub("dungeons")
-  DV = P.dungeonView
+  local P = NS.Journal.DungeonsPage
+  P:ShowSub("quests")
+  DV = P.questsView
   function DV_MORE() for _, it in ipairs(DV.items) do if it.kind == "more" then return it end end end
   function DV_LONG() for _, it in ipairs(DV.items) do if it.kind == "more" then DV.ui.list:SetOffset(0) return end end end
   ${after}`;
@@ -212,7 +219,7 @@ export const LEHRPLAN_LUA = `
   C_Traits = { GetConfigInfo = function() return { treeIDs = { 11 } } end, GetTreeCurrencyInfo = function() return { { quantity = 1 } } end }
   NS.Store.putSnapshot("trainers", 5491, { name = "Lehrer Zackenbart", mapID = 1458, x = 0.6, y = 0.7, class = "PALADIN" }, true)
   NS.Journal.Lehrplan.resetNames()
-  NS.Journal.QuestsPage:ShowSub("lehrplan")`;
+  NS.Journal.PlaenePage:ShowSub("lehrplan")`;
 
 // N1: Vorschaubilder der Notizen (Lesen / Bearbeiten) zusaetzlich unter diesen Namen
 export const N1_SHOTS = { notizen: "n1-notizen", "notizen-edit": "n1-notizen-edit" };
@@ -224,12 +231,13 @@ export const PROFILES = { voll: "b2", frisch: "leer", zehn: "zehn" };
 export const EMPTY_VIEWS = [
   ["reise", "", "", ""],
   ["reise", "gesamt", 'NS.Journal.Frame.showSub("gesamt")', 'NS.Journal.Frame.showSub("karte")'],
-  ["reise", "todo", 'NS.Journal.Frame.showSub("vorhaben")', 'NS.Journal.Frame.showSub("karte")'],
   ["chronik", "", "", ""],
   ["chronik", "tagebuch", "NS.Journal.ChronikPage:OpenDiary()", "NS.Journal.ChronikPage:CloseSub()"],
   ["chronik", "weggefaehrten", "NS.Journal.ChronikPage:OpenCompanions()", "NS.Journal.ChronikPage:CloseSub()"],
   ["quests", "", "", ""],
   ["quests", "questtext", "NS.Journal.QuestsPage:ToggleTable()", "NS.Journal.QuestsPage:ToggleTable()"],
+  ["dungeons", "", "", ""],
+  ["plaene", "", "", "", "reise"],
   ["schaetze", "", "", ""],
   ["schaetze", "quellen", 'NS.Journal.SchaetzePage:SetFlow("bars")', 'NS.Journal.SchaetzePage:SetFlow("levels")'],
   ["momente", "", "", ""],
@@ -855,10 +863,10 @@ export function main(argv) {
         if (id === "kampf") continue;
         if (vm.lua(`return JF.showPage(${JSON.stringify(id)})`) !== true) throw new Error(`Seite ${id} laesst sich nicht zeigen`);
         const decor = keepoutFor(vm, id);
-        for (const [tab, name, open, close] of EMPTY_VIEWS) {
+        for (const [tab, name, open, close, ko] of EMPTY_VIEWS) {
           if (tab !== id) continue;
           if (open) vm.exec(open);
-          shoot(id, name ? `${id}-${name}` : id, decor);
+          shoot(id, name ? `${id}-${name}` : id, ko ? keepoutFor(vm, ko) : decor);
           if (close) vm.exec(close);
         }
       }
@@ -872,10 +880,10 @@ export function main(argv) {
       if (id === "reise") vm.lua(`return JF.showPage("reise")`);
       const decor = keepoutFor(vm, id);
       shots.push([id, shoot(id, id, decor)]);
-      for (const [tab, name, open, close] of SUBVIEWS) {
+      for (const [tab, name, open, close, ko] of SUBVIEWS) {
         if (tab !== id) continue;
         vm.exec(typeof open === "function" ? open() : open);
-        shoot(id, `${id}-${name}`, decor);
+        shoot(id, `${id}-${name}`, ko ? keepoutFor(vm, ko) : decor);
         vm.exec(close);
       }
     }

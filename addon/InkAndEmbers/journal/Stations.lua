@@ -112,6 +112,13 @@ function Stations.build(model, index, fmt)
     return ok and type(s) == "string" and s or nil
   end
   local function zoneAt(t)
+    -- the zone the player was really in (chapters span detours since K2), else the chapter zone
+    local M = Journal.Model
+    if M and M.zoneAt and type(fmt.mapName) == "function" then
+      local ok, z = pcall(M.zoneAt, model, t)
+      local name = ok and type(z) == "number" and fmt.mapName(z) or nil
+      if type(name) == "string" and name ~= "" then return name end
+    end
     local c = chapterAt(model, t)
     return c and type(c.zoneName) == "string" and c.zoneName or nil
   end

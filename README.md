@@ -40,7 +40,12 @@ When you sit down at a campfire (WoW Forever), a few singed scraps of paper floa
 that you can say in /say with a click, or throw away. Who sat with you is written to the log and shows up in the journal.
 
 Smaller things: pop-ups for new medals and areas, a welcome greeting, a short introduction book (`/chronik tutorial`), and
-HUD elements that can be moved in the game's Edit Mode. The interface and the texts are available in English and German.
+HUD elements that can be moved in the game's Edit Mode.
+
+**Languages:** English, German and Brazilian Portuguese. The Portuguese translation is by paulovnas (thank you! PR #1). It is
+selected automatically on a ptBR client; on another client choose it in the language setting or with `/chronik language ptbr`,
+then reload. Texts added after the translation, the tutorial illustrations and the bundled offline search names show in
+English until they are translated (`node scripts/locale-missing.mjs ptBR` lists them).
 
 ## Installation
 
@@ -71,8 +76,8 @@ New files such as textures and fonts are only picked up after a full restart of 
 | `/chronik todo` | show or hide the open to-dos at the screen edge (`todo reset` restores position and size) |
 | `/chronik note` | show or hide the quick note field |
 | `/chronik open` | open the Open tab under Quests |
-| `/chronik training` | open the Training tab under Quests (WoW Forever only; `training status` prints the state) |
-| `/chronik language` | `auto`, `de` or `en`; takes effect after `/reload` |
+| `/chronik training` | open the Training tab under Plans (WoW Forever only; `training status` prints the state) |
+| `/chronik language` | `auto`, `de`, `en` or `ptbr`; takes effect after `/reload` |
 | `/chronik save` | open the save window; saving reloads the interface |
 | `/chronik milestone [level]` | preview of the milestone note (WoW Forever) |
 | `/chronik backup` | state of the data safety: this character's backup copy, last save, how full the main file is, last restore |
