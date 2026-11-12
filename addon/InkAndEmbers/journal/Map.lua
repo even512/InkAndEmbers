@@ -1309,6 +1309,9 @@ local function styleRoute(l, kind)
     l:SetThickness(Map.FLIGHT_WIDTH)
   else
     l:SetColorTexture(Theme.C.red[1], Theme.C.red[2], Theme.C.red[3], 1)
+    -- Pooled lines may carry a vertex tint from an earlier flight styling; reset it,
+    -- otherwise the red texture is multiplied by that tint and turns almost black.
+    l:SetVertexColor(1, 1, 1, 1)
     l:SetThickness(Map.ROUTE_WIDTH)
   end
 end

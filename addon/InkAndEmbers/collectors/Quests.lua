@@ -638,6 +638,27 @@ local function isTaskQuest(questID)
   return readableBool(call(C.IsQuestTask, questID)) == true or readableBool(call(C.IsWorldQuest, questID)) == true
 end
 
+-- description text from the quest log entry (GetQuestLogQuestText works on the selected entry): selects the quest briefly, reads
+-- the text and puts the previous selection back. Only with a known previous selection (so it can be restored exactly), never in combat
+-- (or when that cannot be read) and only when all pieces are present; anything else gives nil instead of changing the selection for good.
+local function logQuestText(questID)
+  local C = C_QuestLog
+  if type(C) ~= "table" or isSecret(C) then return nil end
+  if type(GetQuestLogQuestText) ~= "function" or type(C.SetSelectedQuest) ~= "function" or type(C.GetSelectedQuest) ~= "function" then return nil end
+  local combat = call(InCombatLockdown)
+  if isSecret(combat) or combat == true then return nil end
+  local idx = num(call(C.GetLogIndexForQuestID, questID))
+  if not idx or idx <= 0 then return nil end
+  local prev = num(call(C.GetSelectedQuest))
+  if not prev or prev <= 0 then return nil end
+  if prev ~= questID then
+    if not pcall(C.SetSelectedQuest, questID) then return nil end
+  end
+  local desc = str(call(GetQuestLogQuestText, floor(idx)))
+  if prev ~= questID then pcall(C.SetSelectedQuest, prev) end
+  return desc
+end
+
 handlers.QUEST_ACCEPTED = function(self, a, b)
   local questID = num(b) or num(a) -- Retail: (questID); older clients: (index, questID)
   if not questID or questID <= 0 then return end
@@ -665,7 +686,7 @@ handlers.QUEST_ACCEPTED = function(self, a, b)
   local quests = charQuests()
   local entry = quests and quests[questID]
   if not (type(entry) == "table" and entry.detail) then
-    local desc = str(call(C_QuestLog and C_QuestLog.GetQuestDescription, questID))
+    local desc = str(call(C_QuestLog and C_QuestLog.GetQuestDescription, questID)) or logQuestText(questID)
     if desc then Store.putText("quests", questID, { detail = desc }) end
   end
   noteQuestLine(questID, mapID)

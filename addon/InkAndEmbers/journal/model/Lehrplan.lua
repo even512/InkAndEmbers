@@ -18,6 +18,7 @@ local floor, gmatch, match = math.floor, string.gmatch, string.match
 
 Lehrplan.ALLOW_RETAIL = false   -- tests: switch the retail block off
 Lehrplan.MAX_TRAINERS = 200     -- trainer locations read across all characters
+Lehrplan.PET_CLASS = "HUNTER"   -- the only class with a pet trainer section
 Lehrplan.NEXT_LEVELS = 4        -- "coming next" levels in the summary
 -- race file -> race id (fallback if UnitRace has no third return)
 Lehrplan.RACE_IDS = { Human = 1, Orc = 2, Dwarf = 3, NightElf = 4, Scourge = 5, Tauren = 6, Gnome = 7, Troll = 8 }
@@ -124,6 +125,20 @@ function Lehrplan.parse(cls)
     end
   end
   local plan = { list = list, byId = byId, groupOf = groupOf, quests = quests }
+  -- pet abilities (Beast Training): same line format, own list; only classes that have pets.<CLASS> data
+  local pt = type(D.pets) == "table" and D.pets[cls] or nil
+  if type(pt) == "string" then
+    local plist, pById = {}, {}
+    for line in gmatch(pt, "[^\n]+") do
+      local lv, id, cost, req = match(line, "^(%d+)\t(%d+)\t(%d*)\t([%d,]*)\t(%d*)\t([AH]?)\t(%d*)$")
+      if lv then
+        local e = { level = tonumber(lv), id = tonumber(id), cost = tonumber(cost) or 0, req = idList(req), idx = #plist + 1 }
+        plist[#plist + 1] = e
+        if not pById[e.id] then pById[e.id] = e end
+      end
+    end
+    if #plist > 0 then plan.pets = { list = plist, byId = pById } end
+  end
   cache[cls] = plan
   return plan
 end
@@ -133,7 +148,8 @@ function Lehrplan.resetCache()
 end
 
 -- Hunter pet ability IDs (pets.<CLASS> in the data: Beast Training, taught by the pet trainer, not part of the class plan).
--- Not shown anywhere yet; the Trainer collector uses them to tell a pet trainer window from a class trainer window.
+-- The Trainer collector uses them to tell a pet trainer window from a class trainer window; the rows themselves are plan.pets
+-- (Lehrplan.parse) and are evaluated by Lehrplan.evaluatePets.
 function Lehrplan.petIds(cls)
   local D = ns.TrainerSpells
   local text = type(cls) == "string" and type(D) == "table" and type(D.pets) == "table" and D.pets[cls] or nil
@@ -370,6 +386,14 @@ function Lehrplan.evaluate(opts)
       out.rows[#out.rows + 1] = r
     end
   end
+  -- hunter only: pet abilities (own list for the Pet Training tab; never part of the class counts above, so "Zum Lehrer" ignores them)
+  if plan.pets and p.class == Lehrplan.PET_CLASS then
+    out.pets = Lehrplan.evaluatePets(plan.pets, level, names)
+  elseif ns.devForceHunter == true then
+    -- development switch (journal/SimPanel.lua, not in the release package): preview of the hunter Pet Training tab for another class
+    local hunter = Lehrplan.parse(Lehrplan.PET_CLASS)
+    if hunter and hunter.pets then out.pets = Lehrplan.evaluatePets(hunter.pets, level, names, true) end
+  end
   local levels = {}
   for lv in pairs(nextBy) do levels[#levels + 1] = lv end
   table.sort(levels)
@@ -378,6 +402,169 @@ function Lehrplan.evaluate(opts)
   if money == nil then money = num((call(rawget(_G, "GetMoney")))) end
   out.money = money
   out.short = money and out.now.cost > money and (out.now.cost - money) or 0
+  return out
+end
+
+-- Pet training (hunter, Beast Training). State of the last pet trainer visits: snapshots.state.petTraining =
+-- { level, at, visited, learned = { [id] = true }, open = { [id] = true } } (collectors/Trainer.lua). "learned" is proof of learned
+-- (row "used", learn message); "open" is proof of not learned (row "available"/"unavailable"). The trainer window hides learned
+-- rows by default, so a missing row proves nothing: an id in neither set is "unknown".
+function Lehrplan.petTraining()
+  local c = charTable()
+  local st = c and type(c.snapshots) == "table" and type(c.snapshots.state) == "table" and c.snapshots.state.petTraining or nil
+  if type(st) ~= "table" then return nil end
+  local function set(v)
+    local out = {}
+    if type(v) == "table" then
+      for id, on in pairs(v) do
+        if on == true and type(id) == "number" then out[id] = true end
+      end
+    end
+    return out
+  end
+  return { level = num(st.level), at = num(st.at), visited = st.visited == true, learned = set(st.learned), open = set(st.open) }
+end
+
+-- Merge of a new reading into the stored state (never resets "learned"): ids in learnedIds become learned (lower ranks of the same
+-- ability too), ids in openIds become open unless already learned. old = Lehrplan.petTraining() result or nil.
+-- Returns { learned = set, open = set } restricted to known pet ids, or nil without pet data.
+function Lehrplan.petMerge(old, learnedIds, openIds)
+  local plan = Lehrplan.parse(Lehrplan.PET_CLASS)
+  local pets = plan and plan.pets
+  if not pets then return nil end
+  local learned, open = {}, {}
+  local function take(dst, src)
+    if type(src) ~= "table" then return end
+    for id, on in pairs(src) do
+      if on == true and pets.byId[id] then dst[id] = true end
+    end
+  end
+  take(learned, old and old.learned)
+  take(open, old and old.open)
+  take(learned, learnedIds)
+  take(open, openIds)
+  -- higher rank learned => every lower rank of the chain learned (repeated: chains)
+  for _ = 1, 12 do
+    local changed = false
+    for id in pairs(learned) do
+      for _, r in ipairs(pets.byId[id].req) do
+        if not learned[r] and pets.byId[r] then
+          learned[r] = true
+          changed = true
+        end
+      end
+    end
+    if not changed then break end
+  end
+  for id in pairs(learned) do open[id] = nil end
+  return { learned = learned, open = open }
+end
+
+-- rows of the pet list: { id, level, cost, req, pet = true, state, name, rank, icon }
+-- state: "learned" | "now" (open at the visit, level reached, no open lower rank) | "missing" (a lower rank is known unlearned)
+--        | "later" (level not reached) | "unknown" (level reached, never seen in the window and not known learned: no guessing)
+-- -> { rows, seen (visited a pet trainer), at, learned = { n }, now = { n, cost }, missing = { n }, later = { n }, unknown = { n },
+--      todo = { n, cost } } ("todo" = learnable now, as for the class spells)
+-- Sample state of the development preview (memory only, never stored): first two ranks of Great Stamina and Natural Armor learned,
+-- everything else seen at the trainer except two level-20 abilities (shown as unknown).
+local SAMPLE_LEARNED = { 4187, 4188, 24545, 24549 }
+local SAMPLE_UNSEEN = { [24493] = true, [23992] = true }
+
+local function sampleTraining(pets)
+  local pt = { visited = true, learned = {}, open = {} }
+  for _, id in ipairs(SAMPLE_LEARNED) do pt.learned[id] = true end
+  for _, e in ipairs(pets.list) do
+    if not pt.learned[e.id] and not SAMPLE_UNSEEN[e.id] then pt.open[e.id] = true end
+  end
+  return pt
+end
+
+function Lehrplan.evaluatePets(pets, level, names, preview)
+  local pt = preview and sampleTraining(pets) or Lehrplan.petTraining()
+  local out = { preview = preview == true or nil, rows = {}, seen = pt ~= nil and pt.visited == true, at = pt and pt.at, learned = { n = 0 }, now = { n = 0, cost = 0 },
+    missing = { n = 0 }, later = { n = 0 }, unknown = { n = 0 }, todo = { n = 0, cost = 0 }, next = {} }
+  local nextBy = {}
+  for _, e in ipairs(pets.list) do
+    local r = { id = e.id, level = e.level, cost = e.cost, req = e.req, pet = true }
+    if pt and pt.learned[e.id] then
+      r.state = "learned"
+      out.learned.n = out.learned.n + 1
+    elseif e.level > level then
+      r.state = "later"
+      out.later.n = out.later.n + 1
+      local nb = nextBy[e.level]
+      if not nb then
+        nb = { level = e.level, n = 0, cost = 0 }
+        nextBy[e.level] = nb
+      end
+      nb.n = nb.n + 1
+      nb.cost = nb.cost + e.cost
+    elseif pt and pt.open[e.id] then
+      local ok = true
+      for _, req in ipairs(e.req) do
+        if pt.open[req] then ok = false end
+      end
+      r.state = ok and "now" or "missing"
+      if ok then
+        out.now.n = out.now.n + 1
+        out.now.cost = out.now.cost + e.cost
+        out.todo.n = out.todo.n + 1
+        out.todo.cost = out.todo.cost + e.cost
+      else
+        out.missing.n = out.missing.n + 1
+      end
+    else
+      r.state = "unknown"
+      out.unknown.n = out.unknown.n + 1
+    end
+    if names then
+      local info = Lehrplan.spellInfo(e.id)
+      if info then r.name, r.rank, r.icon, r.missingName = info.name, info.rank, info.icon, info.missing end
+    end
+    out.rows[#out.rows + 1] = r
+  end
+  local levels = {}
+  for lv in pairs(nextBy) do levels[#levels + 1] = lv end
+  table.sort(levels)
+  for i = 1, math.min(#levels, Lehrplan.NEXT_LEVELS) do out.next[i] = nextBy[levels[i]] end
+  return out
+end
+
+-- Is the sub-view "Tierausbildung" on offer? Only where the trainer plan is on (not Retail) and only for hunters (class of the logged-in
+-- character) - or while the development preview /chronik sim jaeger is on (journal/SimPanel.lua, not in the release package).
+function Lehrplan.petTabVisible()
+  if not Lehrplan.active() then return false end
+  if ns.devForceHunter == true then return true end
+  local plan = Lehrplan.parse(Lehrplan.player().class)
+  return plan ~= nil and plan.pets ~= nil and Lehrplan.player().class == Lehrplan.PET_CLASS
+end
+
+-- Rows of the pet view for a page filter (same filters as the class spells): "now" = learnable now + missing lower rank +
+-- unknown (level reached), "next" = later, "learned", "all". Sorted by level, then id.
+function Lehrplan.petRows(pv, filter)
+  local out = {}
+  if type(pv) ~= "table" or type(pv.rows) ~= "table" then return out end
+  for _, r in ipairs(pv.rows) do
+    local s = r.state
+    local take
+    if filter == "now" then
+      take = s == "now" or s == "missing" or s == "unknown"
+    elseif filter == "next" then
+      take = s == "later"
+    elseif filter == "learned" then
+      take = s == "learned"
+    else
+      take = true
+    end
+    if take then out[#out + 1] = r end
+  end
+  table.sort(out, function(a, b)
+    if a.level ~= b.level then
+      if filter == "learned" then return a.level > b.level end
+      return a.level < b.level
+    end
+    return a.id < b.id
+  end)
   return out
 end
 

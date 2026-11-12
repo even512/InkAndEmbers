@@ -56,6 +56,7 @@ L.add("enUS", "Core", {
   helpRest = "/chronik rest - preview the \"Since your last rest\" recap",
   helpMeter = "/chronik meter - turn the Damage Meter on automatically: \"meter on\" or \"meter off\" (also in settings)",
   helpTodo = "/chronik todo - show/hide open to-dos at the screen edge (\"todo reset\" restores position and size)",
+  helpQuests = "/chronik quests on|off - turn the own quest tracker on/off, hides the Questie and Blizzard trackers (WoW Forever only); \"quests hint [done]\" previews the progress hint at the handle",
   helpNote = "/chronik note - show/hide the quick note field (Enter adds a note)",
   helpOpen = "/chronik open - open quests (\"Open\" tab under Quests)",
   helpOpenTest = "/chronik open test - turns on Retail test mode (\"test off\" ends it)",
@@ -197,6 +198,8 @@ L.add("enUS", "col.Rest", {
 L.add("enUS", "col.Plans", {
   trainerOne = "To the trainer: %s new spell (%s)",
   trainerOther = "To the trainer: %s new spells (%s)",
+  petOne = "To the pet trainer: %s new ability (%s)",
+  petOther = "To the pet trainer: %s new abilities (%s)",
   unitG = "g",
   unitS = "s",
   unitK = "c",
@@ -206,6 +209,11 @@ L.add("enUS", "col.Plans", {
 L.add("enUS", "col.Trainer", {
   todo_one = "To the trainer: %s new spell (%s)",
   todo_other = "To the trainer: %s new spells (%s)",
+  petTodo_one = "To the pet trainer: %s new ability (%s)",
+  petTodo_other = "To the pet trainer: %s new abilities (%s)",
+  petToastTitle = "To the pet trainer",
+  petToast_one = "%s new ability",
+  petToast_other = "%s new abilities",
   unitG = "g",
   unitS = "s",
   unitK = "c",

@@ -313,6 +313,70 @@ function Geo.zoneProjector(zoneID)
   return fn, "zone:" .. (zoneID and string.format("%d", floor(zoneID)) or "-"), aff
 end
 
+-- Distance in meters between two map points (x/y 0-1 on their maps): the same map, else the shared continent (both maps projected
+-- onto the continent map). nil without map sizes, without a shared continent or for invalid values (never an error).
+Geo.YARD_M = 0.9144
+
+local function unit01(v)
+  v = num(v)
+  if not v or v < Geo.RECT_MIN or v > Geo.RECT_MAX then return nil end
+  return v
+end
+
+local function metersOn(mapID, x1, y1, x2, y2)
+  local w, h = Geo.mapSize(mapID)
+  if not w or not h then return nil end
+  local dx, dy = (x1 - x2) * w, (y1 - y2) * h
+  return math.sqrt(dx * dx + dy * dy) * Geo.YARD_M
+end
+
+function Geo.distance(mapA, xA, yA, mapB, xB, yB)
+  mapA, mapB = num(mapA), num(mapB)
+  xA, yA, xB, yB = unit01(xA), unit01(yA), unit01(xB), unit01(yB)
+  if not (mapA and mapB and xA and yA and xB and yB) then return nil end
+  mapA, mapB = floor(mapA), floor(mapB)
+  if mapA == mapB then return metersOn(mapA, xA, yA, xB, yB) end
+  local c1, c2 = Geo.continentOf(mapA), Geo.continentOf(mapB)
+  if not c1 or c1 ~= c2 then return nil end
+  local function onCont(mapID, x, y)
+    if mapID == c1 then return x, y end
+    local a, b, c, d = Geo.affine(mapID, c1)
+    if not a then return nil end
+    return a + b * x, c + d * y
+  end
+  local px, py = onCont(mapA, xA, yA)
+  local qx, qy = onCont(mapB, xB, yB)
+  if not (px and qx) then return nil end
+  return metersOn(c1, px, py, qx, qy)
+end
+
+-- Direction from A to B (quest tracker compass, E4): east and south offset in yards on the same map, else on the shared continent
+-- (same projection as Geo.distance). nil without map sizes or without a shared continent (never an error).
+function Geo.vector(mapA, xA, yA, mapB, xB, yB)
+  mapA, mapB = num(mapA), num(mapB)
+  xA, yA, xB, yB = unit01(xA), unit01(yA), unit01(xB), unit01(yB)
+  if not (mapA and mapB and xA and yA and xB and yB) then return nil end
+  mapA, mapB = floor(mapA), floor(mapB)
+  local m = mapA
+  if mapA ~= mapB then
+    local c1, c2 = Geo.continentOf(mapA), Geo.continentOf(mapB)
+    if not c1 or c1 ~= c2 then return nil end
+    local function onCont(mapID, x, y)
+      if mapID == c1 then return x, y end
+      local a, b, c, d = Geo.affine(mapID, c1)
+      if not a then return nil end
+      return a + b * x, c + d * y
+    end
+    xA, yA = onCont(mapA, xA, yA)
+    xB, yB = onCont(mapB, xB, yB)
+    if not (xA and xB) then return nil end
+    m = c1
+  end
+  local w, h = Geo.mapSize(m)
+  if not w or not h then return nil end
+  return (xB - xA) * w, (yB - yA) * h
+end
+
 -- After a loading screen map data may exist that was missing before: retry failures.
 if ns.Core and ns.Core.on then
   ns.Core.on("PLAYER_ENTERING_WORLD", Geo.retryFailed)

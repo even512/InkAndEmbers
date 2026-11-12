@@ -70,7 +70,7 @@ function Names.readSurname()
 end
 
 -- ruleset of the logged-in character | nil. Order Hardcore > RP > PvP > PvE, as Questie. Only on a client with regionally unique
--- names and C_GameRules.IsGameRuleActive (Retail stays nil); an unreadable rule (error, secret) gives nil rather than a guess.
+-- names and C_GameRules.IsGameRuleActive (Retail stays nil); an unreadable rule (error, secret, missing enum member) gives nil rather than a guess.
 function Names.readRuleset()
   if not Names.foreverClient() then return nil end
   local G = rawget(_G, "C_GameRules")
@@ -78,16 +78,17 @@ function Names.readRuleset()
   if type(G) ~= "table" or isSecret(G) or type(G.IsGameRuleActive) ~= "function" then return nil end
   local rules = type(E) == "table" and not isSecret(E) and type(E.GameRule) == "table" and E.GameRule or nil
   if not rules then return nil end
+  -- a missing or secret enum member (renamed by the client) is unknown, not "inactive": otherwise the ruleset would silently read as PvE
   local function active(key)
     local id = rules[key]
-    if id == nil or isSecret(id) then return false end
+    if id == nil or isSecret(id) then return nil end
     local ok, v = pcall(G.IsGameRuleActive, id)
     if not ok or isSecret(v) then return nil end
     return v == true
   end
   local hc = active("HardcoreRuleset")
+  if hc or apiTrue(G.IsHardcoreActive) then return "hardcore" end -- the dedicated Hardcore query also covers a missing enum member
   if hc == nil then return nil end
-  if hc or apiTrue(G.IsHardcoreActive) then return "hardcore" end
   local rp = active("RPRuleset")
   if rp == nil then return nil end
   if rp then return "rp" end

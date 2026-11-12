@@ -20,8 +20,12 @@ Spoken.ORIGIN = "InkAndEmbers"
 local EVENT_NAME = { "QuestAccept", "QuestProgress", "QuestComplete" } -- Spoken's Enums.SoundEvent
 local CACHE_MAX = 600
 local TEXT_MAX = 160
+local NEG_TTL = 20 -- seconds a "no recording" answer counts; a found recording stays until reset()
 
-local cache, cacheN = {}, 0
+-- pos[key] = true (recording found, kept); neg[key] = GetTime() until which the "none" holds. A "none" is never kept for
+-- good: Spoken loads its voice packs (LoadOnDemand, one per frame, from ~1 s after login), and a question asked before
+-- that would otherwise stay "none" for the whole session.
+local pos, neg, cacheN = {}, {}, 0
 local playing = {}
 
 local function global(name)
@@ -54,9 +58,20 @@ end
 
 local function keyOf(questID, event) return questID * 4 + event end
 
+local function now()
+  if type(GetTime) ~= "function" then return nil end
+  local ok, t = pcall(GetTime)
+  if ok and type(t) == "number" then return t end
+  return nil
+end
+
+local hooked = false
+local ensureHooks -- defined below env()
+
 local function env()
   local S, VO = global("Spoken"), global("VoiceOver")
   if not (S and VO) then return nil end
+  if not hooked then ensureHooks(S) end
   local compat = method(S, "IsCompatible")
   if not compat then return nil end
   local ok, res = pcall(compat, S, 1)
@@ -65,6 +80,13 @@ local function env()
   if type(P) ~= "table" or type(DM) ~= "table" then return nil end
   if not (method(P, "PlayNow") and method(P, "Contains") and method(P, "Remove") and method(DM, "PrepareSound")) then return nil end
   return { VO = VO, P = P, DM = DM }
+end
+
+-- Spoken's voice packs still loading? Spoken itself asks the same flag (Addon.dataModulesPending, VoiceOver.lua:627-661)
+-- before it plays anything. Then every "none" is only provisional and is not cached at all.
+local function packsPending(e)
+  local addon = field(e.VO, "Addon")
+  return type(addon) == "table" and field(addon, "dataModulesPending") and true or false
 end
 
 function Spoken.available() return env() ~= nil end
@@ -129,7 +151,52 @@ local function build(e, questID, event, title, giver)
 end
 
 function Spoken.reset()
-  cache, cacheN = {}, 0
+  pos, neg, cacheN = {}, {}, 0
+end
+
+-- Ask the tracker (if any) to redraw so that buttons grey-out from before the packs were loaded become active.
+local function redrawTracker()
+  local QT = Journal.QuestTracker
+  local f = method(QT, "request")
+  if f then pcall(f) end
+end
+
+local function onPacksChanged(redraw)
+  Spoken.reset()
+  if redraw then redrawTracker() end
+end
+
+ensureHooks = function(S)
+  if hooked then return end
+  local reg = method(S or global("Spoken"), "RegisterCallback")
+  if not reg then return end
+  hooked = true
+  local target = S or global("Spoken")
+  pcall(reg, target, "VOICE_PACKS_LOADED", function() onPacksChanged(true) end)
+  pcall(reg, target, "PART_SWITCHED", function(part)
+    if part == nil or part == "quests" then onPacksChanged(true) end
+  end)
+end
+
+-- A Spoken data pack (addon folder "Spoken...") finished loading: earlier "none" answers may be stale now.
+do
+  if type(CreateFrame) == "function" then
+    local ok, f = pcall(CreateFrame, "Frame")
+    if ok and type(f) == "table" and type(f.RegisterEvent) == "function" and type(f.SetScript) == "function" then
+      pcall(f.RegisterEvent, f, "ADDON_LOADED")
+      pcall(f.RegisterEvent, f, "PLAYER_LOGIN")
+      pcall(f.SetScript, f, "OnEvent", function(_, event, name)
+        if event == "ADDON_LOADED" then
+          if type(name) == "string" and string.sub(name, 1, 6) == "Spoken" then
+            onPacksChanged(false)
+            ensureHooks(nil)
+          end
+        else
+          ensureHooks(nil)
+        end
+      end)
+    end
+  end
 end
 
 function Spoken.has(questID, event)
@@ -137,16 +204,28 @@ function Spoken.has(questID, event)
   local e = env()
   if not e then return false end
   local key = keyOf(questID, event)
-  local hit = cache[key]
-  if hit ~= nil then return hit end
+  if pos[key] then return true end
+  local t = now()
+  local until_ = neg[key]
+  if until_ and t and t < until_ then return false end
+  -- Same minimal data as Spoken's own Play button and Questie's tracker (event + questID): PrepareSound writes into it
   local ok, res = pcall(function()
-    local data = build(e, questID, event) -- copy for the check only: PrepareSound writes into it
-    return e.DM:PrepareSound(data)
+    local ev = field(field(e.VO, "Enums"), "SoundEvent")
+    ev = field(ev, EVENT_NAME[event])
+    if type(ev) ~= "number" then ev = event end
+    return e.DM:PrepareSound({ event = ev, questID = questID })
   end)
   local found = ok and res and true or false
-  if cacheN >= CACHE_MAX then cache, cacheN = {}, 0 end
-  cache[key] = found
-  cacheN = cacheN + 1
+  if found then
+    if cacheN >= CACHE_MAX then pos, neg, cacheN = {}, {}, 0 end
+    pos[key] = true
+    neg[key] = nil
+    cacheN = cacheN + 1
+  elseif t and not packsPending(e) then
+    if cacheN >= CACHE_MAX then pos, neg, cacheN = {}, {}, 0 end
+    neg[key] = t + NEG_TTL
+    cacheN = cacheN + 1
+  end
   return found
 end
 

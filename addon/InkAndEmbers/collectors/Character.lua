@@ -424,6 +424,9 @@ local function onSystemMessage(self, text)
   for i = 1, #LEARN do
     local name = Patterns.match(LEARN[i][1], text)
     if str(name) then
+      -- hunter pet ability taught by the pet trainer: the spell link names it (Trainer.noteLearned ignores every other id)
+      local linkID = tonumber(string.match(name, "|Hspell:(%d+)"))
+      if linkID and ns.Trainer and type(ns.Trainer.noteLearned) == "function" then pcall(ns.Trainer.noteLearned, linkID) end
       self.learnMsgs[#self.learnMsgs + 1] = { name = name, kind = LEARN[i][2] }
       queueLearn(self)
       return

@@ -11,3 +11,8 @@ art/
 # Von scripts/fetch-questiedb-release.mjs geladenes QuestieDB-Release (Daten-TOC, nur lokal)
 data-capture/
 tools/.feed-state.json
+
+# Shorts-Rohmaterial, Ton und fertige Videos (gross, nur lokal)
+docs/marketing/shorts/roh/
+docs/marketing/shorts/ton/
+docs/marketing/shorts/fertig/

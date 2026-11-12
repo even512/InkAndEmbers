@@ -126,6 +126,8 @@ end
 local PT = ns.Locale.ns("col.Plans", {
   trainerOne = "Zum Lehrer: %s neuer Zauber (%s)",
   trainerOther = "Zum Lehrer: %s neue Zauber (%s)",
+  petOne = "Zum Tierausbilder: %s neue Fähigkeit (%s)",
+  petOther = "Zum Tierausbilder: %s neue Fähigkeiten (%s)",
   unitG = "G",
   unitS = "S",
   unitK = "K",
@@ -136,14 +138,23 @@ local TRAINER_SHAPES = {
   { "^To the trainer: (%d+) new spells? %((.+)%)$", "g", "s", "c" },
 }
 
+-- same for the pet trainer to-do (hunter): "Zum Tierausbilder: 2 neue Fähigkeiten (5 S 10 K)"
+local PET_SHAPES = {
+  { "^Zum Tierausbilder: (%d+) neue[r]? Fähigkeit[en]* %((.+)%)$", "G", "S", "K" },
+  { "^To the pet trainer: (%d+) new abilit[a-z]* %((.+)%)$", "g", "s", "c" },
+}
+
 local function displayText(p)
-  if p.auto ~= "trainer" or isSecret(p.text) or type(p.text) ~= "string" then return p.text end
-  for _, shape in ipairs(TRAINER_SHAPES) do
+  if (p.auto ~= "trainer" and p.auto ~= "pettrainer") or isSecret(p.text) or type(p.text) ~= "string" then return p.text end
+  local pet = p.auto == "pettrainer"
+  for _, shape in ipairs(pet and PET_SHAPES or TRAINER_SHAPES) do
     local n, price = string.match(p.text, shape[1])
     if n and #price <= 40 then
       local units = { [shape[2]] = PT.unitG, [shape[3]] = PT.unitS, [shape[4]] = PT.unitK }
       price = string.gsub(price, "(%d) (%a)%f[%A]", function(d, u) return d .. " " .. (units[u] or u) end)
-      return PT(ns.Locale.plural(tonumber(n), "trainerOne", "trainerOther"), n, price)
+      local one, other = "trainerOne", "trainerOther"
+      if pet then one, other = "petOne", "petOther" end
+      return PT(ns.Locale.plural(tonumber(n), one, other), n, price)
     end
   end
   return p.text

@@ -214,6 +214,10 @@ EveNChronicleDB = {
     constants = { n, at, pct },                                    -- distinct constants of this file (game limit 262143)
   },
   archive = { ["Player-..."] = { { at, reason, lineCount, lastBlockAt, char }, ... } },  -- only if needed, see below
+  questTracker = { on, mode, order, done, locked, look = { marker, doneObj, dist, objs, icons },     -- own quest tracker (WoW Forever only),
+    collapsed = { todo, quests, turnin }, pos = { point, x, y }, size = { w, h },     -- account-wide settings, all fields optional
+    filter = { done, group }, focus = { show, dist, bar, giver, rewards },           -- E4 (window after the design template)
+    panel = { hover, delay, scale, notify, todo, itemBar, pinned } },
   chars = { ["Player-..."] = {
     info = { name, realm, race, raceFile, class, classFile, faction, factionName, firstSeen, lastSeen, project (WOW_PROJECT_ID of the client, since 1.0.10) },
     lineCount,                -- number of all log lines
@@ -224,6 +228,8 @@ EveNChronicleDB = {
     counters = { [group] = { [key] = n } },
     snapshots = { [kind] = { [key] = { at, ... } } },   -- e.g. gear and stats per level
     shots = { ["MMDDYY_HHMMSS"] = { at, ... } },        -- screenshot mapping (local time in the file name)
+    questTrackerState = { hidden = { [questID] = true }, zones = { [key] = true | false },  -- quest tracker: hidden quests, folded (true) / unfolded (false) zone groups,
+      focus = questID, folded = { [questID] = true } },                                     -- focus quest and quests folded in the window (E4)
   } },
 }
 ```

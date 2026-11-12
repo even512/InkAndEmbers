@@ -16,4 +16,13 @@
 			<OnLoad method="OnLoad"/>
 		</Scripts>
 	</Frame>
+	<!-- Aenderung quest-tracker E3: pulsierender Ziel-Pin des Quest-Trackers (WL.setTarget), eigene Vorlage, nur Tooltip, keine Klicks. -->
+	<Frame name="EveNChronicleWorldTargetTemplate" mixin="EveNChronicleWorldTargetMixin" virtual="true">
+		<Size x="34" y="34"/>
+		<Scripts>
+			<OnLoad method="OnLoad"/>
+			<OnEnter method="OnMouseEnter"/>
+			<OnLeave method="OnMouseLeave"/>
+		</Scripts>
+	</Frame>
 </Ui>

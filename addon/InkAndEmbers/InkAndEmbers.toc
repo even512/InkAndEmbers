@@ -146,8 +146,10 @@ journal\Toast.lua
 journal\Begleiter.lua
 journal\Tutorial.lua
 journal\Meilenstein.lua
+journal\model\QuestTrack.lua
 journal\TodoTracker.lua
 journal\TodoDock.lua
+journal\QuestTrackerHide.lua
 journal\TodoMarks.lua
 journal\Reunion.lua
 journal\QuickNote.lua
@@ -162,4 +164,8 @@ journal\SimPanel.lua
 journal\EditMode.lua
 journal\WorldLayer.lua
 journal\WorldLayer.xml
+journal\QuestTrackActions.lua
+journal\QuestItemButtons.lua
+journal\QuestItemBar.lua
+journal\QuestTracker.lua
 journal\Options.lua

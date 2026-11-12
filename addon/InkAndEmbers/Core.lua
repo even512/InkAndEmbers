@@ -57,6 +57,7 @@ local T = ns.Locale.ns("Core", {
   helpRest = "/chronik rast - Rückblick \"Seit der letzten Rast\" als Vorschau zeigen",
   helpMeter = "/chronik messer - Schadensanzeige automatisch einschalten: \"messer an\" oder \"messer aus\" (auch in den Einstellungen)",
   helpTodo = "/chronik todo - offene To Dos am Bildschirmrand ein-/ausblenden (\"todo reset\" setzt Lage und Größe zurück)",
+  helpQuests = "/chronik quests an|aus - eigenen Quest-Tracker ein-/ausschalten, blendet Questie- und Blizzard-Tracker aus (nur WoW Forever); \"quests hinweis [fertig]\" zeigt zur Probe den Fortschritts-Hinweis am Griff",
   helpNote = "/chronik notiz - Schnellnotiz-Feld ein-/ausblenden (Enter legt eine Notiz an)",
   helpOpen = "/chronik offene - offene Quests (Rubrik \"Offen\" unter Quests)",
   helpOpenTest = "/chronik offene test - schaltet den Retail-Testmodus ein (\"test aus\" beendet ihn)",
@@ -920,7 +921,7 @@ end
 -- help lines in display order (empty texts are skipped)
 local HELP = {
   "helpTitle", "helpToggle", "helpShort", "helpStatus", "helpOptions", "helpMinimap", "helpToast", "helpSound", "helpWelcome", "helpTutorial", "helpRest",
-  "helpMeter", "helpTodo", "helpNote", "helpOpen", "helpOpenTest", "helpTrain", "helpLevelSlip", "helpMilestone", "helpLanguage", "helpReset", "helpSave", "helpBackup", "helpHelp", "helpAliases", "helpDebug", "helpDiag",
+  "helpMeter", "helpTodo", "helpQuests", "helpNote", "helpOpen", "helpOpenTest", "helpTrain", "helpLevelSlip", "helpMilestone", "helpLanguage", "helpReset", "helpSave", "helpBackup", "helpHelp", "helpAliases", "helpDebug", "helpDiag",
   "helpDiagQuests", "helpCampfire", "helpSim", "helpAuras", "helpCoins",
 }
 
@@ -939,6 +940,9 @@ local function helpHiddenInRetail(key)
   if key == "helpCampfire" then
     local ms = J and J.MapSpace
     return ms ~= nil and type(ms.fireTalkHidden) == "function" and ms.fireTalkHidden() == true
+  elseif key == "helpQuests" then
+    local q = J and J.QuestTrackerHide
+    return not (q and type(q.available) == "function" and q.available() == true)
   elseif key == "helpTrain" or key == "helpLevelSlip" or key == "helpMilestone" then
     local lp = J and J.Lehrplan
     return lp ~= nil and type(lp.active) == "function" and lp.active() == false
@@ -1382,6 +1386,7 @@ end
 
 function Core.slash(msg)
   local cmd = string.lower(string.match(type(msg) == "string" and msg or "", "^%s*(%S*)") or "")
+  local typed = cmd
   cmd = COMMAND_ALIASES[cmd] or cmd
   local rest = string.match(type(msg) == "string" and msg or "", "^%s*%S*%s+(%S*)") or ""
   local access = ns.Journal and ns.Journal.Access
@@ -1404,6 +1409,14 @@ function Core.slash(msg)
     ns.Journal.Begleiter.slash(cmd, rest)
   elseif cmd == "todo" and ns.Journal and ns.Journal.TodoTracker then
     ns.Journal.TodoTracker.slash(rest)
+  elseif typed == "quests" and (rest == "hinweis" or rest == "hint") and ns.Journal and ns.Journal.QuestTracker
+      and type(ns.Journal.QuestTracker.testToast) == "function" then
+    -- /chronik quests hinweis [fertig]: progress toast at the handle with sample data (journal/QuestTracker.lua)
+    local word = string.lower(string.match(type(msg) == "string" and msg or "", "^%s*%S+%s+%S+%s+(%S+)") or "")
+    ns.Journal.QuestTracker.testToast(word == "fertig" or word == "done" or word == "ready")
+  elseif typed == "quests" and Core.onOff(rest) ~= nil and ns.Journal and ns.Journal.QuestTrackerHide then
+    -- /chronik quests an|aus: own quest tracker (journal/QuestTrackerHide.lua); without a switch word "quests" stays "offene"
+    ns.Journal.QuestTrackerHide.slash(rest)
   elseif (cmd == "offene" or cmd == "offen") and ns.Journal and ns.Journal.OpenQuests then
     ns.Journal.OpenQuests.slash(string.match(type(msg) == "string" and msg or "", "^%s*%S+%s+(.-)%s*$") or "")
   elseif cmd == "lehrplan" and ns.Trainer then
@@ -1421,6 +1434,9 @@ function Core.slash(msg)
   elseif cmd == "diag" then
     if string.lower(rest) == "retailquests" then
       Core.diagRetailQuests(string.match(type(msg) == "string" and msg or "", "^%s*%S+%s+%S+%s+(%d+)"))
+    elseif string.lower(rest) == "questtracker" and ns.QuestTrackerProbe and type(ns.QuestTrackerProbe.slash) == "function" then
+      -- development probe for the own quest tracker (journal/QuestTrackerProbe.lua, not in the release package: there this word runs the normal diag)
+      ns.QuestTrackerProbe.slash(string.match(type(msg) == "string" and msg or "", "^%s*%S+%s+%S+%s*(.-)%s*$") or "")
     else
       Core.runDiag()
     end

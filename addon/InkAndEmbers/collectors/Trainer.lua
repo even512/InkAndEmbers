@@ -4,10 +4,16 @@
 --    type, level, cost) into snapshots.trainerSpells["<name> #<rank>"] and the trainer's place (player position at the visit) into
 --    snapshots.trainers[npcID] (read by Journal.Lehrplan: nearest trainer). The service names offered as "available" go to
 --    snapshots.state.trainerVisit (level, names): the Lehrplan then knows which entries this trainer really offered.
+-- 1b. Pet trainer (hunter, Beast Training): the window is read for hunters only. Each row is mapped to a spell id (tooltip id, else
+--    name + rank against pets.<CLASS>); "used" = learned, "available"/"unavailable" = not learned. The default window filter hides
+--    "used" rows, so a missing row proves nothing: the reading is merged into snapshots.state.petTraining (never set back to
+--    unlearned, a learned higher rank makes the lower ranks learned). A learn message (Character collector) marks the ability too.
+--    No trainerVisit and no trainer place from a pet trainer.
 -- 2. To-do "Zum Lehrer": after a level-up (and at login, once per level: marker snapshots.state.trainerTodo) with spells learnable
 --    now, one free to-do (Plans.upsertAuto "trainer"); it is updated or completed (Plans.finishAuto) as soon as nothing learnable
 --    is left (spell learned, trainer closed). Login never adds a second one while an automatic or a Lehrplan place to-do is open.
---    Setting trainerTodo.
+--    Setting trainerTodo. Hunters get a second one, "Zum Tierausbilder" (tag pettrainer), counting the pet abilities learnable now
+--    (state.petTraining, marker state.petTodo); it never counts class spells and vice versa.
 -- 3. Talent points: free points (Journal.Lehrplan.unspentTalents) -> one toast per level and session, never in combat (the
 --    toast queue waits). Setting talentHint.
 -- 3b. Announcement of the automatic to-do: a newly created "Zum Lehrer" to-do (not an update) queues one toast "Neues To Do /
@@ -38,6 +44,7 @@ Trainer.MAX_TRAINERS = 200    -- snapshots.trainers (soft cap)
 Trainer.MAX_SPELLS = 800      -- snapshots.trainerSpells (soft cap)
 Trainer.MAX_NAMES = 120       -- names in snapshots.state.trainerVisit
 Trainer.TAG = "trainer"       -- Plans.upsertAuto tag
+Trainer.PET_TAG = "pettrainer" -- Plans.upsertAuto tag of the pet trainer to-do (hunter)
 Trainer.SLIP_SPELLS = 3       -- spell names on the level-up note (the rest: "… and n more")
 Trainer.SLIP_NAME_MAX = 40    -- characters per spell / zone name on the note
 Trainer.SERVICE_TYPES = { available = true, unavailable = true, used = true, header = true }
@@ -56,6 +63,11 @@ local T = ns.Locale.ns("col.Trainer", {
   todoToastTitle = "Zum Lehrer",
   todoToast_one = "%s neuer Zauber",
   todoToast_other = "%s neue Zauber",
+  petTodo_one = "Zum Tierausbilder: %s neue Fähigkeit (%s)",
+  petTodo_other = "Zum Tierausbilder: %s neue Fähigkeiten (%s)",
+  petToastTitle = "Zum Tierausbilder",
+  petToast_one = "%s neue Fähigkeit",
+  petToast_other = "%s neue Fähigkeiten",
   diag = "Lehrplan: %s",
   diagRetail = "aus (Retail: Klassenzauber kommen von selbst)",
   diagOn = "Klasse %s, %s Einträge, jetzt lernbar %s, Lehrer bekannt %s, Besuche %s, freie Talentpunkte %s%s",
@@ -236,7 +248,7 @@ function Trainer.readServices()
         shape = table.concat(t, ",", 1, math.max(last, 1))
       end
       local name = str(v[1])
-      local stype, rank, level
+      local stype, rank, level, after
       for k = 2, 8 do
         local x = v[k]
         if not stype and str(x) and Trainer.SERVICE_TYPES[x] then
@@ -245,6 +257,8 @@ function Trainer.readServices()
           rank = x
         elseif stype and not level and num(x) and x >= 1 and x <= 100 and x == floor(x) then
           level = x
+        elseif stype and not after and str(x) and not Trainer.SERVICE_TYPES[x] then
+          after = x -- first text behind the type (pet trainer: rank text in builds that put it there; class rows ignore it)
         end
       end
       local c = callAll(GetTrainerServiceCost, i)
@@ -252,7 +266,8 @@ function Trainer.readServices()
       local isProf = c and not isSecret(c[2]) and c[2] == true
       if name and stype ~= "header" then
         out[#out + 1] = { name = ns.Sanitize.field(name), rank = rank and ns.Sanitize.field(rank) or nil, type = stype,
-          level = level, cost = cost and floor(cost) or nil, profession = isProf or nil }
+          level = level, cost = cost and floor(cost) or nil, profession = isProf or nil, index = i,
+          after = after and ns.Sanitize.field(after) or nil }
       end
     end
   end
@@ -382,7 +397,12 @@ function Trainer.readVisit(self)
   if not (Trainer.active() and Store.ready()) then return false end
   local services, shape = Trainer.readServices()
   if shape then self.shape = shape end
-  if #services == 0 or not Trainer.isClassTrainer(services) then return false end
+  if #services == 0 then return false end
+  if Trainer.isPetWindow(services) then
+    Trainer.readPetVisit(services)
+    return false -- a pet trainer is never a class trainer: no trainerVisit, no trainer place
+  end
+  if not Trainer.isClassTrainer(services) then return false end
   local LP = L()
   local p = LP.player()
   local level = playerLevel()
@@ -405,6 +425,109 @@ function Trainer.readVisit(self)
   end
   if level then Store.putSnapshot("state", "trainerVisit", { level = level, names = names }, true) end
   return true
+end
+
+-- 1b. Pet trainer
+
+-- spell id from the tooltip data of a service row (C_TooltipInfo.GetTrainerService(i).id); nil if not readable
+local function tooltipSpellId(index)
+  index = num(index)
+  local CTI = rawget(_G, "C_TooltipInfo")
+  if not index or type(CTI) ~= "table" or isSecret(CTI) or type(CTI.GetTrainerService) ~= "function" then return nil end
+  local r = callAll(CTI.GetTrainerService, floor(index))
+  local data = r and r[1]
+  if type(data) ~= "table" or isSecret(data) then return nil end
+  local ok, id = pcall(function() return data.id end)
+  id = ok and num(id) or nil
+  return id and floor(id) or nil
+end
+
+-- lookup tables name + rank -> id and name -> id (only if the name has exactly one id) for the pet ids of a plan
+local function petLookup(LP, pets)
+  local byKey, byName, count = {}, {}, {}
+  for _, e in ipairs(pets.list) do
+    local info = LP.spellInfo(e.id)
+    if info and not info.missing and info.name then
+      byKey[info.name .. "#" .. (info.rank or "")] = e.id
+      count[info.name] = (count[info.name] or 0) + 1
+      byName[info.name] = e.id
+    end
+  end
+  for name, n in pairs(count) do
+    if n > 1 then byName[name] = nil end
+  end
+  return byKey, byName
+end
+
+-- spell id of a pet trainer row: tooltip id first (must be a pet id of the plan), else name + rank, else a name with one id only
+local function petRowId(s, pets, byKey, byName)
+  local id = tooltipSpellId(s.index)
+  if id and pets.byId[id] then return id end
+  if not s.name then return nil end
+  for _, rank in ipairs({ s.rank or false, s.after or false }) do
+    local hit = rank and byKey[s.name .. "#" .. rank]
+    if hit then return hit end
+  end
+  return byName[s.name]
+end
+
+local function petSnapshot(merged, level, visited)
+  return Store.putSnapshot("state", "petTraining", { level = level, visited = visited or nil, learned = merged.learned,
+    open = merged.open }, true)
+end
+
+-- Reads the rows of an open pet trainer window (hunter only) and merges them into snapshots.state.petTraining.
+-- Returns true if something was stored.
+function Trainer.readPetVisit(services)
+  local LP = L()
+  local p = LP and LP.player()
+  if not (p and p.class == LP.PET_CLASS) then return false end
+  local plan = LP.parse(p.class)
+  local pets = plan and plan.pets
+  if not pets then return false end
+  local byKey, byName = petLookup(LP, pets)
+  local learnedIds, openIds, n = {}, {}, 0
+  for _, s in ipairs(services) do
+    if not s.profession then
+      local id = petRowId(s, pets, byKey, byName)
+      if id then
+        if s.type == "used" then
+          learnedIds[id] = true
+          n = n + 1
+        elseif s.type == "available" or s.type == "unavailable" then
+          openIds[id] = true
+          n = n + 1
+        end
+      end
+    end
+  end
+  if n == 0 then return false end
+  local merged = LP.petMerge(LP.petTraining(), learnedIds, openIds)
+  if not merged then return false end
+  local ok = petSnapshot(merged, playerLevel(), true)
+  if ok then Trainer.checkTodo() end
+  return ok
+end
+
+local scheduleCheck -- defined with the to-do code below
+
+-- A learn message names a pet ability (hunter): it counts as learned (Character collector calls this with the spell id).
+function Trainer.noteLearned(spellID)
+  local id = num(spellID)
+  if not (id and Trainer.active() and Store.ready()) then return false end
+  local LP = L()
+  local p = LP and LP.player()
+  if not (p and p.class == LP.PET_CLASS) then return false end
+  local plan = LP.parse(p.class)
+  id = floor(id)
+  if not (plan and plan.pets and plan.pets.byId[id]) then return false end
+  local old = LP.petTraining()
+  if old and old.learned[id] then return false end
+  local merged = LP.petMerge(old, { [id] = true }, nil)
+  if not merged then return false end
+  local ok = petSnapshot(merged, old and old.level or playerLevel(), old and old.visited)
+  if ok then scheduleCheck(Collector) end
+  return ok
 end
 
 local function scheduleRead(self, delay)
@@ -435,15 +558,30 @@ local function stateEntry(key)
   return type(st) == "table" and st or nil
 end
 
-local function todoMarkLevel()
-  local m = stateEntry("trainerTodo")
+local function todoMarkLevel(key)
+  local m = stateEntry(key or "trainerTodo")
   return m and num(m.level) or nil
 end
 
-local function markTodoLevel(level)
+local function markTodoLevel(level, key)
   level = num(level)
   if not level then return false end
-  return Store.putSnapshot("state", "trainerTodo", { level = floor(level) }, true)
+  return Store.putSnapshot("state", key or "trainerTodo", { level = floor(level) }, true)
+end
+
+-- Pet abilities learnable now (hunter only): { n, cost } or nil for every other class / without pet data
+local function petTodoState(level)
+  local LP = L()
+  local v = LP and LP.evaluate({ level = level, names = false })
+  local pv = v and v.pets
+  if pv and pv.preview then return nil end -- development preview: sample state, never a real to-do
+  return pv and pv.todo or nil
+end
+
+function Trainer.petTodoText(n, cost)
+  local LC = ns.Locale
+  local key = LC and LC.plural and LC.plural(n, "petTodo_one", "petTodo_other") or (n == 1 and "petTodo_one" or "petTodo_other")
+  return T(key, n, moneyText(cost))
 end
 
 -- Called by the Lehrplan page after "Als To Do": remembers the place to-do (id) so that a login does not add a second one
@@ -482,7 +620,7 @@ function Trainer.lehrplanTodoOpen()
 end
 
 -- level-up: create/update the to-do if something is learnable now; returns the to-do id or nil
-function Trainer.levelUp(level)
+local function classLevelUp(level)
   if not (Trainer.active() and setting("trainerTodo") and ns.Plans) then return nil end
   local LP = L()
   local view = LP.evaluate({ level = level, names = true })
@@ -493,10 +631,27 @@ function Trainer.levelUp(level)
   return id
 end
 
+local function petLevelUp(level)
+  if not (Trainer.active() and setting("trainerTodo") and ns.Plans) then return nil end
+  local todo = petTodoState(level)
+  if not todo or todo.n < 1 then return nil end
+  local id, how = ns.Plans.upsertAuto(Trainer.PET_TAG, Trainer.petTodoText(todo.n, todo.cost))
+  if id and how == "new" then Collector.pendingPetToast = todo.n end
+  if id then markTodoLevel(level or playerLevel(), "petTodo") end
+  return id
+end
+
+-- level-up: class to-do (returns its id or nil) and, for hunters, the pet trainer to-do
+function Trainer.levelUp(level)
+  local id = classLevelUp(level)
+  petLevelUp(level)
+  return id
+end
+
 -- login: creates the to-do "Zum Lehrer" once per level if spells are learnable now. Never a second one: an open automatic to-do
 -- (any level, only its text follows the count; checkTodo has done that) or an open Lehrplan place to-do counts as "there is one".
 -- Returns "new" | "open" | nil (nothing done)
-function Trainer.loginTodo()
+local function classLoginTodo()
   local P = ns.Plans
   if not (Trainer.active() and setting("trainerTodo") and P and Store.ready()) then return nil end
   local level = playerLevel()
@@ -518,8 +673,38 @@ function Trainer.loginTodo()
   return "open"
 end
 
+-- login, hunter: the same once-per-level rule for the pet trainer to-do
+local function petLoginTodo()
+  local P = ns.Plans
+  if not (Trainer.active() and setting("trainerTodo") and P and Store.ready()) then return nil end
+  local level = playerLevel()
+  if not level then return nil end
+  local todo = petTodoState(nil)
+  if not todo or todo.n < 1 then return nil end
+  if P.findAuto(Trainer.PET_TAG) then
+    markTodoLevel(level, "petTodo")
+    return "open"
+  end
+  if todoMarkLevel("petTodo") == level then return nil end
+  local id, how = P.upsertAuto(Trainer.PET_TAG, Trainer.petTodoText(todo.n, todo.cost))
+  if not id then return nil end
+  markTodoLevel(level, "petTodo")
+  if how == "new" then
+    Collector.pendingPetToast = todo.n
+    return "new"
+  end
+  return "open"
+end
+
+-- Returns the result of the class to-do ("new" | "open" | nil); the pet trainer to-do (hunter) runs alongside
+function Trainer.loginTodo()
+  local r = classLoginTodo()
+  petLoginTodo()
+  return r
+end
+
 -- open to-do: completed when nothing learnable is left, else the text follows the count. Returns "done" | "open" | nil
-function Trainer.checkTodo()
+local function classCheckTodo()
   local P = ns.Plans
   if not (Trainer.active() and P and P.findAuto(Trainer.TAG)) then return nil end
   local view = L().evaluate({ names = true })
@@ -532,7 +717,30 @@ function Trainer.checkTodo()
   return "open"
 end
 
-local function scheduleCheck(self)
+-- open pet trainer to-do: completed when no pet ability is learnable now, else the text follows the count
+local function petCheckTodo()
+  local P = ns.Plans
+  if not (Trainer.active() and P and P.findAuto(Trainer.PET_TAG)) then return nil end
+  local todo = petTodoState(nil)
+  if not todo then
+    P.finishAuto(Trainer.PET_TAG, "trainer") -- no longer a hunter (data): nothing left to show
+    return "done"
+  end
+  if todo.n < 1 then
+    P.finishAuto(Trainer.PET_TAG, "trainer")
+    return "done"
+  end
+  P.upsertAuto(Trainer.PET_TAG, Trainer.petTodoText(todo.n, todo.cost))
+  return "open"
+end
+
+function Trainer.checkTodo()
+  local r = classCheckTodo()
+  petCheckTodo()
+  return r
+end
+
+function scheduleCheck(self)
   if self.checkPending then return end
   self.checkPending = true
   if not Core.after(self, Trainer.CHECK_DELAY, function(s)
@@ -574,25 +782,40 @@ function Trainer.todoToastItem(n)
     after = TT and TT.openBook or nil }
 end
 
+function Trainer.petToastItem(n)
+  local item = Trainer.todoToastItem(n)
+  local LC = ns.Locale
+  local key = LC and LC.plural and LC.plural(n, "petToast_one", "petToast_other") or (n == 1 and "petToast_one" or "petToast_other")
+  item.key, item.title, item.sub = "todo:" .. Trainer.PET_TAG, T.petToastTitle, T(key, n)
+  return item
+end
+
 -- Queues the pending to-do toast: not in combat, not while a level-up note is pending or on screen (then it re-registers with
 -- Begleiter.afterSlip and comes when the note has left). Returns true if it is queued or still waiting.
-function Trainer.flushTodoToast(self)
-  self = self or Collector
-  local n = self.pendingTodoToast
+local function flushToast(self, field, makeItem, dedupe)
+  local n = self[field]
   if not n then return false end
   local Toast = ns.Journal and ns.Journal.Toast
   if not (Toast and type(Toast.enqueue) == "function") then
-    self.pendingTodoToast = nil
+    self[field] = nil
     return false
   end
   if inCombat() or self.pendingSlip then return true end -- PLAYER_REGEN_ENABLED / flushSlip call this again
   local B = ns.Journal and ns.Journal.Begleiter
   if B and type(B.slipKind) == "function" and B.slipKind() and type(B.afterSlip) == "function"
-    and B.afterSlip(function() Trainer.flushTodoToast(self) end, { key = "todoToast" }) then
+    and B.afterSlip(function() Trainer.flushTodoToast(self) end, { key = dedupe }) then
     return true
   end
-  self.pendingTodoToast = nil
-  return Toast.enqueue(Trainer.todoToastItem(n)) and true or false
+  self[field] = nil
+  return Toast.enqueue(makeItem(n)) and true or false
+end
+
+-- Queues the pending toasts of both to-dos ("Zum Lehrer", hunters also "Zum Tierausbilder"). True if one is queued or waiting.
+function Trainer.flushTodoToast(self)
+  self = self or Collector
+  local a = flushToast(self, "pendingTodoToast", Trainer.todoToastItem, "todoToast")
+  local b = flushToast(self, "pendingPetToast", Trainer.petToastItem, "petToast")
+  return a or b
 end
 
 -- why: "login" (once per session) | "level" (once per level). Returns true if a toast was queued.

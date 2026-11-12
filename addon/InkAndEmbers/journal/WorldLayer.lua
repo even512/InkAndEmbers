@@ -4,12 +4,15 @@
 -- (MapCanvasDataProviderMixin) with pins from virtual XML templates (journal/WorldLayer.xml).
 -- Works with OpenMap, which switches the map via SetMapID: the provider recomputes on every OnMapChanged into the
 -- coordinates of the displayed map. No OpenMap internals are used.
--- No OnUpdate. While the map is open ONE slow ticker (WL.LIVE_INTERVAL) runs and stops with the map: it keeps the live tail
+-- No OnUpdate (except the target pin's ring wave, only while that pin is drawn). While the map is open ONE slow ticker (WL.LIVE_INTERVAL) runs and stops with the map: it keeps the live tail
 -- (thin line from the end of the drawn route to the player), retries a draw that came out empty (model not ready, map data
 -- missing, canvas not laid out yet) and, every WL.REBUILD_EVERY s, asks the model for a background rebuild when new trail
 -- points exist (Model.get without noRebuild: old state at once, the build runs in coroutine frames; Model.onReady redraws).
 -- At most WL.PIN_MAX pins and WL.SEG_MAX lines. In combat nothing happens (AcquirePin can create frames): the layer only
 -- clears and redraws after PLAYER_REGEN_ENABLED. Without WorldMapFrame / MapCanvas API it does nothing.
+-- Target pin (quest tracker, change "quest-tracker" E3): WL.setTarget puts ONE pulsing pin on a quest's place. It is an explicit
+-- request of the player, so it shows whatever the switches journey/places say; same combat rule as every pin (drawn only outside
+-- combat, a drawn pin stays and pulses through combat). It goes away with WL.clearTarget, when the map closes or after WL.TARGET_TTL.
 local _, ns = ...
 
 local Journal = ns.Journal or {}
@@ -39,6 +42,21 @@ WL.RETRY_EMPTY = 3
 WL.TAIL_MAX_AGE, WL.TAIL_MAX_VIEW = 30, 0.25
 WL.JUMP_MIN_YD, WL.JUMP_SPEED = 15, 110
 WL.MENU_TAG = "MENU_WORLD_MAP_TRACKING"
+WL.TARGET_TEMPLATE = "EveNChronicleWorldTargetTemplate"
+WL.TARGET_SIZE = 44
+WL.TARGET_FRAME_LEVEL = "PIN_FRAME_LEVEL_TOPMOST" -- above every Blizzard/Questie pin and quest blob (the manager's top-most level; WorldQuestDataProvider uses it too)
+WL.RINGS, WL.RING_CYCLE, WL.RING_STAGGER = 3, 3.3, 1.1 -- sonar rings of the target pin: count, seconds per cycle, start offset between rings
+-- A ring is a circle line of RING_DOTS soft dots (Disc texture, nothing filled: the quest symbol below stays visible); radius RING_RADIUS
+-- (px at pin scale 1, 2 * radius = RING_BASE_SCALE of the pin size), it grows from RING_SCALE_FROM to RING_SCALE_TO times that radius.
+WL.RING_DOTS, WL.RING_DOT_PX, WL.RING_RADIUS = 48, 2.5, 30
+WL.RING_SCALE_FROM, WL.RING_SCALE_TO = 0.3, 2.2
+WL.RING_ALPHA_MAX = 1 -- alpha of a ring when it starts in the middle
+WL.RING_WOBBLE, WL.RING_WOBBLE_HZ = 0.03, 0.6 -- slight radius wobble (share of the radius, cycles per second)
+WL.RING_WAVES, WL.RING_WAVE_SPEED, WL.RING_WAVE_DEPTH = 3, 0.9, 0.35 -- travelling alpha wave round each ring: crests, speed, depth
+WL.RING_COLOR = { 0.55, 0.85, 1 } -- light blue (design decision, 11.11.): stands out from the yellow quest blob and the brown map
+WL.RING_STATIC_ALPHA = 0.95
+WL.TARGET_TTL = 300
+WL.TARGET_TITLE_BYTES = 160
 
 WL.TEXT = ns.Locale.ns("WorldLayer", {
   menu = "Reise (Ink & Embers)",
@@ -55,6 +73,7 @@ WL.TEXT = ns.Locale.ns("WorldLayer", {
   tipSource = "Reisejournal",
   noteTip = "Klick: Notiz im Buch öffnen",
   noteCombat = "Im Kampf öffnet sich das Buch nicht. Versucht es danach noch einmal.",
+  targetTip = "Ziel aus dem Quest-Tracker",
 })
 
 WL.stats = { pins = 0, segs = 0 }
@@ -554,6 +573,225 @@ function RouteMixin:OnCanvasSizeChanged()
   if self.segs then pcall(WL.layoutRoute, self) end
 end
 
+-- Target pin (quest tracker, see header): own template and mixin, nothing shared with the journey/places pins.
+
+EveNChronicleWorldTargetMixin = {}
+local TargetMixin = EveNChronicleWorldTargetMixin
+
+function TargetMixin:DisableInheritedMotionScriptsWarning() return true end
+
+function TargetMixin:OnLoad()
+  try(self, "UseFrameLevelType", WL.TARGET_FRAME_LEVEL)
+  try(self, "SetScalingLimits", 1, WL.SCALE_MIN, WL.SCALE_MAX)
+  try(self, "SetMouseClickEnabled", false)
+  try(self, "SetMouseMotionEnabled", true)
+  local Theme = Journal.Theme
+  local TEX = Theme and Theme.TEX or {}
+  local col = WL.RING_COLOR
+  -- sonar wave: RINGS circle lines start small in the middle, grow outwards (ease-out) and fade out, WL.RING_STAGGER seconds apart;
+  -- each dot's alpha runs a travelling wave round the ring and the radius wobbles slightly. Driven by the pin's own OnUpdate (set
+  -- only while a target is drawn; a hidden pin = closed map gets no OnUpdate): the AnimationGroup Scale animation of the earlier
+  -- version stood still in the Forever client. Only SetScale/SetAlpha on own unprotected frames, so it keeps running in combat.
+  -- Nothing in the middle. "Bewegung reduzieren": one static ring at the base radius.
+  local rings = {}
+  local R = WL.RING_RADIUS
+  for n = 1, WL.RINGS do
+    local ring = CreateFrame("Frame", nil, self)
+    ring:SetSize(2 * R, 2 * R)
+    ring:SetPoint("CENTER", self, "CENTER", 0, 0)
+    if ring.EnableMouse then ring:EnableMouse(false) end
+    ring.dots = {}
+    for k = 0, WL.RING_DOTS - 1 do
+      local a = 2 * math.pi * k / WL.RING_DOTS
+      local dot = ring:CreateTexture(nil, "ARTWORK")
+      -- texture first, then size and anchor: a texture without a size takes the file size (64 px)
+      if TEX.disc then dot:SetTexture(TEX.disc) else dot:SetColorTexture(col[1], col[2], col[3], 1) end
+      dot:SetSize(WL.RING_DOT_PX, WL.RING_DOT_PX)
+      dot:SetPoint("CENTER", ring, "CENTER", math.cos(a) * R, math.sin(a) * R)
+      dot:SetVertexColor(col[1], col[2], col[3], 1)
+      dot.angle = a
+      ring.dots[#ring.dots + 1] = dot
+    end
+    rings[n] = ring
+  end
+  self.rings, self.gen, self.animating = rings, 0, false
+end
+
+-- one frame of the wave at time t (seconds since the pin was drawn); returns the number of rings shown
+function WL.ringFrame(self, t)
+  local shown = 0
+  local cycle, from, to = WL.RING_CYCLE, WL.RING_SCALE_FROM, WL.RING_SCALE_TO
+  for n, ring in ipairs(self.rings or {}) do
+    local local_t = t - (n - 1) * WL.RING_STAGGER
+    if local_t < 0 then
+      ring:SetShown(false)
+    else
+      local p = (local_t % cycle) / cycle
+      local e = 1 - (1 - p) ^ 3 -- ease-out: fast from the middle, slows down at the edge
+      local wobble = 1 + WL.RING_WOBBLE * math.sin(2 * math.pi * (t * WL.RING_WOBBLE_HZ) + n * 2.1)
+      try(ring, "SetScale", (from + (to - from) * e) * wobble)
+      ring:SetAlpha(WL.RING_ALPHA_MAX * (1 - p) ^ 1.6)
+      ring:SetShown(true)
+      local phase = 2 * math.pi * (t / cycle) * WL.RING_WAVE_SPEED + n
+      for _, dot in ipairs(ring.dots or {}) do
+        try(dot, "SetAlpha", 1 - WL.RING_WAVE_DEPTH * (0.5 + 0.5 * math.sin(WL.RING_WAVES * dot.angle - phase)))
+      end
+      shown = shown + 1
+    end
+  end
+  return shown
+end
+
+local function ringUpdate(self, elapsed)
+  local e = num(elapsed) or 0
+  self.animT = (self.animT or 0) + e
+  WL.ringFrame(self, self.animT)
+end
+
+-- The ring frames sit above the pin's own level (a pin level set by the map canvas moves the pin; make sure the children follow).
+function TargetMixin:ApplyFrameLevel()
+  local base = rawget(_G, "MapCanvasPinMixin")
+  if base and type(base.ApplyFrameLevel) == "function" then pcall(base.ApplyFrameLevel, self) end
+  local lv = num(try(self, "GetFrameLevel"))
+  if lv then
+    for n, ring in ipairs(self.rings or {}) do try(ring, "SetFrameLevel", lv + n) end
+  end
+end
+
+local function reduceMotion()
+  local View = Journal.View
+  if not View or type(View.peek) ~= "function" then return false end
+  local ok, v = pcall(View.peek, "reduceMotion")
+  return ok and v == true
+end
+
+local function stopRings(self)
+  self.gen = (self.gen or 0) + 1
+  self.animating = false
+  try(self, "SetScript", "OnUpdate", nil)
+end
+
+function TargetMixin:OnAcquired(p)
+  self.data = p
+  local size = num(p and p.size) or WL.TARGET_SIZE
+  self:SetSize(size, size)
+  stopRings(self)
+  self:SetPosition(p.x, p.y)
+  self:ApplyFrameLevelSafe()
+  if reduceMotion() then
+    -- static, strong: the first ring as a plain circle line at the base radius, the others away
+    for n, ring in ipairs(self.rings or {}) do
+      ring:SetShown(n == 1)
+      if n == 1 then
+        try(ring, "SetScale", 1)
+        ring:SetAlpha(WL.RING_STATIC_ALPHA)
+        for _, dot in ipairs(ring.dots or {}) do try(dot, "SetAlpha", 1) end
+      end
+    end
+    return
+  end
+  -- animated: the pin's OnUpdate drives the wave from the first frame on (ring 1 at once, the others after their stagger)
+  for _, ring in ipairs(self.rings or {}) do ring:SetShown(false) end
+  self.animT, self.animating = 0, true
+  WL.ringFrame(self, 0)
+  try(self, "SetScript", "OnUpdate", ringUpdate)
+end
+
+-- (the canvas applies the level after OnAcquired as well; this only makes the ring frames right from the first frame)
+function TargetMixin:ApplyFrameLevelSafe()
+  local lv = num(try(self, "GetFrameLevel"))
+  if lv then
+    for n, ring in ipairs(self.rings or {}) do try(ring, "SetFrameLevel", lv + n) end
+  end
+end
+
+function TargetMixin:OnReleased()
+  stopRings(self)
+  if self.hover then
+    self.hover = false
+    local Theme = Journal.Theme
+    if Theme and Theme.hideTooltip then Theme.hideTooltip() end
+  end
+  self.data = nil
+end
+
+function TargetMixin:OnMouseEnter()
+  self.hover = true
+  local p, Theme = self.data, Journal.Theme
+  if p and type(p.tip) == "table" and Theme and Theme.tooltip then
+    local ok, err = pcall(Theme.tooltip, self, p.tip, WL.TEXT.tipSource)
+    if not ok then report(err) end
+  end
+end
+
+function TargetMixin:OnMouseLeave()
+  self.hover = false
+  local Theme = Journal.Theme
+  if Theme and Theme.hideTooltip then Theme.hideTooltip() end
+end
+
+-- a title for the tooltip must already be display-safe (QuestTrack records are): only escaped pipes ("||") are accepted
+local function safeTitle(s)
+  if type(s) ~= "string" or isSecret(s) or s == "" or #s > WL.TARGET_TITLE_BYTES then return nil end
+  local probe = s:gsub("||", "")
+  if probe:find("|", 1, true) or probe:find("%c") then return nil end
+  return s
+end
+
+-- t = { mapID, x, y (0..1 on that map), title (display-safe, optional), questID (optional) } -> true | false (invalid)
+function WL.setTarget(t)
+  if type(t) ~= "table" or isSecret(t) then return false end
+  local mapID, x, y = num(t.mapID), num(t.x), num(t.y)
+  if not (mapID and x and y) or mapID <= 0 or x < 0 or x > 1 or y < 0 or y > 1 then return false end
+  WL.target = { mapID = floor(mapID), x = x, y = y, title = safeTitle(t.title), questID = num(t.questID), at = gt() }
+  return true
+end
+
+function WL.clearTarget()
+  local had = WL.target ~= nil
+  WL.target = nil
+  if had then WL.refresh() end
+  return had
+end
+
+-- the current target, nil once it has run out
+function WL.activeTarget()
+  local t = WL.target
+  if not t then return nil end
+  if gt() - t.at > WL.TARGET_TTL then
+    WL.target = nil
+    return nil
+  end
+  return t
+end
+
+-- target position on the shown map: same map as is, else through Geo (zone <-> sub map / continent of the same continent)
+function WL.targetPos(t, shownMapID)
+  shownMapID = num(shownMapID)
+  if not (t and shownMapID) then return nil end
+  if shownMapID == t.mapID then return t.x, t.y end
+  local Geo = Journal.Geo
+  if not (Geo and type(Geo.zoneAffine) == "function") then return nil end
+  local ok, a, b, c, d = pcall(Geo.zoneAffine, t.mapID, shownMapID)
+  if not ok or not (num(a) and num(b) and num(c) and num(d)) then return nil end
+  local x, y = a + b * t.x, c + d * t.y
+  if not inBox(x, y) then return nil end
+  return x, y
+end
+
+local function drawTarget(map, t)
+  local x, y = WL.targetPos(t, try(map, "GetMapID"))
+  if not x then return end
+  local tip = { title = t.title, detail = WL.TEXT.targetTip }
+  local ok, pin = pcall(map.AcquirePin, map, WL.TARGET_TEMPLATE, { kind = "target", x = x, y = y, size = WL.TARGET_SIZE, tip = tip,
+    questID = t.questID })
+  if not ok then
+    report(pin)
+    return
+  end
+  WL.targetPin = pin
+end
+
 local pending = false
 
 local function removeAll(provider)
@@ -561,13 +799,16 @@ local function removeAll(provider)
   if not map then return end
   try(map, "RemoveAllPinsByTemplate", WL.PIN_TEMPLATE)
   try(map, "RemoveAllPinsByTemplate", WL.ROUTE_TEMPLATE)
+  try(map, "RemoveAllPinsByTemplate", WL.TARGET_TEMPLATE)
+  WL.targetPin = nil
 end
 
 local function draw(provider, rebuild)
   local map = provider:GetMap()
   if not map then return end
   local on = WL.anyEnabled()
-  if on and inCombat() then
+  local target = WL.activeTarget()
+  if (on or target) and inCombat() then
     -- Combat: leave the drawn pins alone (no removing, no drawing) and catch up after PLAYER_REGEN_ENABLED. Only pins of another
     -- map than the one now shown are taken away, they would sit in the wrong place.
     pending = true
@@ -582,8 +823,10 @@ local function draw(provider, rebuild)
   removeAll(provider)
   WL.stats = { pins = 0, segs = 0 }
   WL.routePin = nil
-  if not on then return end
+  if target then drawTarget(map, target) end
+  -- caught up (also when only the target was drawn and the switches are off): nothing is left for PLAYER_REGEN_ENABLED
   pending = false
+  if not on then return end
   WL.lastDraw = gt()
   -- an empty or partial result is retried by the live tick (WL.retry); a complete draw clears the flag below
   WL.retry = true
@@ -688,6 +931,9 @@ local function newProvider()
   end
   function P:OnHide()
     WL.stopLive()
+    -- the target belongs to one look at the map (a target set just now is kept: the map may be closed and reopened by the open)
+    local t = WL.target
+    if t and gt() - t.at > 0.5 then WL.target = nil end
   end
   function P:OnMapChanged()
     self:RefreshAllData(false)
@@ -713,6 +959,7 @@ function WL.install()
   if not wmf or type(baseP) ~= "table" or type(basePin) ~= "table" then return false end
   fillMixin(PinMixin, basePin)
   fillMixin(RouteMixin, basePin)
+  fillMixin(TargetMixin, basePin)
   local provider = newProvider()
   local ok, err = pcall(wmf.AddDataProvider, wmf, provider)
   if not ok then

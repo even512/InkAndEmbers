@@ -27,6 +27,83 @@ local TX = ns.Locale.ns("Options", {
   gJourney = "Reise und Karte",
   gTodo = "To Do und Mini-Zettel",
   gQuick = "Schnellnotizen",
+  gQuestTracker = "Quest-Tracker",
+  questTrackerLabel = "Eigenen Quest-Tracker nutzen",
+  questTrackerTip = "Ein Fenster mit To Dos und Quests statt der Tracker von Questie und Blizzard. Blendet den Questie-Tracker und den kompletten Blizzard-Tracker aus, also auch automatische Quest-Hinweise, Erfolge, Szenarien und Berufe. Mini-Zettel und Andocken ruhen so lange. Im Kampf wird erst danach umgeschaltet. Gilt für alle Charaktere (nur WoW Forever).",
+  qtModeLabel = "Auswahl",
+  qtModeTip = "Welche Quests der Tracker zeigt: nur verfolgte (wie Blizzard, neue Quests werden automatisch verfolgt), alle im Questlog oder die der aktuellen Zone.",
+  qtModes = { tracked = "Nur verfolgte", log = "Alle im Questlog", zone = "Aktuelle Zone" },
+  qtOrderLabel = "Sortierung",
+  qtOrderTip = "Zone: Gruppen je Zone, die aktuelle oben, darin nach Entfernung, mit „Als Nächstes“. Entfernung oder Stufe: eine Liste.",
+  qtOrders = { zones = "Zone", distance = "Entfernung", level = "Stufe" },
+  qtDoneLabel = "Fertige Quests",
+  qtDoneTip = "Abgabebereite Quests in ihrer Zone mit „? Abgeben: NPC“ oder in einer eigenen Gruppe „Abgeben“ ganz oben.",
+  qtDones = { inZone = "In ihrer Zone", group = "Eigene Gruppe oben" },
+  qtTodoLabel = "To Do im Tracker",
+  qtTodoTip = "Lage des To-Do-Abschnitts im Quest-Tracker.",
+  qtTodoAt = { top = "Oben", bottom = "Unten" },
+  qtHideDoneLabel = "Abgeschlossene Quests ausblenden",
+  qtHideDoneTip = "Abgabebereite Quests verschwinden aus der Liste (der Zähler oben zeigt sie weiter).",
+  qtHideGroupLabel = "Gruppenquests ausblenden",
+  qtHideGroupTip = "Elite- und Gruppenquests verschwinden aus der Liste.",
+  qtZoneOnlyLabel = "Nur aktuelle Zone",
+  qtZoneOnlyTip = "Zeigt nur Quests, deren Ort in der aktuellen Zone liegt (die Fokus-Quest bleibt sichtbar). Wechselt die Zone, folgt die Liste.",
+  qtObjsLabel = "Ziele anzeigen",
+  qtObjsTip = "Zeigt unter jeder Quest ihre Ziele mit Zähler.",
+  qtDoneObjLabel = "Erledigte Ziele zeigen",
+  qtDoneObjTip = "Erledigte Ziele bleiben abgehakt und blass stehen, statt zu verschwinden.",
+  qtDistLabel = "Entfernung anzeigen",
+  qtDistTip = "Zeigt an jeder Quest die Entfernung, mit Richtungspfeil, wenn das Spiel die Blickrichtung liefert.",
+  qtIconsLabel = "Questtyp-Symbole",
+  qtIconsTip = "Symbol vor dem Titel: Sammeln, Besiegen, Erkunden oder Gespräch, in der Schwierigkeitsfarbe.",
+  qtFocusLabel = "Fokus-Bereich anzeigen",
+  qtFocusTip = "Die Fokus-Quest steht als Karte oben im Tracker. Die Zielscheibe an jeder Quest setzt oder löst den Fokus (pro Charakter).",
+  qtFocusDistLabel = "Fokus: Kompass und Entfernung",
+  qtFocusDistTip = "Pfeil zum Ziel und Entfernung. Liefert das Spiel keine Blickrichtung (etwa in Instanzen), steht nur die Entfernung da.",
+  qtFocusBarLabel = "Fokus: Fortschrittsbalken",
+  qtFocusBarTip = "Ein schmaler Balken unter jedem Ziel der Fokus-Quest.",
+  qtFocusGiverLabel = "Fokus: Questgeber",
+  qtFocusGiverTip = "Name des Questgebers (aus QuestieDB, wenn installiert).",
+  qtFocusRewLabel = "Fokus: Belohnungen",
+  qtFocusRewTip = "EP, Geld und ein Gegenstand in Qualitätsfarbe, soweit das Questlog sie lesbar liefert.",
+  qtNotifyLabel = "Hinweis bei Fortschritt",
+  qtNotifyTip = "Ist der Tracker eingefahren, erscheint neben dem Griff kurz ein Hinweis mit Quest und Ziel.",
+  qtHideInfoLabel = "Blizzard-Questfortschritt ausblenden",
+  qtHideInfoTip = "Die gelben Fortschrittszeilen in der Bildschirmmitte („Wolf getötet: 3/10“, „Ziel abgeschlossen“) erscheinen nicht mehr, der Tracker zeigt den Fortschritt selbst. Andere Meldungen und Fehler bleiben. Gilt für alle Charaktere.",
+  qtHoverLabel = "Beim Überfahren ausfahren",
+  qtHoverTip = "Der Tracker fährt aus, sobald die Maus den rechten Bildschirmrand oder den Griff berührt. Aus: nur per Klick auf den Griff.",
+  qtDelayLabel = "Einfahren nach",
+  qtDelayTip = "So viele Millisekunden bleibt der Tracker offen, nachdem die Maus ihn verlassen hat. Die Nadel hält ihn ganz offen.",
+  qtSyncFocusLabel = "Fokus mit Spiel-Markierung abgleichen",
+  qtSyncFocusTip = "Die Fokus-Quest folgt der im Spiel aktiv markierten Quest (Questlog, Weltkarte) und umgekehrt. Bei Problemen hier abschalten.",
+  qtBgAlphaLabel = "Hintergrund-Deckkraft",
+  qtBgAlphaTip = "Wie dunkel der Hintergrund des ausgefahrenen Trackers ist (Prozent).",
+  qtFadeWidthLabel = "Auslauf-Breite",
+  qtFadeWidthTip = "Breite des durchsichtigen Auslaufs links am Tracker in Pixeln (0 = harte Kante).",
+  qtFadeTimeLabel = "Ausblenddauer",
+  qtFadeTimeTip = "So viele Millisekunden dauert das Ausblenden beim Einfahren (0 = sofort).",
+  qtFontScaleLabel = "Schriftgröße",
+  qtFontScaleTip = "Größe aller Texte im Tracker in Prozent, unabhängig von der Größe des Trackers.",
+  qtFontHeadLabel = "Schriftart Überschriften",
+  qtFontHeadTip = "Schrift für Kopf, Fokus-Titel und Griff. Enthält alle Schriften des Spiels und der Addons (SharedMedia). Fehlt eine Schrift, gilt die Standardschrift.",
+  qtFontTextLabel = "Schriftart Text",
+  qtFontTextTip = "Schrift für Questnamen, Ziele und Zonen. Enthält alle Schriften des Spiels und der Addons (SharedMedia). Fehlt eine Schrift, gilt die Standardschrift.",
+  qtFontDefault = "Standard",
+  qtPanMapLabel = "Karte auf das Ziel schwenken",
+  qtPanMapTip = "„Auf Karte zeigen“ öffnet die Weltkarte und zentriert sie auf den Zielpunkt. Bei Kartenproblemen abschalten: dann wird die Karte nur geöffnet.",
+  qtScaleLabel = "Größe des Trackers",
+  qtScaleTip = "Größe des ausgefahrenen Panels in Prozent. Der Griff am Rand hat eine eigene Größe.",
+  qtGripScaleLabel = "Griff-Größe",
+  qtGripScaleTip = "Größe des Griffs am rechten Rand samt Füllstand-Pille in Prozent, unabhängig von der Größe des Panels.",
+  qtGripAlphaLabel = "Griff-Deckkraft",
+  qtGripAlphaTip = "Wie deutlich der Griff am rechten Rand in Ruhe zu sehen ist (10 bis 100 %). Beim Drüberfahren und wenn eine Quest abgabebereit ist, wird er sanft voll sichtbar.",
+  qtItemBarLabel = "Leiste für Quest-Gegenstände",
+  qtItemBarTip = "Eine eigene, verschiebbare Leiste (Bearbeitungsmodus) mit den Quest-Gegenständen der aktuellen Zone.",
+  qtUnhideLabel = "Ausgeblendete Quests",
+  qtUnhideButton = "Wieder zeigen",
+  qtUnhideTip = "Holt alle Quests zurück, die du im Tracker ausgeblendet hast (dieser Charakter).",
+  qtResetLabel = "Lage des Quest-Trackers",
+  qtResetTip = "Setzt Griff, Größe und Leiste für Quest-Gegenstände auf ihre Standardlage zurück.",
   gToasts = "Einblendungen",
   gMedals = "Medaillen",
   gMarks = "Markierung der To-Do-Gegner",
@@ -283,6 +360,72 @@ local function fireHidden()
   return ms ~= nil and type(ms.fireTalkHidden) == "function" and ms.fireTalkHidden() == true
 end
 
+-- the own quest tracker exists only in WoW Forever (journal/QuestTrackerHide.lua, client switch MapSpace.retailClient)
+local function questTrackerHidden()
+  local Q = Journal.QuestTrackerHide
+  return not (Q and type(Q.available) == "function" and Q.available() == true)
+end
+
+-- quest tracker switches (journal/model/QuestTrack.lua settings; account-wide)
+local function qtGet(key)
+  local Q = Journal.QuestTrack
+  if not (Q and type(Q.settings) == "function") then return nil end
+  local ok, s = pcall(Q.settings)
+  if not ok or type(s) ~= "table" then return nil end
+  local g, k = key:match("^(%a+)%.(%a+)$")
+  if g then return type(s[g]) == "table" and s[g][k] or nil end
+  return s[key]
+end
+
+local function qtSet(key, value)
+  local Q = Journal.QuestTrack
+  if Q and type(Q.set) == "function" then call(Q.set, key, value) end
+end
+
+local function qtCheck(key, setting, default)
+  return { kind = "check", key = key, hidden = questTrackerHidden, enabledBy = "questTracker", label = tx(key .. "Label"),
+    default = default, tip = tx(key .. "Tip"),
+    get = function() return qtGet(setting) == true end,
+    set = function(v) qtSet(setting, bool(v)) end }
+end
+
+local function qtChoice(key, setting, default, values, names)
+  return { kind = "dropdown", key = key, hidden = questTrackerHidden, enabledBy = "questTracker", label = tx(key .. "Label"),
+    default = default, varType = "string", tip = tx(key .. "Tip"),
+    options = function()
+      local n = TX[names]
+      local list = {}
+      for i, v in ipairs(values) do list[i] = { value = v, label = type(n) == "table" and n[v] or v } end
+      return list
+    end,
+    get = function()
+      local v = qtGet(setting)
+      for _, x in ipairs(values) do if x == v then return v end end
+      return default
+    end,
+    set = function(v) qtSet(setting, v) end }
+end
+
+-- font choice: "" = default, else a font name (built-in or from LibSharedMedia); a name that is gone shows as default
+local function qtFont(key, setting)
+  return { kind = "dropdown", key = key, hidden = questTrackerHidden, enabledBy = "questTracker", label = tx(key .. "Label"),
+    default = "", varType = "string", tip = tx(key .. "Tip"),
+    options = function()
+      local list = { { value = "", label = TX.qtFontDefault or "Default" } }
+      local Tr = Journal.QuestTracker
+      local names = Tr and type(Tr.fontList) == "function" and call(Tr.fontList) or nil
+      for _, n in ipairs(type(names) == "table" and names or {}) do list[#list + 1] = { value = n, label = n } end
+      return list
+    end,
+    get = function()
+      local v = qtGet(setting)
+      local Tr = Journal.QuestTracker
+      if type(v) == "string" and v ~= "" and Tr and type(Tr.fontFile) == "function" and call(Tr.fontFile, v) then return v end
+      return ""
+    end,
+    set = function(v) qtSet(setting, type(v) == "string" and v or "") end }
+end
+
 local function smokeHidden()
   local S = Journal.Smoke
   return S ~= nil and S.active() == false
@@ -456,6 +599,80 @@ Options.GROUPS = {
       { kind = "button", key = "todoReset", label = tx("todoResetLabel"), button = tx("resetButton"),
         tip = tx("todoResetTip"),
         click = function() local T = TT() if T then call(T.reset) end end },
+    },
+  },
+  {
+    title = tx("gQuestTracker"), hidden = questTrackerHidden,
+    items = {
+      { kind = "check", key = "questTracker", hidden = questTrackerHidden, label = tx("questTrackerLabel"), default = false,
+        tip = tx("questTrackerTip"),
+        get = function() local Q = Journal.QuestTrackerHide return Q ~= nil and Q.storedOn() == true end,
+        set = function(v) local Q = Journal.QuestTrackerHide if Q then call(Q.setEnabled, bool(v)) end end },
+      qtChoice("qtMode", "mode", "tracked", { "tracked", "log", "zone" }, "qtModes"),
+      qtChoice("qtOrder", "order", "zones", { "zones", "distance", "level" }, "qtOrders"),
+      qtChoice("qtDone", "done", "inZone", { "inZone", "group" }, "qtDones"),
+      qtChoice("qtTodo", "panel.todo", "top", { "top", "bottom" }, "qtTodoAt"),
+      qtCheck("qtHideDone", "filter.done", false),
+      qtCheck("qtHideGroup", "filter.group", false),
+      qtCheck("qtZoneOnly", "filter.zoneOnly", false),
+      qtCheck("qtObjs", "look.objs", true),
+      { kind = "check", key = "qtDoneObj", hidden = questTrackerHidden, enabledBy = "questTracker", label = tx("qtDoneObjLabel"),
+        default = true, tip = tx("qtDoneObjTip"),
+        get = function() return qtGet("look.doneObj") ~= "hide" end,
+        set = function(v) qtSet("look.doneObj", bool(v) and "strike" or "hide") end },
+      qtCheck("qtDist", "look.dist", false),
+      qtCheck("qtIcons", "look.icons", true),
+      qtCheck("qtFocus", "focus.show", true),
+      qtCheck("qtFocusDist", "focus.dist", true),
+      qtCheck("qtFocusBar", "focus.bar", true),
+      qtCheck("qtFocusGiver", "focus.giver", true),
+      qtCheck("qtFocusRew", "focus.rewards", true),
+      qtCheck("qtNotify", "panel.notify", true),
+      qtCheck("qtHideInfo", "panel.hideInfo", true),
+      qtCheck("qtHover", "panel.hover", true),
+      { kind = "slider", key = "qtDelay", hidden = questTrackerHidden, enabledBy = "questTracker", label = tx("qtDelayLabel"), tip = tx("qtDelayTip"),
+        min = 0, max = 2000, step = 100, default = 600, format = function(v) return string.format("%d ms", math.floor((tonumber(v) or 0) + 0.5)) end,
+        get = function() return qtGet("panel.delay") or 600 end,
+        set = function(v) qtSet("panel.delay", tonumber(v)) end },
+      { kind = "slider", key = "qtScale", hidden = questTrackerHidden, enabledBy = "questTracker", label = tx("qtScaleLabel"), tip = tx("qtScaleTip"),
+        min = 80, max = 140, step = 5, default = 100,
+        get = function() return math.floor((qtGet("panel.scale") or 1) * 100 + 0.5) end,
+        set = function(v) qtSet("panel.scale", (tonumber(v) or 100) / 100) end },
+      { kind = "slider", key = "qtGripScale", hidden = questTrackerHidden, enabledBy = "questTracker", label = tx("qtGripScaleLabel"), tip = tx("qtGripScaleTip"),
+        min = 70, max = 160, step = 5, default = 100, format = function(v) return string.format("%d %%", math.floor((tonumber(v) or 0) + 0.5)) end,
+        get = function() return math.floor((qtGet("panel.gripScale") or 1) * 100 + 0.5) end,
+        set = function(v) qtSet("panel.gripScale", (tonumber(v) or 100) / 100) end },
+      { kind = "slider", key = "qtGripAlpha", hidden = questTrackerHidden, enabledBy = "questTracker", label = tx("qtGripAlphaLabel"), tip = tx("qtGripAlphaTip"),
+        min = 10, max = 100, step = 5, default = 40, format = function(v) return string.format("%d %%", math.floor((tonumber(v) or 0) + 0.5)) end,
+        get = function() return math.floor((qtGet("panel.gripAlpha") or 0.4) * 100 + 0.5) end,
+        set = function(v) qtSet("panel.gripAlpha", (tonumber(v) or 40) / 100) end },
+      qtCheck("qtSyncFocus", "panel.syncFocus", true),
+      qtCheck("qtPanMap", "panel.panMap", true),
+      { kind = "slider", key = "qtBgAlpha", hidden = questTrackerHidden, enabledBy = "questTracker", label = tx("qtBgAlphaLabel"), tip = tx("qtBgAlphaTip"),
+        min = 50, max = 100, step = 2, default = 96, format = function(v) return string.format("%d %%", math.floor((tonumber(v) or 0) + 0.5)) end,
+        get = function() return math.floor((qtGet("panel.bgAlpha") or 0.96) * 100 + 0.5) end,
+        set = function(v) qtSet("panel.bgAlpha", (tonumber(v) or 96) / 100) end },
+      { kind = "slider", key = "qtFadeWidth", hidden = questTrackerHidden, enabledBy = "questTracker", label = tx("qtFadeWidthLabel"), tip = tx("qtFadeWidthTip"),
+        min = 0, max = 120, step = 4, default = 36, format = function(v) return string.format("%d px", math.floor((tonumber(v) or 0) + 0.5)) end,
+        get = function() return qtGet("panel.fadeWidth") or 36 end,
+        set = function(v) qtSet("panel.fadeWidth", tonumber(v)) end },
+      { kind = "slider", key = "qtFadeTime", hidden = questTrackerHidden, enabledBy = "questTracker", label = tx("qtFadeTimeLabel"), tip = tx("qtFadeTimeTip"),
+        min = 0, max = 1000, step = 50, default = 300, format = function(v) return string.format("%d ms", math.floor((tonumber(v) or 0) + 0.5)) end,
+        get = function() return math.floor((qtGet("panel.fadeTime") or 0.3) * 1000 + 0.5) end,
+        set = function(v) qtSet("panel.fadeTime", (tonumber(v) or 300) / 1000) end },
+      { kind = "slider", key = "qtFontScale", hidden = questTrackerHidden, enabledBy = "questTracker", label = tx("qtFontScaleLabel"), tip = tx("qtFontScaleTip"),
+        min = 80, max = 150, step = 5, default = 100, format = function(v) return string.format("%d %%", math.floor((tonumber(v) or 0) + 0.5)) end,
+        get = function() return math.floor((qtGet("panel.fontScale") or 1) * 100 + 0.5) end,
+        set = function(v) qtSet("panel.fontScale", (tonumber(v) or 100) / 100) end },
+      qtFont("qtFontHead", "panel.fontHead"),
+      qtFont("qtFontText", "panel.fontText"),
+      qtCheck("qtItemBar", "panel.itemBar", true),
+      { kind = "button", key = "qtUnhide", hidden = questTrackerHidden, enabledBy = "questTracker", label = tx("qtUnhideLabel"), button = tx("qtUnhideButton"),
+        tip = tx("qtUnhideTip"),
+        click = function() local Q = Journal.QuestTrack if Q then call(Q.clearHidden) end end },
+      { kind = "button", key = "qtReset", hidden = questTrackerHidden, enabledBy = "questTracker", label = tx("qtResetLabel"), button = tx("resetButton"),
+        tip = tx("qtResetTip"),
+        click = function() local Tr = Journal.QuestTracker if Tr and Tr.resetPlace then call(Tr.resetPlace) end end },
     },
   },
   {
@@ -766,6 +983,7 @@ local function register(category, layout, item)
     if type(CreateSettingsButtonInitializer) ~= "function" then return end
     local init = CreateSettingsButtonInitializer(txt(item.label), txt(item.button), function() item.click() end, txt(item.tip), true)
     layout:AddInitializer(init)
+    bindParent(init, item)
     if item.key == "saveNow" then buttonInits[item.key] = { init = init, item = item } end
     return
   end
@@ -792,9 +1010,10 @@ local function register(category, layout, item)
     local opts = Settings.CreateSliderOptions(item.min, item.max, item.step)
     local M = rawget(_G, "MinimalSliderWithSteppersMixin")
     if type(opts.SetLabelFormatter) == "function" and type(M) == "table" and type(M.Label) == "table" and M.Label.Right then
-      opts:SetLabelFormatter(M.Label.Right, function(v) return string.format("%d %%", math.floor((tonumber(v) or 0) + 0.5)) end)
+      opts:SetLabelFormatter(M.Label.Right, item.format or function(v) return string.format("%d %%", math.floor((tonumber(v) or 0) + 0.5)) end)
     end
-    Settings.CreateSlider(category, setting, opts, tip)
+    local sInit = Settings.CreateSlider(category, setting, opts, tip)
+    bindParent(sInit, item)
   elseif item.kind == "dropdown" then
     local init = Settings.CreateDropdown(category, setting, function() return textContainer(item.options()) end, tip)
     inits[item.key] = { init = init, item = item }

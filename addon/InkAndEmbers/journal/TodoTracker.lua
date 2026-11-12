@@ -78,6 +78,7 @@ TodoTracker.TEXT = ns.Locale.ns("TodoTracker", {
   dockToggleHint = "Klappt auch mit dem Questtracker ein und aus. Klick auf eine Zeile öffnet das Reisejournal auf der To-Do-Seite.",
   dockHeadCount = "%s (%d)",
   dockedSlash = "Die To Dos hängen am Questtracker. Abdocken: Optionen -> AddOns -> Ink & Embers -> „To Dos am Questtracker andocken“.",
+  questsSlash = "Die To Dos stehen im Quest-Tracker von Ink & Embers. Mini-Zettel zurück: /chronik quests aus.",
 })
 local T = TodoTracker.TEXT
 
@@ -1298,6 +1299,7 @@ function TodoTracker.layout()
 end
 
 function TodoTracker.wanted()
+  if TodoTracker.suppressed() then return false end
   local s = TodoTracker.settings()
   if not s.shown then return false end
   local Store = ns.Store
@@ -1313,6 +1315,7 @@ local function stopTicker()
 end
 
 local function updateTicker()
+  if TodoTracker.suppressed() then return stopTicker() end
   local s = TodoTracker.settings()
   local every
   if (s.shown or TodoTracker.docked()) and not (s.combatHide and inCombat()) then
@@ -1469,7 +1472,32 @@ end
 -- Docked to the quest tracker (journal/TodoDock.lua): the mini note stays hidden and the section draws the same entries. It shows
 -- whenever to-dos are open (or always with "hide when empty" off), independent of the mini note's on/off switch.
 function TodoTracker.docked()
-  return TodoTracker.Dock ~= nil and TodoTracker.settings().dock == true
+  return not TodoTracker.suppressed() and TodoTracker.Dock ~= nil and TodoTracker.settings().dock == true
+end
+
+-- The own quest tracker (journal/QuestTrackerHide.lua, WoW Forever, option off by default) is on: mini note, dock, distance
+-- ticker, automatic show and the edit-mode entry "todo" rest. Plans.onChange/hookPlans/changed keep running and call the
+-- onPlansChanged listeners, so the quest tracker can draw TodoTracker.entries() itself. Option off: exactly the baseline.
+function TodoTracker.suppressed()
+  local Q = Journal.QuestTrackerHide
+  if Q == nil then return false end
+  if type(Q.active) == "function" and Q.active() == true then return true end
+  -- the saved wish counts too: at login/reload this module's PLAYER_ENTERING_WORLD runs before QuestTrackerHide applies
+  return type(Q.wanted) == "function" and Q.wanted() == true
+end
+
+TodoTracker.plansListeners = {}
+function TodoTracker.onPlansChanged(fn)
+  if type(fn) == "function" then TodoTracker.plansListeners[#TodoTracker.plansListeners + 1] = fn end
+end
+
+local function refreshSuppressed()
+  if st.frame then st.frame:Hide() end
+  if TodoTracker.Dock then TodoTracker.Dock.hide() end
+  stopTicker()
+  if TodoTracker.hookPlans then TodoTracker.hookPlans() end
+  for _, fn in ipairs(TodoTracker.plansListeners) do pcall(fn) end
+  return false
 end
 
 local function refreshDocked(s)
@@ -1495,6 +1523,7 @@ end
 
 function TodoTracker.refresh()
   if st.preview then return true end
+  if TodoTracker.suppressed() then return refreshSuppressed() end
   local s = TodoTracker.settings()
   if TodoTracker.docked() then return refreshDocked(s) end
   if TodoTracker.Dock then TodoTracker.Dock.hide() end
@@ -1554,7 +1583,7 @@ function TodoTracker.autoScan()
   end
   st.known = known
   local s = TodoTracker.settings()
-  if st.preview or not s.autoShow or s.shown or open == 0 or TodoTracker.docked() then return false end
+  if st.preview or not s.autoShow or s.shown or open == 0 or TodoTracker.docked() or TodoTracker.suppressed() then return false end
   if fresh or (initial and not s.dismissed) then
     TodoTracker.setShown(true)
     return true
@@ -1608,6 +1637,7 @@ local function syncSettings()
   for _, fn in ipairs(TodoTracker.listeners) do pcall(fn) end
   if TodoTracker.hud and TodoTracker.hud.sync then pcall(TodoTracker.hud.sync) end
 end
+TodoTracker.syncSettings = syncSettings
 
 function TodoTracker.setShown(on)
   TodoTracker.set("shown", on and true or false)
@@ -1728,6 +1758,10 @@ function TodoTracker.slash(arg)
   local Store = ns.Store
   if not (Store and Store.char and Store.char()) then
     say(T.notReady)
+    return false
+  end
+  if TodoTracker.suppressed() then
+    say(T.questsSlash) -- the quest tracker holds the to-dos: nothing is written (shown/dismissed/pos stay as they are)
     return false
   end
   if arg == "reset" then

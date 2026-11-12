@@ -170,10 +170,26 @@ L.add("ptBR", "col.Rest", {
   fireStatus = "Fogueira: IDs conhecidos %s, última detecção %s.",
 })
 
+-- collectors/Plans.lua (pet trainer to-do shown in the current language)
+L.add("ptBR", "col.Plans", {
+  trainerOne = "Ao instrutor: %s nova magia (%s)",
+  trainerOther = "Ao instrutor: %s novas magias (%s)",
+  petOne = "Ao treinador de mascotes: %s nova habilidade (%s)",
+  petOther = "Ao treinador de mascotes: %s novas habilidades (%s)",
+  unitG = "g",
+  unitS = "s",
+  unitK = "c",
+})
+
 -- collectors/Trainer.lua
 L.add("ptBR", "col.Trainer", {
   todo_one = "Ao instrutor: %s nova magia (%s)",
   todo_other = "Ao instrutor: %s novas magias (%s)",
+  petTodo_one = "Ao treinador de mascotes: %s nova habilidade (%s)",
+  petTodo_other = "Ao treinador de mascotes: %s novas habilidades (%s)",
+  petToastTitle = "Ao treinador de mascotes",
+  petToast_one = "%s nova habilidade",
+  petToast_other = "%s novas habilidades",
   unitG = "g",
   unitS = "s",
   unitK = "c",

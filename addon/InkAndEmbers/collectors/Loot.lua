@@ -58,6 +58,7 @@ local KILL_SRC_MAX = 8        -- seconds: only a kill this fresh and unambiguous
 local KILL_TTL_NOWINDOW = 15  -- seconds: same without a loot window (looting without a window, window unreadable)
 local KILL_MAX = 8            -- remembered kills
 local KILL_DEDUPE = 5         -- seconds: the same kill via FC_KILL_SEEN and FC_KILL
+local KILL_PAIR = 2           -- seconds: an unreadable-ID kill (FC_KILL_SEEN) is paired with its FC_KILL this soon (Combat waits 1 s for the XP)
 
 -- messages (GlobalStrings) in order: variants with a quantity first. Columns: name, kind, has quantity.
 local MESSAGES = {
@@ -228,22 +229,30 @@ end
 
 -- FC_KILL_SEEN fires right at the kill (Combat then waits briefly for XP before FC_KILL); auto-loot can arrive before FC_KILL.
 -- The same kill via both signals is remembered once (same npcID within KILL_DEDUPE s).
-local function noteKill(self, npcID)
+-- Kills without a readable npcID (secret) have nothing to compare: they are never merged by "same ID". Such a kill from FC_KILL only
+-- joins the kill that FC_KILL_SEEN noted a moment ago (within KILL_PAIR s, once each); every other unreadable kill stays its own entry.
+local function noteKill(self, npcID, signal)
   local id, t, k = num(npcID), GetTime(), self.kills
   for i = #k, 1, -1 do
-    if k[i].id == id and t - k[i].at <= KILL_DEDUPE then
-      -- duplicate (second signal or second kill of the same npcID): do not create anew, but move the timestamp to the newer kill,
-      -- else the younger kill is judged 'too old' for srcID (KILL_SRC_MAX) too early.
-      k[i].at = t
+    local e = k[i]
+    if id ~= nil then
+      if e.id == id and t - e.at <= KILL_DEDUPE then
+        -- duplicate (second signal or second kill of the same npcID): do not create anew, but move the timestamp to the newer kill,
+        -- else the younger kill is judged 'too old' for srcID (KILL_SRC_MAX) too early.
+        e.at = t
+        return
+      end
+    elseif signal == "kill" and e.id == nil and e.unpaired and t - e.at <= KILL_PAIR then
+      e.unpaired = nil -- the same kill, now confirmed by FC_KILL
       return
     end
   end
-  k[#k + 1] = { id = id, at = t }
+  k[#k + 1] = { id = id, at = t, unpaired = (id == nil and signal ~= "kill") or nil }
   while #k > KILL_MAX do table.remove(k, 1) end
 end
 
-handlers.FC_KILL = noteKill
-handlers.FC_KILL_SEEN = noteKill
+handlers.FC_KILL = function(self, npcID) return noteKill(self, npcID, "kill") end
+handlers.FC_KILL_SEEN = function(self, npcID) return noteKill(self, npcID, "seen") end
 
 handlers.LOOT_OPENED = function(self)
   local t = GetTime()

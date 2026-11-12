@@ -1,4 +1,6 @@
--- HUD elements in edit mode via the embedded LibEditMode: toast, slip (welcome greeting), card (campfire recap), todo, quick, fire, smoke. Each has an unprotected holder on UIParent
+-- HUD elements in edit mode via the embedded LibEditMode: toast, slip (welcome greeting), card (campfire recap), todo, quick, fire, smoke,
+-- and in WoW Forever the own quest tracker: quests (grip of the slide-out panel; only the height at the right edge counts) and questbar
+-- (quest item bar). Each has an unprotected holder on UIParent
 -- (size = scale, opacity = alpha), saved per layout in chars[guid].editMode.layouts. The draft is committed when Blizzard saves
 -- (hooksecurefunc SaveLayouts + EventRegistry "EditMode.SavedLayouts"), discarded on revert. Writing into EditModeManagerFrame would taint: own section.
 local ADDON_NAME, ns = ...
@@ -15,7 +17,7 @@ EditMode.IDS = { "toast", "slip", "card", "todo", "quick", "fire", "smoke" }
 EditMode.SCALE = { min = 50, max = 150, step = 5, default = 100 }
 -- Toasts and cards start smaller (80 %) than the other HUD elements; saved sizes stay as they are. The welcome note keeps its
 -- real size by default (125 % x BASE_SCALE 0.8 = 1.0). The smoke signal starts at 100 % (80 % of its real size), as set by hand.
-EditMode.SCALE_DEFAULTS = { toast = 80, card = 80, slip = 125, smoke = 100 }
+EditMode.SCALE_DEFAULTS = { toast = 80, card = 80, slip = 125, smoke = 100, quests = 125, questbar = 125 }
 -- Default place of the welcome note: left screen edge, a figure's inset away (Begleiter.CUTOUTS inset), Begleiter.SLIP.y
 EditMode.SLIP_INSET = 12
 -- Default position of the toasts and cards: the top edge sits TOAST_BELOW_FRAC x screen height under the screen centre (not in the middle of the view)
@@ -24,7 +26,7 @@ function EditMode.scaleDefault(id) return EditMode.SCALE_DEFAULTS[id] or EditMod
 EditMode.BASE_SCALE = 0.8   -- 100 % in edit mode = 80 % of the base size
 EditMode.ALPHA = { min = 20, max = 100, step = 5, default = 100 }
 EditMode.DURATION = { min = 2, max = 30, step = 1 }
-EditMode.LEVEL = { toast = 30, slip = 20, card = 10, todo = 10, quick = 10, fire = 10, smoke = 10 }
+EditMode.LEVEL = { toast = 30, slip = 20, card = 10, todo = 10, quick = 10, fire = 10, smoke = 10, quests = 10, questbar = 10 }
 EditMode.LAYOUTS_MAX = 64
 EditMode.NAME_BYTES = 64
 EditMode.POINTS = { TOPLEFT = true, TOP = true, TOPRIGHT = true, LEFT = true, CENTER = true, RIGHT = true, BOTTOMLEFT = true,
@@ -32,7 +34,8 @@ EditMode.POINTS = { TOPLEFT = true, TOP = true, TOPRIGHT = true, LEFT = true, CE
 
 EditMode.TEXT = ns.Locale.ns("EditMode", {
   name = { toast = "Chronik: Einblendungen", slip = "Chronik: Willkommen-Gruß", card = "Chronik: Rast-Rückblick",
-    todo = "Chronik: Mini-To-Do-Zettel", quick = "Chronik: Schnellnotizen", fire = "Chronik: Zettel am Feuer", smoke = "Chronik: Rauchzeichen" },
+    todo = "Chronik: Mini-To-Do-Zettel", quick = "Chronik: Schnellnotizen", fire = "Chronik: Zettel am Feuer", smoke = "Chronik: Rauchzeichen",
+    quests = "Chronik: Quest-Tracker", questbar = "Chronik: Quest-Gegenstände" },
   scale = "Größe",
   scaleDesc = "Größe des Elements, 50 bis 150 %.",
   alpha = "Deckkraft",
@@ -71,7 +74,18 @@ EditMode.TEXT = ns.Locale.ns("EditMode", {
   },
   panelTitle = "Ink & Embers",
   panelHint = "Im Bearbeitungsmodus zeigen",
-  panelNames = { toast = "Einblendungen", slip = "Willkommen-Gruß", card = "Rast-Rückblick", todo = "Mini-To-Do-Zettel", quick = "Schnellnotizen", fire = "Zettel am Feuer", smoke = "Rauchzeichen" },
+  panelNames = { toast = "Einblendungen", slip = "Willkommen-Gruß", card = "Rast-Rückblick", todo = "Mini-To-Do-Zettel", quick = "Schnellnotizen", fire = "Zettel am Feuer", smoke = "Rauchzeichen",
+    quests = "Quest-Tracker", questbar = "Quest-Gegenstände" },
+  questsScale = "Größe des Trackers",
+  questsScaleDesc = "Größe des ausgefahrenen Panels, 80 bis 140 % (wie in den Einstellungen).",
+  questsGripScale = "Größe des Griffs",
+  questsGripScaleDesc = "Größe des Griffs samt Pille, 70 bis 160 % (wie in den Einstellungen).",
+  questsHover = "Beim Überfahren ausfahren",
+  questsHoverDesc = "Der Tracker fährt aus, sobald die Maus den rechten Rand oder den Griff berührt.",
+  questsDelay = "Einfahren nach",
+  questsDelayDesc = "So lange bleibt der Tracker offen, nachdem die Maus ihn verlassen hat.",
+  showBar = "Leiste zeigen",
+  showBarDesc = "Zeigt die Quest-Gegenstände der aktuellen Zone in einer eigenen Leiste (wie in den Einstellungen).",
   dirty = "Ungespeicherte Änderungen",
   clean = "Alles gespeichert",
   save = "Speichern",
@@ -110,6 +124,9 @@ local function QN() return Journal.QuickNote end
 local function FN() return Journal.FireNotes end
 local function SM() return Journal.Smoke end
 local function BG() return Journal.Begleiter end
+local function QTR() return Journal.QuestTracker end
+local function QIBar() return Journal.QuestItemBar end
+local function QTk() return Journal.QuestTrack end
 
 local function layoutKey(name)
   if isSecret(name) or type(name) ~= "string" or name == "" then return "_" end
@@ -279,6 +296,17 @@ function EditMode.natural(id)
     local S = SM()
     return S and S.W or 660, S and S.H or 160
   end
+  if id == "quests" then
+    local Tr, Q = QTR(), QTk()
+    local k = (Q and Q.settings and Q.settings().panel.gripScale) or 1
+    local H = Tr and Tr.HANDLE or { wHover = 28, h = 96 }
+    return H.wHover * k, H.h * k
+  end
+  if id == "questbar" then
+    local B = QIBar()
+    if not B then return 142, 40 end
+    return B.PAD * 2 + B.EDIT_SLOTS * B.SIZE + (B.EDIT_SLOTS - 1) * B.GAP, B.PAD * 2 + B.SIZE
+  end
   local Q = QN()
   return Q and Q.W or 250, Q and Q.H or 130
 end
@@ -299,6 +327,11 @@ function EditMode.defaultPos(id)
   end
   if id == "smoke" then
     return { point = "TOP", x = 0, y = SM() and SM().defaultY() or -10 }
+  end
+  if id == "quests" then return { point = "RIGHT", x = 0, y = 40 } end
+  if id == "questbar" then
+    local p = QIBar() and QIBar().DEFAULT_POS or { point = "BOTTOM", x = 0, y = 236 }
+    return { point = p.point, x = p.x, y = p.y }
   end
   return { point = "TOPRIGHT", x = -40, y = -530 }
 end
@@ -493,6 +526,8 @@ function EditMode.applyAll()
   if QN() and QN().state.frame then QN().place() end
   if FN() and FN().state.frame then FN().place() end
   if SM() and SM().state.frame then SM().place() end
+  if QTR() and QTR().state.frames then QTR().place() end
+  if QIBar() and QIBar().state.frame then QIBar().place() end
 end
 
 function EditMode.toastId(item)
@@ -688,10 +723,21 @@ function EditMode.available(id)
     local B = BG()
     return B ~= nil and type(B.restOn) == "function" and B.restOn() == true
   end
-  -- the to-do note docked to the quest tracker follows the tracker: no own position, no edit-mode entry
+  -- the to-do note docked to the quest tracker follows the tracker: no own position, no edit-mode entry; the same while the
+  -- own quest tracker holds the to-dos (TodoTracker.suppressed)
   if id == "todo" then
     local Tr = TT()
-    return not (Tr and type(Tr.docked) == "function" and Tr.docked())
+    return not (Tr and ((type(Tr.docked) == "function" and Tr.docked())
+      or (type(Tr.suppressed) == "function" and Tr.suppressed())))
+  end
+  -- the own quest tracker (WoW Forever): only while it is on and applied; the bar only with its switch
+  if id == "quests" then
+    local Tr = QTR()
+    return Tr ~= nil and type(Tr.active) == "function" and Tr.active() == true
+  end
+  if id == "questbar" then
+    local B = QIBar()
+    return B ~= nil and type(B.wanted) == "function" and B.wanted() == true
   end
   return true
 end
@@ -942,6 +988,7 @@ function EditMode.enter()
   if not st.draft then beginDraft() end
   hideConfirm()
   for _, id in ipairs(EditMode.IDS) do showElement(id) end
+  if QIBar() and holder("questbar") then safe(QIBar().setEditing, true) end
   local p = st.panel or buildPanel()
   updatePanel()
   p:Show()
@@ -957,6 +1004,7 @@ function EditMode.exit()
     if h then h:Show() end
   end
   if st.panel then st.panel:Hide() end
+  if QIBar() and holder("questbar") then safe(QIBar().setEditing, false) end
   if EditMode.isDirty() then
     showConfirm()
   else
@@ -1010,6 +1058,8 @@ local function after(id)
   if id == "quick" and QN() and QN().state.frame then QN().place() end
   if id == "fire" and FN() and FN().state.frame then FN().place() end
   if id == "smoke" and SM() and SM().state.frame then SM().place() end
+  if id == "quests" and QTR() and QTR().state.frames then QTR().place() end
+  if id == "questbar" and QIBar() and QIBar().state.frame then QIBar().place() end
   updatePanel()
 end
 
@@ -1052,7 +1102,70 @@ local function checkSetting(lib, name, desc, key, setter)
   }
 end
 
+-- quest tracker grip: own size (the panel option, not the edit-mode scale), hover and delay; no opacity
+local function questsSettings(lib)
+  local Q, Tr = QTk(), QTR()
+  local function setQ(key, value)
+    safe(function()
+      if Q.set(key, value) and Tr then
+        Tr.place()
+        Tr.sizePanel()
+        Tr.request()
+      end
+      EditMode.apply("quests")
+      if Tr then Tr.place() end
+      updatePanel()
+    end)
+  end
+  return {
+    {
+      kind = lib.SettingType.Slider, name = T.questsScale, desc = T.questsScaleDesc, default = 100, minValue = 80, maxValue = 140,
+      valueStep = 5, formatter = pctFormat,
+      get = function() return floor((Q.settings().panel.scale or 1) * 100 + 0.5) end,
+      set = function(_, value, fromReset) setQ("panel.scale", fromReset and 1 or (tonumber(value) or 100) / 100) end,
+    },
+    {
+      kind = lib.SettingType.Slider, name = T.questsGripScale, desc = T.questsGripScaleDesc, default = 100, minValue = 70, maxValue = 160,
+      valueStep = 5, formatter = pctFormat,
+      get = function() return floor((Q.settings().panel.gripScale or 1) * 100 + 0.5) end,
+      set = function(_, value, fromReset) setQ("panel.gripScale", fromReset and 1 or (tonumber(value) or 100) / 100) end,
+    },
+    {
+      kind = lib.SettingType.Checkbox, name = T.questsHover, desc = T.questsHoverDesc, default = true,
+      get = function() return Q.settings().panel.hover == true end,
+      set = function(_, value) setQ("panel.hover", value and true or false) end,
+    },
+    {
+      kind = lib.SettingType.Slider, name = T.questsDelay, desc = T.questsDelayDesc, default = 600, minValue = 0, maxValue = 2000,
+      valueStep = 100, formatter = function(v) return string.format("%d ms", floor((tonumber(v) or 0) + 0.5)) end,
+      get = function() return Q.settings().panel.delay or 600 end,
+      set = function(_, value, fromReset) setQ("panel.delay", fromReset and 600 or (tonumber(value) or 600)) end,
+    },
+  }
+end
+
+local function questbarSettings(lib)
+  local Q = QTk()
+  return {
+    pctSetting(lib, "questbar", "scale", EditMode.SCALE, T.scale, T.scaleDesc),
+    {
+      kind = lib.SettingType.Checkbox, name = T.showBar, desc = T.showBarDesc, default = true,
+      get = function() return Q.settings().panel.itemBar == true end,
+      set = function(_, value)
+        safe(function()
+          Q.set("panel.itemBar", value and true or false)
+          if QIBar() then QIBar().refresh() end
+          showElement("questbar")
+          updatePanel()
+        end)
+      end,
+    },
+  }
+end
+
 function EditMode.settingsFor(lib, id)
+  if id == "quests" then return questsSettings(lib) end
+  if id == "questbar" then return questbarSettings(lib) end
   local out = {
     pctSetting(lib, id, "scale", EditMode.SCALE, T.scale, T.scaleDesc),
     pctSetting(lib, id, "alpha", EditMode.ALPHA, T.alpha, T.alphaDesc),
@@ -1142,6 +1255,7 @@ local function register(lib, id)
   st.defaults[id] = d
   lib:AddFrame(h, function(_, layoutName, point, x, y)
     safe(function()
+      if id == "quests" then point, x, y = EditMode.snapRight(h, point, x, y) end
       EditMode.set(id, "pos", { point = point, x = x, y = y }, layoutName)
       after(id)
     end)
@@ -1149,6 +1263,17 @@ local function register(lib, id)
   lib:AddFrameSettings(h, EditMode.settingsFor(lib, id))
   local sel = type(lib.frameSelections) == "table" and lib.frameSelections[h] or nil
   if sel and sel.SetFrameLevel then sel:SetFrameLevel((h:GetFrameLevel() or 1) + 50) end
+end
+
+-- the quest tracker grip stays at the right screen edge: only its height (centre) is kept
+function EditMode.snapRight(h, point, x, y)
+  local _, cy = h:GetCenter()
+  cy = num(cy)
+  local k = num(h:GetScale()) or 1
+  if k <= 0 then k = 1 end
+  local _, sh = screenSize()
+  if not cy then return "RIGHT", 0, num(y) or 0 end
+  return "RIGHT", 0, floor((cy - sh / k / 2) * 10 + 0.5) / 10
 end
 
 function EditMode.init()
@@ -1166,6 +1291,11 @@ function EditMode.init()
   if F then ids[#ids + 1] = "fire" end
   -- WoW Forever only; the Retail test preview (/chronik feuer rauch) falls back to the default position
   if S and S.active() then ids[#ids + 1] = "smoke" end
+  -- own quest tracker: WoW Forever only (QuestTrack.available); the entries show while it is switched on
+  local Qk = QTk()
+  local forever = Qk ~= nil and type(Qk.available) == "function" and Qk.available() == true
+  if forever and QTR() then ids[#ids + 1] = "quests" end
+  if forever and QIBar() then ids[#ids + 1] = "questbar" end
   local ok, err = pcall(function()
     for _, id in ipairs(ids) do register(lib, id) end
   end)
@@ -1221,6 +1351,19 @@ function EditMode.init()
       end,
     }
   end
+  local function onHolder(id)
+    return function(f)
+      local h = holder(id)
+      if not h then return false end
+      if f:GetParent() ~= h then f:SetParent(h) end
+      f:SetFrameStrata("MEDIUM")
+      f:ClearAllPoints()
+      if id == "quests" then f:SetPoint("RIGHT", h, "RIGHT", 0, 0) else f:SetPoint("TOPLEFT", h, "TOPLEFT", 0, 0) end
+      return true
+    end
+  end
+  if holder("quests") then QTR().hud = { place = onHolder("quests") } end
+  if holder("questbar") then QIBar().hud = { place = onHolder("questbar") } end
   hookBlizzard()
   lib:RegisterCallback("enter", function() safe(EditMode.enter) end)
   lib:RegisterCallback("exit", function() safe(EditMode.exit) end)

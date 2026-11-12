@@ -2,6 +2,9 @@
 -- Left: filter (now · upcoming · learned · all), page arrows and the spell list (icon, name and rank, level, cost, state).
 -- Right: what is learnable now with the total cost against the gold in the bag, the next levels, the nearest known trainer
 -- (from own visits; "Als To Do" places a to-do at them), free talent points and the training fees paid so far.
+-- The same view class also draws the sub-view "Tierausbildung" (View.new(..., "pets"), Journal.TierView; hunters only, or the
+-- development preview /chronik sim jaeger): same layout and filters, rows = pet abilities (Lehrplan.evaluate().pets), state of the
+-- last pet trainer visit; the right side shows the learnable count, cost, next levels and a note instead of trainer, talents, fees.
 -- Data: journal/model/Lehrplan.lua (display-ready). Grid (docs/raster.md): left list ends before y 474 (blot bottom left),
 -- right everything stays left of x 446 and above y 578 (keep-outs DecorKeepout quests). No ticker, no OnUpdate; rows pooled.
 local _, ns = ...
@@ -32,6 +35,22 @@ local T = ns.Locale.ns("p.QuestsLehrplan", {
   sNow = "jetzt lernbar", sMissing = "erst Vorgängerrang", sTalent = "Talent nötig", sLater = "ab Stufe %s",
   sLearned = "gelernt", sQuest = "aus Klassenquest", sUnoffered = "Lehrer bot es nicht an",
   free = "ohne Kosten",
+  petPage = "TIERAUSBILDUNG", petPreview = "(Vorschau)", petSample = "Vorschau mit Beispielstand, nicht Euer Charakter", sUnknown = "unbekannt",
+  petFNowTip = { "Jetzt", "Was Euer Tier auf Eurer Stufe beim Tierausbilder lernen kann" },
+  petFNextTip = { "Kommend", "Was die nächsten Stufen bringen" },
+  petFLearnedTip = { "Gelernt", "Was Euer Tier schon gelernt hat" },
+  petFAllTip = { "Alle", "Alle Tierfähigkeiten und Ränge" },
+  petNoteHead = "Tierausbilder",
+  petHow = "Einmal beim Tierausbilder kaufen, dann jedem Tier über \"%s\" beibringen.",
+  petAbility = "Tierausbildung",
+  petTaming = "Fähigkeiten wie Klaue oder Biss lernt Ihr durch Zähmen, nicht hier.",
+  petNoneHead = "Keine Tierausbildung", petNoneBody = "Die Tierausbildung gibt es nur für Jäger.",
+  petEmptyNow = "Gerade gibt es nichts zu lernen. Besucht den Tierausbilder, damit Ink den Stand kennt.",
+  petEmptyNext = "Nichts mehr in Sicht.", petEmptyLearned = "Noch nichts gelernt oder noch nicht gesehen. Besucht den Tierausbilder.",
+  petCostNone = "Im Moment gibt es beim Tierausbilder nichts Neues.",
+  petSeen = "Stand vom letzten Besuch beim Tierausbilder", petUnseen = "Noch nicht beim Tierausbilder gewesen",
+  petTip = "Tipp: Im Fenster des Tierausbilders oben im Filter \"%s\" anhaken, dann sieht Ink auch schon Gelerntes.",
+  unknownTip = "Dieser Rang wurde beim Tierausbilder noch nicht gesehen. Ink rät nicht.",
   needs = "Voraussetzung: %s", needsTalent = "Talent: %s", questTip = "Belohnung einer Klassenquest, nicht beim Lehrer",
   unofferedTip = "Beim letzten Besuch auf dieser Stufe stand der Zauber nicht in der Liste des Lehrers.",
   learnable = "jetzt lernbar",
@@ -79,6 +98,7 @@ View.LAYOUT = { rowsY = ROWS_Y, rowH = ROW_H, leftEnd = LEFT_END, nextY = R_NEXT
 
 local FILTER_TEXT = { now = "fNow", next = "fNext", learned = "fLearned", all = "fAll" }
 local EMPTY_TEXT = { now = "emptyNow", next = "emptyNext", learned = "emptyLearned", all = "emptyNow" }
+local PET_EMPTY_TEXT = { now = "petEmptyNow", next = "petEmptyNext", learned = "petEmptyLearned", all = "petEmptyNow" }
 
 local function int(n) return Journal.Texts.int(n) end
 local function money(c) return Journal.Texts.money(c, "short") end
@@ -99,6 +119,38 @@ local function plural(n, one, other)
   return T(pluralKey(n, one, other), int(n))
 end
 
+-- name of the trainer window filter that shows learned rows (client text, fallback "Used")
+function View.petFilterName()
+  local v = rawget(_G, "TRAINER_FILTER_USED")
+  if type(v) == "string" and not (type(issecretvalue) == "function" and issecretvalue(v) == true) and v ~= "" then
+    return ns.Sanitize.field(v)
+  end
+  return "Used"
+end
+
+function View.petTip() return T("petTip", View.petFilterName()) end
+
+-- name of the hunter ability that teaches a pet (Beast Training, spell 5149) in the client language; fallback: our own text
+function View.petAbilityName()
+  local name
+  local CS = rawget(_G, "C_Spell")
+  if type(CS) == "table" and type(CS.GetSpellName) == "function" then
+    local ok, v = pcall(CS.GetSpellName, 5149)
+    if ok then name = v end
+  end
+  if name == nil and type(rawget(_G, "GetSpellInfo")) == "function" then
+    local ok, v = pcall(GetSpellInfo, 5149)
+    if ok then name = v end
+  end
+  if type(name) == "string" and name ~= "" and not (type(issecretvalue) == "function" and issecretvalue(name) == true) then
+    return ns.Sanitize.field(name)
+  end
+  return T.petAbility
+end
+
+-- how it works in Forever: buy once from the trainer, teach every pet with the ability; family abilities come from taming
+function View.petHowText() return T("petHow", View.petAbilityName()) .. "\n\n" .. T.petTaming end
+
 -- state text of a row
 function View.stateText(r)
   local s = r.state
@@ -108,6 +160,7 @@ function View.stateText(r)
   if s == "later" then return T("sLater", int(r.level)) end
   if s == "learned" then return T.sLearned end
   if s == "quest" then return T.sQuest end
+  if s == "unknown" then return T.sUnknown end
   return ""
 end
 
@@ -130,6 +183,10 @@ local function rowTip(r)
   if r.state == "quest" then tip[#tip + 1] = T.questTip end
   if r.state == "now" and r.offered == false then tip[#tip + 1] = T.unofferedTip end
   tip[#tip + 1] = View.stateText(r)
+  if r.state == "unknown" then
+    tip[#tip + 1] = T.unknownTip
+    tip[#tip + 1] = View.petTip()
+  end
   return tip
 end
 View.rowTip = rowTip
@@ -197,11 +254,11 @@ end
 local function buildLeft(self, tab)
   local ui = self.ui
   ui.headL = W.NewPageHead(tab, { side = "L" })
-  ui.headL:SetTexts(T.brand, T.page)
+  ui.headL:SetTexts(T.brand, self.pets and T.petPage or T.page)
   local items = {}
   for _, key in ipairs(LP.FILTERS) do
     local k = FILTER_TEXT[key]
-    items[#items + 1] = { key = key, label = T[k], tip = T[k .. "Tip"] }
+    items[#items + 1] = { key = key, label = T[k], tip = T[self.pets and ("pet" .. k:gsub("^f", "F") .. "Tip") or (k .. "Tip")] }
   end
   ui.filter = D.NewToggle(tab, { items = items, size = 13, gap = 12, onChange = function(key) self:SetFilter(key) end })
   ui.filter.frame:SetPoint("LEFT", tab, "TOPLEFT", LX, -CTRL_CY)
@@ -226,7 +283,7 @@ end
 local function buildRight(self, tabR)
   local ui = self.ui
   ui.headR = W.NewPageHead(tabR, { side = "R" })
-  ui.headR:SetTexts("", T.page)
+  ui.headR:SetTexts("", self.pets and T.petPage or T.page)
   ui.num = label(tabR, "title", G.size.xl, "ink")
   ui.num:SetPoint("TOPLEFT", tabR, "TOPLEFT", RX, -TITLE_Y)
   ui.numLbl = label(tabR, "label", G.size.s, "sepia")
@@ -249,7 +306,7 @@ local function buildRight(self, tabR)
     fs:SetPoint("TOPLEFT", tabR, "TOPLEFT", RX + 4, -(R_NEXT_Y + 34 + (i - 1) * G.line.text))
     ui.nextLines[i] = fs
   end
-  ui.trainerHead = section(self, tabR, R_TRAINER_Y, T.trainerHead)
+  ui.trainerHead = section(self, tabR, R_TRAINER_Y, self.pets and T.petNoteHead or T.trainerHead)
   ui.trainerName = label(tabR, "title", G.size.m, "ink")
   ui.trainerName:SetWidth(RW)
   ui.trainerName:SetWordWrap(false)
@@ -279,8 +336,8 @@ local function buildRight(self, tabR)
   for _, fs in ipairs(ui.nextLines) do ui.rightParts[#ui.rightParts + 1] = fs end
 end
 
-function View.new(page, left, right)
-  local self = setmetatable({ page = page, ui = {} }, View)
+function View.new(page, left, right, mode)
+  local self = setmetatable({ page = page, ui = {}, pets = mode == "pets" }, View)
   local ui = self.ui
   local tab = CreateFrame("Frame", nil, left)
   tab:SetAllPoints(left)
@@ -339,7 +396,7 @@ function View:Render()
   if not self.open then return end
   local view = LP.evaluate()
   self.view = view
-  local ok = view.available
+  local ok = view.available and (not self.pets or view.pets ~= nil)
   ui.emptyHead:SetShown(not ok)
   ui.emptyBody:SetShown(not ok)
   ui.emptyRight:SetShown(not ok)
@@ -352,14 +409,16 @@ function View:Render()
   end
   for _, f in ipairs(ui.rightParts) do f:SetShown(ok) end
   local player = Journal.Widgets.playerLine and Journal.Widgets.playerLine(self.page and self.page.data) or ""
-  ui.headR:SetTexts(player or "", T.page)
+  ui.headR:SetTexts(player or "", self.pets and T.petPage or T.page)
   if not ok then
     local retail = view.reason == "RETAIL"
-    W.setText(ui.emptyHead, retail and T.retailHead or T.noDataHead)
-    W.setText(ui.emptyBody, retail and T.retailBody or T.noDataBody)
-    W.setText(ui.emptyRight, retail and T.retailBody or T.noDataBody)
+    local none = self.pets and view.available -- trainer plan on, but this is no hunter: no pet training
+    W.setText(ui.emptyHead, none and T.petNoneHead or (retail and T.retailHead or T.noDataHead))
+    W.setText(ui.emptyBody, none and T.petNoneBody or (retail and T.retailBody or T.noDataBody))
+    W.setText(ui.emptyRight, none and T.petNoneBody or (retail and T.retailBody or T.noDataBody))
     return
   end
+  if self.pets then return self:RenderPets(view, view.pets) end
   -- left: filter and list
   local filter = self:Filter()
   ui.filter:SetValue(filter)
@@ -424,6 +483,47 @@ function View:Render()
   W.setText(ui.fees, T("fees", money(LP.feesPaid())))
 end
 
+-- pet training (mode "pets"): the same layout with the pet abilities; right side without trainer, talents and fees
+function View:RenderPets(view, pv)
+  local ui = self.ui
+  local filter = self:Filter()
+  ui.filter:SetValue(filter)
+  local rows = LP.petRows(pv, filter)
+  self.items = rows
+  ui.rowsList.opts.empty = T[PET_EMPTY_TEXT[filter]]
+  ui.rowsList:SetItems(rows)
+  ui.rowsList:Refresh()
+  local open = pv.now.n + pv.missing.n + pv.later.n + pv.unknown.n
+  local info = T("info", int(view.level), int(pv.learned.n), int(open))
+  if pv.preview then info = info .. " · " .. T.petPreview end
+  W.setText(ui.info, info)
+  ui.num:SetText(int(pv.now.n))
+  W.setText(ui.numLbl, T.learnable)
+  if pv.now.n > 0 then
+    W.setText(ui.costLine, T("costLine", money(pv.now.cost), view.money and money(view.money) or "?"))
+    local short = (view.money and pv.now.cost > view.money) and (pv.now.cost - view.money) or 0
+    W.setText(ui.shortLine, short > 0 and T("short", money(short)) or T.enough)
+    ui.shortLine:SetTextColor(W.color(short > 0 and "red" or "sepia"))
+  else
+    W.setText(ui.costLine, T.petCostNone)
+    W.setText(ui.shortLine, "")
+  end
+  for i, fs in ipairs(ui.nextLines) do
+    local nb = pv.next[i]
+    if nb then
+      W.setText(fs, T(pluralKey(nb.n, "nextLine_one", "nextLine_other"), int(nb.level), int(nb.n),
+        nb.cost > 0 and money(nb.cost) or T.free))
+    else
+      W.setText(fs, i == 1 and T.nextNone or "")
+    end
+  end
+  -- note: state of the last visit (or the preview mark) and the hint where the filter sits
+  W.setText(ui.trainerName, pv.preview and T.petPreview or "")
+  local seen = pv.preview and T.petSample or (pv.seen and T.petSeen or T.petUnseen)
+  W.setText(ui.trainerSub, seen .. ". " .. View.petTip() .. "\n\n" .. View.petHowText())
+  for _, f in ipairs({ ui.todo, ui.todoMsg, ui.talentHead, ui.talentLine, ui.fees }) do f:Hide() end
+end
+
 function View:Open()
   self.open = true
   self.todoText = nil
@@ -443,6 +543,9 @@ function View:Close()
   ui.table:Hide()
   ui.tableR:Hide()
 end
+
+-- sub-view "Tierausbildung": the same view in pet mode (pages/Plaene.lua)
+Journal.TierView = { new = function(page, left, right) return View.new(page, left, right, "pets") end }
 
 -- /chronik lehrplan: open the book, tab Pläne, sub-bookmark "Lehrplan". The book stays closed in combat.
 function LP.openPage()

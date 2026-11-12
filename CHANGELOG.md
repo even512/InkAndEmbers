@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.0.11
+
+**At a glance:** hunters get their own **Pet Training** page, the quest data now comes from **QuestieDB 1.0.15** with over 500 more quests, and a few fixes. For WoW Forever there is also an **optional quest tracker**, which is off by default.
+
+### New
+
+**Pet Training for hunters (WoW Forever):** a new bookmark "Pet Training" on the Plans page shows which pet abilities and ranks you have learned and which you can learn at your level. Open the pet trainer once (tick its "Used" filter once so Ink also sees what you already know). A to-do "To the pet trainer" reminds you when something new is learnable. A short note explains how it works: you buy an ability once at the pet trainer and then teach it to each pet with Beast Training. Thanks to Tairgire for the help in GitHub issue #2.
+
+**Optional quest tracker (WoW Forever, off by default):** if you like, Ink & Embers can show your quests and to-dos in its own slim window at the right screen edge instead of the Questie and Blizzard trackers. It includes a focus quest with compass and distance, a ring on the world map and a bar for quest items. Turn it on under Options > AddOns > Ink & Embers > Quest Tracker or with `/chronik quests on`; `/chronik quests off` brings your usual trackers back. If you leave it off, nothing changes for you.
+
+### Changes
+
+**Quest data updated to QuestieDB 1.0.15:** 523 more quests, about 340 corrected quests, 176 more quest givers on the map and ten more dungeon quests (for example in Blackfathom Deeps, Gnomeregan, Razorfen Downs, Zul'Farrak and Maraudon).
+
+**Training data updated** to the latest What's Training data (druid ranks). Spells and prices are unchanged.
+
+### Fixes
+
+**Journey map:** footpath lines after a flight no longer turn almost black in places.
+
+**Quest texts:** when the game does not hand over a quest's text the usual way, the book now reads it from the quest log instead of leaving it empty.
+
+**Ruleset (WoW Forever):** if the game does not report the ruleset readably, it is left out instead of showing "PvE" by mistake.
+
+**Kill count:** kills whose enemy the game hides are no longer merged with other kills.
+
 ## 1.0.10
 
 **At a glance:** your journey is now told in **Acts and Chapters** with a real **table of contents**, the book has **9 tabs** with the new tabs Dungeons and Plans, the journey map can **reveal whole zones** and **hide its icons**, and the book now speaks **Brazilian Portuguese**. Plus fixes for elite screenshots and hunter pet training. **None of your recorded data changes.**

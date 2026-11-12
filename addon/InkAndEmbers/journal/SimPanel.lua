@@ -72,6 +72,8 @@ local T = ns.Locale.ns("SimPanel", {
   sexW = "weiblich",
   trainerOn = "Entwickler-Schalter Lehrplan: AN (nur diese Sitzung). Der Reiter Training arbeitet auch in Retail, mit den Classic-Klassendaten - „bekannt“ stimmt dort nicht.",
   trainerOff = "Entwickler-Schalter Lehrplan: AUS (Retail wieder gesperrt).",
+  hunterOn = "Entwickler-Schalter Jäger: AN (nur diese Sitzung). Unter Pläne erscheint der Reiter Tierausbildung als Vorschau mit Beispielstand; nichts wird gespeichert, kein To Do.",
+  hunterOff = "Entwickler-Schalter Jäger: AUS.",
   whyNotReady = "nicht bereit",
   whyCombat = "Kampf",
   whyMounted = "beritten",
@@ -274,9 +276,18 @@ end
 
 -- /chronik sim lehrplan: developer switch for the training plan (Journal.Lehrplan.active honours ns.devForceTrainer, so the tab,
 -- page and status lines work in Retail too). Session only; exists only where this file is part of the addon folder (not in the
--- release package). Returns true when the sim argument was meant for it.
+-- release package). /chronik sim jaeger: the same for the hunter tab Pet Training (preview with a sample state). Returns true when the sim
+-- argument was meant for it.
 function SimPanel.devSlash(arg)
   local word = string.lower(type(arg) == "string" and arg or "")
+  if word == "jaeger" or word == "hunter" then
+    -- preview of the hunter tab Pet Training for any class (Journal.Lehrplan.evaluate honours ns.devForceHunter; sample state in memory only)
+    ns.devForceHunter = ns.devForceHunter ~= true
+    if ns.Core and ns.Core.print then ns.Core.print(ns.devForceHunter and T.hunterOn or T.hunterOff) end
+    local pages = ns.Journal and ns.Journal.Pages
+    if pages and type(pages.refresh) == "function" then pcall(pages.refresh) end
+    return true
+  end
   if word ~= "lehrplan" and word ~= "training" then return false end
   ns.devForceTrainer = ns.devForceTrainer ~= true
   if ns.Core and ns.Core.print then ns.Core.print(ns.devForceTrainer and T.trainerOn or T.trainerOff) end

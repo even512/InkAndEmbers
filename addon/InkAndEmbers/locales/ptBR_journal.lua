@@ -592,6 +592,8 @@ L.add("ptBR", "SimPanel", {
   sexW = "feminino",
   trainerOn = "Opção de desenvolvedor do plano de treinamento: ATIVADA (somente nesta sessão). A aba Treinamento também funciona no Retail com os dados de classe do Classic; a indicação de habilidades conhecidas não é correta no Retail.",
   trainerOff = "Opção de desenvolvedor do plano de treinamento: DESATIVADA (Retail bloqueado novamente).",
+  hunterOn = "Opção de desenvolvedor do caçador: ATIVADA (somente nesta sessão). Na aba Plans aparece a sub-aba Treino de Mascotes como prévia com um estado de exemplo; nada é salvo, nenhuma tarefa.",
+  hunterOff = "Opção de desenvolvedor do caçador: DESATIVADA.",
   whyNotReady = "não está pronto",
   whyCombat = "combate",
   whyMounted = "montado",

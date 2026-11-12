@@ -27,6 +27,7 @@ ignore:
   - addon/InkAndEmbers/journal/SimPanel.lua
   - addon/InkAndEmbers/journal/FireProbe.lua
   - addon/InkAndEmbers/journal/WardrobeProbe.lua
+  - addon/InkAndEmbers/journal/QuestTrackerProbe.lua
   - .github
   - .gitignore
   - .gitattributes
