@@ -27,6 +27,8 @@
 --                               sub-bookmarks live in Frame (Frame.SUBTABS_REISE): the UI filters them with guestAllows.
 --   Pages.escape(id)           Esc in a sub-view of tab id: back to where a cross-tab jump came from (Frame.jumpBack), otherwise
 --                               to the first visible sub-bookmark of the tab
+--   Pages.hideTab(id, fn)      a client without this tab altogether (Handwerk in Retail): fn() -> true = hidden; Pages.tabHidden(id),
+--                               Pages.isAvailable / Pages.tabs / Pages.show and Frame.updateTabs (bookmark gone, the others close the gap)
 local _, ns = ...
 
 local Journal = ns.Journal or {}
@@ -36,7 +38,7 @@ local Pages = {}
 Journal.Pages = Pages
 
 Pages.HOME = "reise"
-Pages.ORDER = { "reise", "chronik", "dungeons", "kampf", "quests", "plaene", "schaetze", "momente", "notizen" }
+Pages.ORDER = { "reise", "chronik", "dungeons", "kampf", "quests", "plaene", "schaetze", "handwerk", "momente", "notizen" }
 Pages.TEXT = ns.Locale.ns("Pages", {
   building = "Tinte trocknet …",
   empty = "Noch keine Einträge in dieser Chronik.",
@@ -50,6 +52,7 @@ Pages.TEXT = ns.Locale.ns("Pages", {
   tab_quests = "Quests",
   tab_plaene = "Pläne",
   tab_schaetze = "Schätze",
+  tab_handwerk = "Handwerk",
   tab_momente = "Momente",
   tab_notizen = "Notizen",
 })
@@ -68,6 +71,8 @@ Pages.GUEST_HIDDEN_SUBS = {
   dungeons = { quests = true },
   quests = { offen = true, zonen = true },
   schaetze = { anprobe = true }, -- the model is the logged-in character (SetUnit "player")
+  handwerk = { rezeptbuch = true }, -- the recipe cache and the live profession data belong to the logged-in character
+  chronik = { vermaechtnis = true }, -- Legacy is read live from the client (the logged-in account)
 }
 
 -- I12 (book reordered, 9 tabs): where the sub-pages of the old order live now. Pages.resolve(id, sub) -> id, sub of the new place
@@ -153,6 +158,10 @@ local CHECK = {
   openCategory = function(v) return type(v) == "boolean" end,
   -- Lehrplan (WoW Forever): automatic to-do "Zum Lehrer" after a level-up, notice about free talent points, list filter
   trainerTodo = function(v) return type(v) == "boolean" end,
+  -- bar at the Blizzard profession window (journal/ProfessionBar.lua); missing = on
+  professionBar = function(v) return type(v) == "boolean" end,
+  -- shopping list window at the Blizzard auction house (journal/AuctionDock.lua); missing = on
+  auctionDock = function(v) return type(v) == "boolean" end,
   talentHint = function(v) return type(v) == "boolean" end,
   -- toast when the addon creates a to-do by itself (collectors/Trainer.lua "Zum Lehrer"); missing = on
   todoToast = function(v) return type(v) == "boolean" end,
@@ -161,6 +170,8 @@ local CHECK = {
   -- narrator note at level 10, 20, ... 60 (journal/Meilenstein.lua: the stretch's tally); only the note, the book view stays; missing = on
   milestoneSlip = function(v) return type(v) == "boolean" end,
   trainFilter = function(v) return v == "now" or v == "next" or v == "learned" or v == "all" end,
+  craftFilter = function(v) return v == "trainer" or v == "now" or v == "soon" end, -- Pläne > Handwerk list filter (journal/pages/PlaeneHandwerk.lua)
+  heatKind = function(v) return v == "stay" or v == "death" end, -- Reise > Heatmap: switch Aufenthalt | Todesorte (journal/HeatmapView.lua)
   kampfHunted = function(v)
     return v == nil or v == "all" or (type(v) == "number" and v == v and v > 0 and v < 2147483648 and v == math.floor(v))
   end,
@@ -168,7 +179,7 @@ local CHECK = {
 local DEFAULT = { toast = true, toastSound = true, toastMedal = true, toastZone = true, welcome = true, narrator = "own", restReview = false, saveReminder = false, autoShots = true, welcomeAfter = 3600, welcomeSeen = true,
   welcomeQuests = true, welcomeRested = true, welcomePlan = true, bookSounds = true, worldMap = true, worldPins = true,
   albumFilter = "all", showHiddenChars = false, openLocked = false, openGroup = false, openRepeat = false, openClass = true,
-  openCategory = false, trainerTodo = true, talentHint = true, todoToast = true, levelSlip = true, milestoneSlip = true, trainFilter = "now" }
+  openCategory = false, trainerTodo = true, professionBar = true, auctionDock = true, talentHint = true, todoToast = true, levelSlip = true, milestoneSlip = true, trainFilter = "now", craftFilter = "trainer", heatKind = "stay" }
 
 -- Old saved games had two switches: "welcome" (greeting) and "welcomeSlip" (welcome-back note). Now there is one: on only if both
 -- were on (nil = default on). The old key is removed, so this runs once per saved game.
@@ -207,8 +218,25 @@ function Pages.register(id, page)
   return true
 end
 
+-- Tabs that a client leaves out altogether (WoW Forever only: Handwerk in Retail): Pages.hideTab(id, fn), fn() -> true = hidden.
+-- Read live; the bookmark is gone (not dimmed), Pages.show refuses the page, the other bookmarks close the gap (Frame.updateTabs).
+local hiddenTabs = {}
+
+function Pages.hideTab(id, fn)
+  if type(id) ~= "string" or type(fn) ~= "function" then return false end
+  hiddenTabs[id] = fn
+  return true
+end
+
+function Pages.tabHidden(id)
+  local fn = type(id) == "string" and hiddenTabs[id]
+  if not fn then return false end
+  local ok, hide = pcall(fn)
+  return ok and hide == true
+end
+
 function Pages.isAvailable(id)
-  return type(id) == "string" and pages[id] ~= nil
+  return type(id) == "string" and pages[id] ~= nil and not Pages.tabHidden(id)
 end
 
 -- true when page id (and sub-bookmark sub, optional) is shown in the current mode; in the own book always true
@@ -224,8 +252,9 @@ end
 function Pages.tabs()
   local out = {}
   for i, id in ipairs(Pages.ORDER) do
-    out[i] = { id = id, label = Pages.LABELS[id], available = pages[id] ~= nil, active = id == currentId,
-      hidden = not Pages.guestAllows(id) }
+    local gone = Pages.tabHidden(id)
+    out[i] = { id = id, label = Pages.LABELS[id], available = pages[id] ~= nil and not gone, active = id == currentId,
+      hidden = gone or not Pages.guestAllows(id) }
   end
   return out
 end
@@ -504,7 +533,7 @@ local function hideCurrent()
 end
 
 function Pages.show(id)
-  if not pages[id] then return false, "nicht-verfuegbar" end
+  if not pages[id] or Pages.tabHidden(id) then return false, "nicht-verfuegbar" end
   if not Pages.guestAllows(id) then return false, "nur-eigen" end
   if not left or not right then return false, "fehler" end
   if currentId ~= id or not shown then

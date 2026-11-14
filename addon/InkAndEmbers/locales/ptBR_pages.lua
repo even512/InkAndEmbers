@@ -321,3 +321,199 @@ L.add("ptBR", "p.QuestsLehrplan", {
   emptyNow = "Nada para aprender agora. Visite seu instrutor novamente no próximo nível.", emptyNext = "Nada mais à vista.", emptyLearned = "Nada aprendido ainda. Visite seu instrutor de classe.",
   prevPage = "Página anterior", nextPage = "Próxima página",
 })
+
+-- 1.0.12 data books
+L.add("ptBR", "p.Schaetze", {
+  toTrade = "Comércio",
+  tradeTip = "Casa de Leilões, correio e trocas",
+  tradeTip2 = "Números de faturas, cartas e trocas",
+  tradeSub = "Casa de Leilões, correio e trocas",
+})
+
+-- 1.0.12 data books: tab Crafting, Plans > Crafting, pet level note
+L.add("ptBR", "p.Plaene", {
+  subCraft = "Ofícios",
+  subCraftTip = "Quais receitas você pode aprender a seguir (somente WoW Forever)",
+})
+L.add("ptBR", "p.QuestsLehrplan", {
+  petFrom = "Seu mascote pode aprender isso a partir do nível %s", petFromShort = "Mascote do nível %s",
+  petLevelRule = "O instrutor segue o seu nível; seu mascote precisa alcançar sozinho o nível do grau.",
+})
+L.add("ptBR", "p.Handwerk", {
+  brand = "INK & EMBERS", book = "PROFISSÕES", page = "OFÍCIOS", title = "Ofícios",
+  prof_one = "%s profissão", prof_other = "%s profissões", rec_one = "%s receita", rec_other = "%s receitas",
+  listHead = "PROFISSÕES",
+  listEmpty = "Nenhuma profissão aprendida ainda. Assim que você aprender uma, a curva dela se escreve aqui sozinha.",
+  primary = "Profissão principal", secondary = "Profissão secundária",
+  skillOf = "%s / %s",
+  skillNow = "Habilidade %s de %s", skillRank = "%s · %s",
+  balance = "BALANÇO",
+  mined = "minerado", picked = "colhido", skinned = "esfolado", fished = "pescado", crafted = "fabricado",
+  minedTip = "Minério e pedra dos veios", pickedTip = "Ervas e flores das plantas",
+  skinnedTip = "Couro e peles de inimigos (estimado a partir dos achados)", fishedTip = "Tudo o que ficou preso no anzol",
+  craftedTip = "Itens que você mesmo fabricou, inclusive os abaixo da qualidade Incomum",
+  balanceEmpty = "Nada coletado nem fabricado ainda.",
+  firstCraft = "Primeira fabricação", firstCraftTip = "O primeiro item que você mesmo fabricou, a partir da qualidade Incomum",
+  level = "Nível %s",
+  curveHead = "HABILIDADE AO LONGO DO TEMPO DE JOGO", recipesHead = "Receitas aprendidas",
+  hours = "%s h", minutes = "%s min",
+  open = "ainda não", milestoneTip = "Habilidade %s alcançada",
+  tipSkill = "Habilidade %s de %s", tipLearned = "Aprendida no nível %s", tipLast = "Último aumento: %s",
+  tipWhen = "%s · Nível %s", tipPlay = "Após %s de tempo de jogo",
+  noRecipes = "Nenhuma receita aprendida ainda.",
+  recipesUnsure = "As receitas desta profissão não podem ser atribuídas com certeza. Você encontra todas no livro de receitas.",
+  emptyTitle = "O livro de ofícios ainda está vazio",
+  emptyBody = "Aprenda uma profissão, e cada ponto de habilidade, cada receita e cada marco se escreve aqui sozinho.",
+  date = "{d}/{m}/{y}",
+})
+L.add("ptBR", "p.PlaeneHandwerk", {
+  brand = "INK & EMBERS", page = "OFÍCIOS",
+  fTrainer = "Instrutor", fNow = "Agora", fSoon = "Em breve",
+  fTrainerTip = { "Instrutor", "O que um instrutor de profissão ensina a você agora" },
+  fNowTip = { "Agora", "Tudo o que você pode aprender com a sua habilidade, inclusive de vendedores, missões e saques" },
+  fSoonTip = { "Em breve", "O que os próximos 25 pontos de habilidade trazem" },
+  info = "Profissões: %s · %s agora · %s em breve",
+  skillWord = "Habilidade %s",
+  free = "grátis",
+  sNow = "agora", sSoon = "em %s pontos", sLevel = "a partir do nível %s", sLater = "a partir da habilidade %s", sLearned = "aprendida",
+  learnable = "aprendível com o instrutor",
+  costLine = "Custo do treinamento %s · nas suas bolsas %s",
+  costNone = "O instrutor de profissão não tem nada de novo para você agora.",
+  short = "Ainda faltam %s para você.", enough = "Suas bolsas cobrem tudo.",
+  profHead = "Suas profissões",
+  profLine = "%s %s/%s · %s agora · %s em breve",
+  profLineNoMax = "%s %s · %s agora · %s em breve",
+  todoOn = "A tarefa “Ao instrutor de profissão” está na sua lista.",
+  todoOff = "Assim que um instrutor tiver algo novo para você, o Ink adiciona “Ao instrutor de profissão” à sua lista de tarefas.",
+  retailHead = "Somente WoW Forever",
+  retailBody = "Os dados de receitas são do WoW Forever. Esta folha fica vazia no Retail.",
+  noDataHead = "Sem dados de receitas",
+  noProfHead = "Ainda sem profissão",
+  noProfBody = "Aprenda uma profissão. Esta folha mostra então quais receitas vêm a seguir.",
+  noProfDataHead = "Sem receitas para as suas profissões",
+  noProfDataBody = "Não há dados de receitas para as suas profissões.",
+  noApiBody = "Suas profissões não podem ser lidas agora. Tente de novo daqui a pouco.",
+  emptyTrainer = "O instrutor de profissão não tem nada de novo agora. Mais habilidade traz novas receitas.",
+  emptyNow = "Não há nada para aprender agora.",
+  emptySoon = "Nada de novo nos próximos 25 pontos.",
+  prevPage = "Página anterior", nextPage = "Próxima página",
+  tipSource = "Fonte: %s", tipCost = "Preço: %s", tipLevel = "Requer nível %s", tipRank = "Grau da profissão: %s",
+  tipFavor = "Favor do Mercador: %s", tipNeed = "Mais %s pontos de habilidade",
+})
+
+-- change "runde3" (packages A, R, E, L)
+-- journal/pages/ChronikVermaechtnis.lua
+L.add("ptBR", "p.ChronikVermaechtnis", {
+  challengesHead = "Desafios", tabClasses = "Classes", pageOf = "Página %s de %s", tipProgress = "Progresso: %s de %s", progress = "%s/%s", colAch = "Desafio", colState = "Situação", colPoints = "Pontos", prevPage = "Página anterior", nextPage = "Próxima página",
+  page = "LEGADO", brand = "INK & EMBERS", title = "Legado",
+  subLabel = "Legado", subTip = "Pontos, desafios de classe, árvores de talentos e recompensas do sistema de Legado",
+  subTip2 = "Vale para toda a sua conta; só WoW Forever",
+  points = "Pontos: %s de %s", pointsOnly = "Pontos: %s", pointsMax = "Pontos possíveis: %s",
+  level = "Trilha do Legado: nível %s", levelOf = "Trilha do Legado: nível %s de %s",
+  classesHead = "Desafios de classe", tier1 = "Novato", tier2 = "Experiente", tier3 = "Mestre",
+  date = "{d}/{m}/{y}", doneShort = "feito", openShort = "aberto",
+  tipDone = "Concluído em %s", tipDoneNoDate = "Concluído", tipOpen = "Ainda não concluído", tipPoints_other = "Vale %s pontos",
+  tipPoints_one = "Vale %s ponto", tipOther = "Conquistado por outro personagem da sua conta",
+  tipTier = "%s · %s", classesUnreadable = "Os desafios de classe não podem ser lidos agora.",
+  rewardsHead = "Recompensas da trilha", rewardLevel = "Nível %s", rewardFallback = "Item nº %s", rewardUnknown = "Recompensa",
+  collected = "coletada", ready = "pronta para coletar", reached = "alcançado",
+  missing_one = "falta %s ponto", missing_other = "faltam %s pontos", tipNeed = "Disponível a partir do nível %s da trilha do Legado",
+  rewardsUnreadable = "As recompensas não podem ser lidas agora.",
+  treesTitle = "Árvores de talentos", tree_professions = "Profissões", tree_adventure = "Aventura", tree_progression = "Progressão",
+  rank = "%s/%s", tipRank = "Posto %s de %s", unknown = "Desconhecido", treeUnreadable = "Esta árvore não pode ser lida agora.",
+  treeEmpty = "Nenhum nó encontrado.",
+  hintCombat = "O livro não lê o Legado durante o combate. Volte depois da luta.",
+  hintUnreadable = "O Legado não pode ser lido agora. Tente de novo daqui a pouco.",
+  reread = "Ler de novo",
+  staleCombat = "Em combate: estado salvo de {date}", staleUnreadable = "Não legível agora: estado salvo de {date}",
+})
+
+L.add("ptBR", "p.Schaetze", {
+  toAuktion = "Casa de Leilões", auktionTip = "Todas as vendas e compras na Casa de Leilões",
+  auktionTip2 = "Tabela ordenável: data, item, quantidade e preço",
+})
+
+-- journal/pages/SchaetzeAuktion.lua
+L.add("ptBR", "p.SchaetzeAuktion", {
+  brand = "INK & EMBERS", book = "CASA DE LEILÕES", page = "BALANÇO",
+  title = "Casa de Leilões", count_one = "%s fatura", count_other = "%s faturas", countOf = "%s de %s faturas",
+  prevPage = "Página anterior", nextPage = "Próxima página",
+  colTime = "Data", colKind = "Tipo", colItem = "Item", colCount = "Qtd.", colPrice = "Total", colUnit = "Unid.",
+  fAll = "Tudo", fSold = "Vendas", fBought = "Compras",
+  fAllTip = "Todas as faturas", fSoldTip = "Só vendas", fBoughtTip = "Só compras",
+  sortAsc = "Ordem: crescente", sortDesc = "Ordem: decrescente", headTip = "Clique: ordenar, clique de novo: inverter",
+  tipCount = "Quantidade: %s", tipTotal = "Preço total: %s", tipUnit = "Por unidade: %s", tipFee = "Comissão: %s", tipNoPrice = "Preço não legível",
+  empty = "Ainda nenhuma fatura da Casa de Leilões.",
+  emptyBody = "Assim que você esvaziar sua caixa de correio e houver faturas de vendas ou compras, a crônica as anota aqui.",
+  noMatch = "Nenhuma fatura corresponde a este filtro.",
+  balTitle = "Balanço", balSub = "Todas as faturas, independentemente do filtro",
+  secSold = "Vendas", secBought = "Compras", secSaldo = "No fim das contas",
+  labSoldN = "Itens vendidos", labIncome = "Receitas", labFee = "Comissão", labBoughtN = "Itens comprados", labSpent = "Gastos",
+  labSaldo = "Saldo", saldoPlus = "Ganhou mais do que gastou", saldoMinus = "Gastou mais do que ganhou", saldoZero = "Equilibrado",
+  balNote = "Baseado nas faturas da sua caixa de correio. Lances, depósitos e leilões expirados não aparecem em nenhuma fatura.",
+  noPrice = "–",
+})
+
+L.add("ptBR", "p.Handwerk", {
+  subBerufe = "Profissões", subBerufeTip = "Curva de habilidade, marcos e balanço das suas profissões",
+  subRezept = "Livro de receitas", subRezeptTip = "Todas as receitas das suas profissões, aprendidas e ainda abertas, com materiais (só WoW Forever)",
+})
+
+-- journal/pages/HandwerkRezeptbuch.lua (change "runde3", package R)
+L.add("ptBR", "p.HandwerkRezeptbuch", {
+  brand = "INK & EMBERS", book = "LIVRO DE RECEITAS", page = "OFÍCIOS",
+  title = "Livro de receitas", sub = "Todas as receitas das suas profissões, aprendidas e ainda abertas",
+  listHead = "PROFISSÕES", recipesHead = "RECEITAS",
+  fAll = "Todas", fLearned = "Aprendidas", fOpen = "Abertas",
+  fAllTip = { "Todas", "Receitas aprendidas e ainda não aprendidas" },
+  fLearnedTip = { "Aprendidas", "Só as receitas que você já conhece" },
+  fOpenTip = { "Abertas", "Só as receitas que ainda faltam" },
+  profSub = "Habilidade %s de %s", profSubNoMax = "Habilidade %s",
+  profCount = "%s de %s", profNoCount = "–",
+  countLine = "%s aprendidas · %s abertas",
+  hintNoCache = "Abra a janela da profissão uma vez para o livro conhecer todos os detalhes.",
+  hintCache = "No estado da última vez que você abriu a janela da profissão. Receitas recém-aprendidas aparecem quando você a abre de novo.",
+  legend = "Cor:",
+  learned = "aprendida", open = "aberta", fromSkill = "a partir de %s",
+  skillWord = "Habilidade %s",
+  tipSource = "Origem: %s", tipDifficulty = "Dificuldade: %s", tipUps = "Pontos de habilidade por fabricação: até %s",
+  tipCost = "Preço: %s", tipStock = "Nas bolsas: %s · Banco: %s",
+  tipNeeds = "Precisa de: %s", tipMore = "Clique: detalhes abaixo",
+  needs = "PRECISA DE", output = "Fabrica: %s", outputQty = "Fabrica: %s× %s",
+  noMats = "Esta receita não precisa de materiais.",
+  detailNoCache = "O livro só conhece o resultado e os materiais depois que você abrir a janela da profissão.",
+  moreMats = "… e mais %s",
+  itemNo = "Item nº %s",
+  pick = "Escolha uma receita.",
+  emptyList = "Ainda não há receitas para esta profissão.",
+  emptyFilterLearned = "Nenhuma receita aprendida ainda.", emptyFilterOpen = "Todas as receitas desta profissão estão aprendidas.",
+  noProfTitle = "Ainda nenhuma profissão com receitas",
+  noProfBody = "Aprenda uma profissão. Esta folha mostrará então todas as receitas dela, aprendidas e abertas.",
+  prevPage = "Página anterior", nextPage = "Próxima página",
+})
+
+-- journal/pages/HandwerkSkillpunkt.lua (change "runde3", package E)
+L.add("ptBR", "p.HandwerkSkillpunkt", {
+  head = "PARA O PRÓXIMO PONTO DE HABILIDADE",
+  orange = "Laranja: quase toda fabricação dá um ponto de habilidade",
+  yellow = "Amarelo: cerca de uma em cada duas fabricações dá um ponto de habilidade",
+  green = "Verde: uma fabricação só raramente dá um ponto de habilidade",
+  mats_one = "%s material", mats_other = "%s materiais",
+  enough = "dá para %s",
+  enoughNone = "nenhum nas suas bolsas",
+  ups = "até %s pontos de habilidade por fabricação",
+  more = "+%s a mais",
+  best = "Avanço de habilidade mais eficiente: %s",
+  enoughLine = "Os materiais dão para %s",
+  missingLabel = "Faltam:",
+  expect_one = "Até o próximo ponto: cerca de %s fabricação",
+  expect_other = "Até o próximo ponto: cerca de %s fabricações",
+  addList = "Para a lista de compras",
+  addTip = { "Para a lista de compras", "Coloca a receita na lista de compras para as fabricações até o próximo ponto." },
+  onList = "Na lista",
+  onListTip = { "Na lista", "Um clique abre a lista de compras." },
+  noSure = "Nenhuma receita laranja ou amarela sobrando: aprenda novas com o instrutor.",
+  noSureTip = { "Ofícios", "Clique: mostra quais receitas você pode aprender a seguir." },
+  nocache = "Abra a janela da profissão uma vez e aqui aparece qual receita traz o próximo ponto de habilidade.",
+  nolearned = "Nenhuma receita desta profissão aprendida ainda."
+})

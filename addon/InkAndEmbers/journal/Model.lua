@@ -446,6 +446,11 @@ H.DC = function(J, t)
   local d = J.deaths[#J.deaths]
   if d and not d.cause and t - d.t <= 120 then d.cause, d.npc, d.source = F[4], nz(F[1]), F[2] end
 end
+-- Away phase (AF line at the END of the phase, F1 = duration): the interval [t - seconds, t] for the heat map (journal/model/Heatmap.lua)
+H.AF = function(J, t)
+  local secs = nz(F[1])
+  if secs and secs > 0 then push(J.afk, { t0 = t - secs, t1 = t }) end
+end
 H.DB = function(J, t)
   push(J.breaks, t)
   local d = J.deaths[#J.deaths]
@@ -565,7 +570,7 @@ end
 -- the new part is read on the next build.
 local LOG_ARRAYS = { "spT0", "spT1", "tzT", "tzV", "sT", "sM", "lv", "kT", "kN", "kL", "kP", "specials", "spirits", "qt", "shots", "hs",
   "hb", "tf", "tl", "fp", "ib", "mo", "sz", "ex", "tb", "rt", "gs", "gm", "gu", "du", "pk", "bk", "ta", "sp", "gT", "gV",
-  "breaks", "evX" }
+  "breaks", "evX", "afk" }
 local LOG_VALUES = { "firstT", "lastT", "spanOpen", "spanStart", "qaN", "baseLevel" }
 -- the log and trail caches live in the model slot (slot.logCache, slot.trailCache; see Model.get: own / guest)
 
@@ -1684,12 +1689,16 @@ local function buildTotal(J, model, level)
   local story = MT(ns.Locale.plural(n, "stays_one", "stays_other"), int(n)) .. ", " .. (h.kmApprox and MT.approx or "")
     .. MT("onFoot", km)
   if h.flights > 0 then story = story .. ", " .. MT(ns.Locale.plural(h.flights, "flights_one", "flights_other"), int(h.flights)) end
+  -- P3 flight and hearthstone book (model/Flugbuch.lua): nil without flights and hearthstone trips
+  local fbOk, fb = false, nil
+  if Journal.Flugbuch then fbOk, fb = pcall(Journal.Flugbuch.build, J.tf, J.tl, J.hs) end
   return {
     index = 0, total = true, title = MT.totalTitle, zoneName = MT.totalTitle, label = label, subtitle = sub,
     story = disp(story .. ".", Model.TEXT_MAX), startText = a, endText = b, levelFrom = from, levelTo = to,
     t0 = J.firstT, t1 = J.lastT, p0 = 0, p1 = J.playedTotal, stays = n,
     stats = { played = J.playedTotal, playedText = Model.formatPlayed(J.playedTotal), quests = quests, kills = kills,
       deaths = deaths, shots = shots, moments = moments },
+    flightBook = fbOk and fb or nil,
   }
 end
 
@@ -1705,7 +1714,7 @@ local function newJ(db, char, geo)
     sT = {}, sM = {}, zn = {}, zoneKey = {}, mainKey = {}, startKey = {}, contOf = {}, sizeOf = {}, nonQual = {},
     lv = {}, kT = {}, kN = {}, kL = {}, kP = {}, specials = {}, deaths = {}, spirits = {}, qt = {}, qaN = 0, shots = {}, hs = {}, hb = {},
     tf = {}, tl = {}, fp = {}, gaps = {}, ib = {}, mo = {}, sz = {}, ex = {}, tb = {}, rt = {}, gs = {}, gm = {}, gu = {},
-    du = {}, pk = {}, bk = {}, ta = {}, sp = {}, gT = {}, gV = {}, breaks = {}, evX = {},
+    du = {}, pk = {}, bk = {}, ta = {}, sp = {}, gT = {}, gV = {}, breaks = {}, evX = {}, afk = {},
   }
 end
 
@@ -1767,7 +1776,7 @@ local function build(db, guid, char, snap, opts, slot)
   c3 = clock()
   cs = c3
 
-  local model = { _J = J, _routes = {}, _notes = {}, _kills = {}, _killsN = 0 }
+  local model = { _J = J, _routes = {}, _notes = {}, _kills = {}, _killsN = 0, _blocks = blocks }
   model.chapters = {}
   for i, c in ipairs(chapters) do
     -- Detours (buildChapters): { zoneID, name } in order, plus the card line "Abstecher: X, Y"
@@ -2177,6 +2186,21 @@ function Model.fromAxis(model, q)
   local k = idle.k and idle.k[i] or idle.keep
   if q < q0 + k then return a + (q - q0) * (b - a) / k end
   return b + (q - q0 - k)
+end
+
+-- Sources of the heat map (journal/model/Heatmap.lua): decoded trail blocks (raw points, in time order, shared with the trail cache,
+-- read only), away intervals { t0, t1 }, deaths (J.deaths records), play breaks (L lines, sorted).
+function Model.heatSource(model)
+  local J = type(model) == "table" and model._J
+  if not J then return nil end
+  return { blocks = model._blocks or {}, afk = J.afk or {}, deaths = J.deaths or {}, breaks = J.breaks or {} }
+end
+
+-- display name of a map: stored name, else the live name, else "Karte <id>"
+function Model.mapName(model, mapID)
+  local J = type(model) == "table" and model._J
+  if not J or type(mapID) ~= "number" or mapID ~= mapID or isSecret(mapID) then return nil end
+  return disp(mapName(J, mapID) or plain(MT("mapN", int(mapID))), Model.NAME_MAX)
 end
 
 function Model.zoneOf(model, mapID)

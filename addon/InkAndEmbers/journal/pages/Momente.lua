@@ -67,7 +67,7 @@ local SHADOW_X, SHADOW_Y, SHADOW_ALPHA = 2, -3, 0.28
 local TAPE_W, TAPE_H = 52, 14 -- only without the pad texture (the pad brings its own tape)
 local ICON_SIZE = 30
 local LIB_ROWS = 4
-local CURIO_ROWS = 7
+local CURIO_ROWS = Momente.CURIO_LINES -- rows of the curiosity list (model value)
 
 local function int(n) return Journal.Texts.int(n) end
 
@@ -528,6 +528,15 @@ local function buildRight(self, right)
   ui.curioEmpty:SetJustifyH("LEFT")
   ui.curioEmpty:SetText(T.curiosEmpty)
   place(ui.curioEmpty, right, RX + 4, CURIO_Y + 26)
+  -- more sentences than rows: small arrows in the head line page through the pool (changing selection, see RenderCurios)
+  ui.curioPair = D.NewNavPair(right, { size = 16, onPrev = function() self:StepCurios(-1) end, onNext = function() self:StepCurios(1) end,
+    tipPrev = { T.pagePrev }, tipNext = { T.pageNext } })
+  ui.curioPair.frame:SetPoint("RIGHT", right, "TOPLEFT", RX + RW, -(CURIO_Y + 8))
+  ui.curioNav = label(right, "label", G.size.xs, "sepia", "RIGHT")
+  ui.curioNav:SetWidth(120)
+  ui.curioNav:SetPoint("RIGHT", ui.curioPair.frame, "LEFT", -6, 0)
+  ui.curioPair.frame:Hide()
+  ui.curioNav:Hide()
 end
 
 function Page.Build(self, left, right)
@@ -747,14 +756,58 @@ function Page:RenderLibrary()
   ui.list:Refresh()
 end
 
+-- Curiosities: all sentences form a pool. Up to CURIO_ROWS show as they are; with more, the pool is shuffled each time the page
+-- is opened (the deck is dropped in OnHide) and starts at a random sheet; the arrows page through it (round).
+function Page:ShuffleCurios(n)
+  local deck = { n = n }
+  for i = 1, n do deck[i] = i end
+  for i = n, 2, -1 do
+    local j = math.random(i)
+    deck[i], deck[j] = deck[j], deck[i]
+  end
+  self.curioDeck = deck
+  self.curioPage = math.random(ceil(n / CURIO_ROWS))
+end
+
+function Page:StepCurios(dir)
+  local deck = self.curioDeck
+  if not deck then return end
+  local pages = ceil(deck.n / CURIO_ROWS)
+  if pages < 2 then return end
+  self.curioPage = ((self.curioPage - 1 + dir) % pages) + 1
+  self:RenderCurios()
+end
+
 function Page:RenderCurios()
   local ui, c = self.ui, self.view.curios
+  local pool = c.pool or c.lines
+  local n = #pool
+  local order, pages, shown = nil, 1, pool
+  if n > CURIO_ROWS then
+    if not self.curioDeck or self.curioDeck.n ~= n then self:ShuffleCurios(n) end
+    order, pages = self.curioDeck, ceil(n / CURIO_ROWS)
+    if self.curioPage > pages then self.curioPage = 1 end
+    shown = {}
+    for i = 1, CURIO_ROWS do
+      local k = order[(self.curioPage - 1) * CURIO_ROWS + i]
+      shown[i] = k and pool[k] or nil
+    end
+  else
+    self.curioDeck = nil
+  end
   for i, row in ipairs(ui.curio) do
-    local line = c.lines[i]
+    local line = shown[i]
     row.dot:SetShown(line ~= nil)
     W.setText(row.text, line)
   end
-  ui.curioEmpty:SetShown(not c.any)
+  ui.curioEmpty:SetShown(n == 0)
+  local paged = pages > 1
+  ui.curioPair.frame:SetShown(paged)
+  ui.curioNav:SetShown(paged)
+  if paged then
+    ui.curioPair:SetEnabled(true, true)
+    W.setText(ui.curioNav, T("pageOf", self.curioPage, pages))
+  end
 end
 
 function Page:Render()
@@ -790,6 +843,9 @@ function Page.OnHide(self)
   W.hideTip(ui.pair.next)
   W.hideTip(ui.rdPair.prev)
   W.hideTip(ui.rdPair.next)
+  W.hideTip(ui.curioPair.prev)
+  W.hideTip(ui.curioPair.next)
+  self.curioDeck = nil -- the next opening shuffles the curiosities anew
   for _, row in ipairs(ui.list.rows) do W.hideTip(row) end
 end
 

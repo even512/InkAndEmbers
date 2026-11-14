@@ -109,6 +109,32 @@ L.add("enUS", "p.ChronikMeilensteine", {
   zonesMore = "… and %s more",
 })
 
+-- journal/pages/ChronikVermaechtnis.lua
+L.add("enUS", "p.ChronikVermaechtnis", {
+  challengesHead = "Challenges", tabClasses = "Classes", pageOf = "Page %s of %s", tipProgress = "Progress: %s of %s", progress = "%s/%s", colAch = "Challenge", colState = "Status", colPoints = "Points", prevPage = "Previous page", nextPage = "Next page",
+  page = "LEGACY", brand = "INK & EMBERS", title = "Legacy",
+  subLabel = "Legacy", subTip = "Points, class challenges, talent trees and rewards of the Legacy system",
+  subTip2 = "Applies to your whole account; WoW Forever only",
+  points = "Points: %s of %s", pointsOnly = "Points: %s", pointsMax = "Possible points: %s",
+  level = "Legacy track: level %s", levelOf = "Legacy track: level %s of %s",
+  classesHead = "Class challenges", tier1 = "Novice", tier2 = "Experienced", tier3 = "Master",
+  date = "{m}/{d}/{y}", doneShort = "done", openShort = "open",
+  tipDone = "Completed on %s", tipDoneNoDate = "Completed", tipOpen = "Not done yet", tipPoints_other = "Worth %s points",
+  tipPoints_one = "Worth %s point", tipOther = "Earned by another character on your account",
+  tipTier = "%s · %s", classesUnreadable = "The class challenges cannot be read right now.",
+  rewardsHead = "Track rewards", rewardLevel = "Level %s", rewardFallback = "Item #%s", rewardUnknown = "Reward",
+  collected = "collected", ready = "ready to collect", reached = "reached",
+  missing_one = "%s point to go", missing_other = "%s points to go", tipNeed = "Available from level %s of the Legacy track",
+  rewardsUnreadable = "The rewards cannot be read right now.",
+  treesTitle = "Talent trees", tree_professions = "Professions", tree_adventure = "Adventure", tree_progression = "Progression",
+  rank = "%s/%s", tipRank = "Rank %s of %s", unknown = "Unknown", treeUnreadable = "This tree cannot be read right now.",
+  treeEmpty = "No nodes found.",
+  hintCombat = "The book does not read Legacy during combat. Come back after the fight.",
+  hintUnreadable = "Legacy cannot be read right now. Try again in a moment.",
+  reread = "Read again",
+  staleCombat = "In combat: saved state from {date}", staleUnreadable = "Not readable right now: saved state from {date}",
+})
+
 -- journal/pages/Kampf.lua
 L.add("enUS", "p.Kampf", {
   pageOf = "Page %s of %s", deathOf = "Death %s of %s", moreZones = "+ %s more zones", closeCount = "%s narrow victories · %s",
@@ -211,6 +237,44 @@ L.add("enUS", "p.Plaene", {
   subTrainTip = "What your class trainer teaches you at which level (WoW Forever only)",
   subPets = "Pet Training",
   subPetsTip = "What the pet trainer teaches your pet at which level (hunters only)",
+  subCraft = "Crafting",
+  subCraftTip = "Which recipes you can learn next (WoW Forever only)",
+})
+
+-- journal/pages/PlaeneHandwerk.lua
+L.add("enUS", "p.PlaeneHandwerk", {
+  brand = "INK & EMBERS", page = "CRAFTING",
+  fTrainer = "Trainer", fNow = "Now", fSoon = "Soon",
+  fTrainerTip = { "Trainer", "What a profession trainer teaches you right now" },
+  fNowTip = { "Now", "Everything you can learn at your skill, including vendors, quests and drops" },
+  fSoonTip = { "Soon", "What the next 25 skill points add" },
+  info = "Professions: %s · %s now · %s soon",
+  skillWord = "Skill %s",
+  free = "free",
+  sNow = "now", sSoon = "in %s points", sLevel = "from level %s", sLater = "from skill %s", sLearned = "learned",
+  learnable = "learnable at the trainer",
+  costLine = "Training fees %s · in your bag %s",
+  costNone = "The profession trainer has nothing new for you right now.",
+  short = "You are still short %s.", enough = "Your bag covers everything.",
+  profHead = "Your professions",
+  profLine = "%s %s/%s · %s now · %s soon",
+  profLineNoMax = "%s %s · %s now · %s soon",
+  todoOn = "The to-do \"To the profession trainer\" is on your list.",
+  todoOff = "As soon as a trainer has something new for you, Ink adds \"To the profession trainer\" to your to-do list.",
+  retailHead = "WoW Forever only",
+  retailBody = "The recipe data is for WoW Forever. This sheet stays empty on Retail.",
+  noDataHead = "No recipe data",
+  noProfHead = "No profession yet",
+  noProfBody = "Learn a profession. This sheet then shows which recipes come next.",
+  noProfDataHead = "No recipes for your professions",
+  noProfDataBody = "There is no recipe data for your professions.",
+  noApiBody = "Your professions cannot be read right now. Try again in a moment.",
+  emptyTrainer = "The profession trainer has nothing new right now. More skill brings new recipes.",
+  emptyNow = "Nothing is learnable right now.",
+  emptySoon = "Nothing new in the next 25 points.",
+  prevPage = "Previous page", nextPage = "Next page",
+  tipSource = "Source: %s", tipCost = "Price: %s", tipLevel = "Level %s required", tipRank = "Profession rank: %s",
+  tipFavor = "Merchant's Favor: %s", tipNeed = "%s more skill points",
 })
 
 L.add("enUS", "p.Quests", {
@@ -273,6 +337,10 @@ L.add("enUS", "p.Schaetze", {
   fundeTip2 = "Table: from where, where and at which level",
   toAnprobe = "Gear Journey", anprobeTip = "Your character with the gear of every level",
   anprobeTip2 = "3D model and timeline: try on level by level",
+  toTrade = "Trade", tradeTip = "Auction House, mail and trade", tradeTip2 = "Figures from invoices, letters and trades",
+  tradeSub = "Auction House, mail and trade",
+  toAuktion = "Auction House", auktionTip = "All sales and purchases at the Auction House",
+  auktionTip2 = "Sortable table: date, item, quantity and price",
 })
 
 -- journal/pages/SchaetzeAnprobe.lua
@@ -285,6 +353,27 @@ L.add("enUS", "p.SchaetzeAnprobe", {
   slotEmpty = "empty", itemNo = "Item #%s", newTag = "new",
   notShown = "Cannot be shown on the model",
   modelCombat = "The model appears after the fight.", modelMissing = "The model cannot be shown here.",
+})
+
+-- journal/pages/SchaetzeAuktion.lua
+L.add("enUS", "p.SchaetzeAuktion", {
+  brand = "INK & EMBERS", book = "AUCTION HOUSE", page = "BALANCE",
+  title = "Auction House", count_one = "%s invoice", count_other = "%s invoices", countOf = "%s of %s invoices",
+  prevPage = "Previous page", nextPage = "Next page",
+  colTime = "Date", colKind = "Type", colItem = "Item", colCount = "Qty", colPrice = "Total", colUnit = "Each",
+  fAll = "All", fSold = "Sales", fBought = "Purchases",
+  fAllTip = "All invoices", fSoldTip = "Sales only", fBoughtTip = "Purchases only",
+  sortAsc = "Sorted: ascending", sortDesc = "Sorted: descending", headTip = "Click: sort, click again: reverse",
+  tipCount = "Quantity: %s", tipTotal = "Total price: %s", tipUnit = "Per piece: %s", tipFee = "Fee: %s", tipNoPrice = "Price not readable",
+  empty = "No Auction House invoice yet.",
+  emptyBody = "Once you empty your mailbox and there are invoices for sales or purchases, the Chronicle writes them down here.",
+  noMatch = "No invoice matches this filter.",
+  balTitle = "Balance", balSub = "All invoices, regardless of the filter",
+  secSold = "Sales", secBought = "Purchases", secSaldo = "Bottom line",
+  labSoldN = "Items sold", labIncome = "Income", labFee = "Fee", labBoughtN = "Items bought", labSpent = "Spent",
+  labSaldo = "Balance", saldoPlus = "Earned more than spent", saldoMinus = "Spent more than earned", saldoZero = "Even",
+  balNote = "Based on the invoices from your mailbox. Bids, deposits and expired auctions appear in no invoice.",
+  noPrice = "–",
 })
 
 -- journal/pages/SchaetzeFunde.lua
@@ -426,6 +515,8 @@ L.add("enUS", "p.QuestsLehrplan", {
   petHow = "Buy once from the pet trainer, then teach it to each pet with \"%s\".",
   petAbility = "Beast Training",
   petTaming = "Abilities like Claw or Bite come from taming, not from here.",
+  petLevelRule = "The trainer goes by your level; your pet has to reach the rank level itself.",
+  petFrom = "Your pet can learn this from level %s", petFromShort = "Pet from level %s",
   petNoneHead = "No pet training", petNoneBody = "Pet training exists for hunters only.",
   petEmptyNow = "Nothing to learn right now. Visit the pet trainer so that Ink knows your state.",
   petEmptyNext = "Nothing more in sight.", petEmptyLearned = "Nothing learned yet, or not seen yet. Visit the pet trainer.",
@@ -477,4 +568,94 @@ L.add("enUS", "p.QuestsZonen", {
   combat = "Nothing is counted in combat.", combatRight = "The overview appears after the fight.",
   empty = "No zone counts yet.", emptyBody = "A zone appears here as soon as it has at least %s quests for you.",
   prevPage = "Previous page", nextPage = "Next page",
+})
+
+-- journal/pages/Handwerk.lua (change "datenbuecher", P5)
+L.add("enUS", "p.Handwerk", {
+  brand = "INK & EMBERS", book = "PROFESSIONS", page = "CRAFTING", title = "Crafting",
+  prof_one = "%s profession", prof_other = "%s professions", rec_one = "%s recipe", rec_other = "%s recipes",
+  listHead = "PROFESSIONS",
+  listEmpty = "No profession learned yet. As soon as you learn one, its curve writes itself here.",
+  primary = "Primary profession", secondary = "Secondary profession",
+  skillOf = "%s / %s",
+  skillNow = "Skill %s of %s", skillRank = "%s · %s",
+  subBerufe = "Professions", subBerufeTip = "Skill curve, milestones and tally of your professions",
+  subRezept = "Recipe book", subRezeptTip = "Every recipe of your professions, learned and still open, with materials (WoW Forever only)",
+  balance = "TALLY",
+  mined = "mined", picked = "picked", skinned = "skinned", fished = "fished", crafted = "crafted",
+  minedTip = "Ore and stone from resource nodes", pickedTip = "Herbs and flowers from plants",
+  skinnedTip = "Leather and hides from enemies (estimated from the finds)", fishedTip = "Everything that hung on the hook",
+  craftedTip = "Items you made yourself, including those below Uncommon quality",
+  balanceEmpty = "Nothing gathered or crafted yet.",
+  firstCraft = "First craft", firstCraftTip = "The first item you made yourself, from Uncommon quality",
+  level = "Level %s",
+  curveHead = "SKILL OVER PLAY TIME", recipesHead = "Learned recipes",
+  hours = "%s hr", minutes = "%s min",
+  open = "not yet", milestoneTip = "Skill %s reached",
+  tipSkill = "Skill %s of %s", tipLearned = "Learned at level %s", tipLast = "Last rise: %s",
+  tipWhen = "%s · Level %s", tipPlay = "After %s of play time",
+  noRecipes = "No recipe learned yet.",
+  recipesUnsure = "The recipes of this profession cannot be assigned with certainty. You will find all of them in the recipe book.",
+  emptyTitle = "The crafting book is still empty",
+  emptyBody = "Learn a profession, and every skill point, every recipe and every milestone writes itself down here.",
+  date = "{m}/{d}/{y}",
+})
+
+-- journal/pages/HandwerkRezeptbuch.lua (change "runde3", package R)
+L.add("enUS", "p.HandwerkRezeptbuch", {
+  brand = "INK & EMBERS", book = "RECIPE BOOK", page = "CRAFTING",
+  title = "Recipe book", sub = "Every recipe of your professions, learned and still open",
+  listHead = "PROFESSIONS", recipesHead = "RECIPES",
+  fAll = "All", fLearned = "Learned", fOpen = "Open",
+  fAllTip = { "All", "Learned and not yet learned recipes" },
+  fLearnedTip = { "Learned", "Only the recipes you already know" },
+  fOpenTip = { "Open", "Only the recipes you are still missing" },
+  profSub = "Skill %s of %s", profSubNoMax = "Skill %s",
+  profCount = "%s of %s", profNoCount = "–",
+  countLine = "%s learned · %s open",
+  hintNoCache = "Open your profession window once so the book knows every detail.",
+  hintCache = "As of the last time you opened the profession window. Newly learned recipes appear when you open it again.",
+  legend = "Colour:",
+  learned = "learned", open = "open", fromSkill = "from %s",
+  skillWord = "Skill %s",
+  tipSource = "Source: %s", tipDifficulty = "Difficulty: %s", tipUps = "Skill points per craft: up to %s",
+  tipCost = "Price: %s", tipStock = "In bags: %s · Bank: %s",
+  tipNeeds = "Needs: %s", tipMore = "Click: details below",
+  needs = "NEEDS", output = "Makes: %s", outputQty = "Makes: %s× %s",
+  noMats = "This recipe needs no materials.",
+  detailNoCache = "The book only knows the result and the materials once you have opened your profession window.",
+  moreMats = "… and %s more",
+  itemNo = "Item #%s",
+  pick = "Choose a recipe.",
+  emptyList = "There are no recipes for this profession yet.",
+  emptyFilterLearned = "No recipe learned yet.", emptyFilterOpen = "Every recipe of this profession is learned.",
+  noProfTitle = "No profession with recipes yet",
+  noProfBody = "Learn a profession. This sheet then shows all its recipes, learned and open.",
+  prevPage = "Previous page", nextPage = "Next page",
+})
+
+-- journal/pages/HandwerkSkillpunkt.lua (change "runde3", package E)
+L.add("enUS", "p.HandwerkSkillpunkt", {
+  head = "FOR THE NEXT SKILL POINT",
+  orange = "Orange: almost every craft gives a skill point",
+  yellow = "Yellow: about every second craft gives a skill point",
+  green = "Green: a craft only rarely gives a skill point",
+  mats_one = "%s material", mats_other = "%s materials",
+  enough = "enough for %s",
+  enoughNone = "none in your bags",
+  ups = "up to %s skill points per craft",
+  more = "+%s more",
+  best = "Most efficient skill-up: %s",
+  enoughLine = "Materials are enough for %s",
+  missingLabel = "Missing:",
+  expect_one = "About %s craft until the next point",
+  expect_other = "About %s crafts until the next point",
+  addList = "To the shopping list",
+  addTip = { "To the shopping list", "Puts the recipe on the shopping list for the crafts until the next point." },
+  onList = "On the list",
+  onListTip = { "On the list", "Click opens the shopping list." },
+  noSure = "No orange or yellow recipe left – learn new ones from the trainer.",
+  noSureTip = { "Crafting", "Click: shows which recipes you can learn next." },
+  nocache = "Open the profession window once, and this shows which recipe brings the next skill point.",
+  nolearned = "No recipe of this profession learned yet."
 })

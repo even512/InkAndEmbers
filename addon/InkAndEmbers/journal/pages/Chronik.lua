@@ -788,6 +788,7 @@ function Page.OpenDiary(self) openSub(self, "diaryView", "DiaryView") end
 function Page.OpenCompanions(self) openSub(self, "matesView", "CompanionsView") end
 function Page.OpenFire(self) openSub(self, "fireView", "FireMatesView") end -- inside "Weggefährten" (switch "Am Feuer")
 function Page.OpenMilestones(self) openSub(self, "milestonesView", "MilestonesView") end
+function Page.OpenVermaechtnis(self) openSub(self, "vermaechtnisView", "VermaechtnisView") end -- WoW Forever only (pages/ChronikVermaechtnis.lua)
 
 function Page:CloseSub()
   local was = self.sub
@@ -826,6 +827,7 @@ function Page:GetSub()
   -- the companions bookmark holds two views: the group (matesView) and the people at the fire (fireView)
   if self.sub and (self.sub == self.matesView or self.sub == self.fireView) then return "weggefaehrten" end
   if self.sub and self.sub == self.milestonesView then return "meilensteine" end
+  if self.sub and self.sub == self.vermaechtnisView then return "vermaechtnis" end
   return "steckbrief"
 end
 
@@ -837,6 +839,8 @@ function Page:ShowSub(key)
     Page.OpenCompanions(self)
   elseif key == "meilensteine" then
     Page.OpenMilestones(self)
+  elseif key == "vermaechtnis" then
+    Page.OpenVermaechtnis(self)
   else
     self:CloseSub()
   end

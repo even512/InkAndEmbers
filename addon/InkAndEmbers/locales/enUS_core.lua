@@ -8,13 +8,18 @@ L.add("enUS", "Locale", {
   deDE = "Deutsch",
   enUS = "English",
   ptBR = "Português (Brasil)",
-  tip = "Language of the travel journal. Automatic: German or Brazilian Portuguese on matching clients, English otherwise. Takes effect after /reload.",
+  frFR = "Français",
+  esES = "Español",
+  esMX = "Español (México)",
+  ruRU = "Русский",
+  itIT = "Italiano",
+  tip = "Language of the travel journal. Automatic: the client's language if the journal speaks it (German, English, Portuguese, French, Spanish, Russian, Italian), English otherwise. Takes effect after /reload.",
   reloadLabel = "Apply language",
   reloadButton = "Save and reload",
   reloadTip = "Opens the save window (like /chronik save): saving reloads the interface, then the chosen language applies.",
   changed = "Language: %s. Takes effect after /reload (or /chronik save).",
   unchanged = "Language: %s.",
-  usage = "Language: /chronik language auto | de | en | ptbr (current: %s).",
+  usage = "Language: /chronik language auto | de | en | ptbr | fr | es | mx | ru | it (current: %s).",
 })
 
 L.add("enUS", "Names", {
@@ -63,7 +68,7 @@ L.add("enUS", "Core", {
   helpLevelSlip = "/chronik level - preview the level-up note: what you can learn at the trainer (WoW Forever only)",
   helpMilestone = "/chronik milestone [level] - preview the narrator's tally of a milestone (level 10, 20, … 60; WoW Forever only)",
   helpTrain = "/chronik training - your class training plan (\"Training\" tab under Plans, WoW Forever only); \"training status\" shows the state",
-  helpLanguage = "/chronik language - choose language: \"language auto\", \"language de\", \"language en\" or \"language ptbr\" (takes effect after /reload)",
+  helpLanguage = "/chronik language - choose language: \"language auto\", \"language de\", \"language en\", \"language ptbr\" or \"language fr | es | mx | ru | it\" (takes effect after /reload)",
   helpReset = "/chronik reset - reset the size and position of the travel journal",
   helpSave = "/chronik save - open the save window (saving reloads the interface)",
   helpBackup = "/chronik backup - state of the data safety: this character's backup copy, last save, how full the file is",
@@ -200,6 +205,15 @@ L.add("enUS", "col.Plans", {
   trainerOther = "To the trainer: %s new spells (%s)",
   petOne = "To the pet trainer: %s new ability (%s)",
   petOther = "To the pet trainer: %s new abilities (%s)",
+  unitG = "g",
+  unitS = "s",
+  unitK = "c",
+})
+
+-- collectors/CraftTodo.lua
+L.add("enUS", "col.CraftTodo", {
+  todo_one = "To the profession trainer: %s new recipe (%s)",
+  todo_other = "To the profession trainer: %s new recipes (%s)",
   unitG = "g",
   unitS = "s",
   unitK = "c",
@@ -437,4 +451,21 @@ L.add("enUS", "col.Campfire", {
   noGuest = "No mock guest with that name.",
   guestSays = "[Sim] %s says: %s",
   sayError = "Say: %s",
+})
+
+-- collectors/Einkaufszettel.lua (change "runde3", package E)
+L.add("enUS", "col.Einkauf", {
+  title = "Shopping list: %s× %s",
+  ready = "ready",
+  errOff = "The shopping list only exists in WoW Forever.",
+  errCount = "Please choose a number from 1 to 999.",
+  errRecipe = "This recipe is not saved in the recipe book yet. Open the profession window once.",
+  errNotReady = "Some materials are still missing.",
+  errNoApi = "Crafting is not possible right now.",
+  errWindow = "Open the profession window first: %s.",
+  errBlocked = "The game blocks crafting from here. Craft in the profession window instead: %s.",
+  errCombat = "Not possible in combat.",
+  errFull = "The to-do list is full.",
+  moreLines = "… %s more",
+  errNotReadyChar = "The character is not ready yet.",
 })

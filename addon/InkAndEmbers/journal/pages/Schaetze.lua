@@ -82,6 +82,10 @@ Page.TEXT = ns.Locale.ns("p.Schaetze", {
   fundeTip2 = "Tabelle: woher, wo und auf welcher Stufe",
   toAnprobe = "Ausrüstungsreise", anprobeTip = "Dein Charakter mit der Ausrüstung jeder Stufe",
   anprobeTip2 = "3D-Modell und Zeitstrahl: Stufe für Stufe anprobiert",
+  toTrade = "Handel", tradeTip = "Auktionshaus, Post und Handel", tradeTip2 = "Zahlen aus Rechnungen, Briefen und Handeln",
+  tradeSub = "Auktionshaus, Post und Handel",
+  toAuktion = "Auktionshaus", auktionTip = "Alle Verkäufe und Käufe im Auktionshaus",
+  auktionTip2 = "Tabelle zum Sortieren: Datum, Gegenstand, Menge und Preis",
 })
 
 local function font(parent, kind, size, color, justify)
@@ -556,7 +560,33 @@ function Page.CloseAnprobe(self)
   local was = self.anprobeOpen
   if self.anprobe then self.anprobe:Close() end
   self.anprobeOpen = false
-  if self.mainL and not self.fundeOpen then
+  if self.mainL and not self.fundeOpen and not self.auktionOpen then
+    self.mainL:Show()
+    self.mainR:Show()
+  end
+  if was then Pages.subChanged("schaetze") end
+end
+
+-- sub-view "Auktionshaus" (pages/SchaetzeAuktion.lua): invoice table left, balance right (works in a guest book too: the
+-- index is the one of the shown character)
+
+function Page.OpenAuktion(self)
+  local View = Journal.AuktionView
+  if not (self.built and View and self.index) then return end
+  if not self.auktion then self.auktion = View.new(self, self.holderL, self.holderR) end
+  Widgets.hideTip(self.R.fundeHit)
+  self.mainL:Hide()
+  self.mainR:Hide()
+  self.auktionOpen = true
+  self.auktion:Open(self.index)
+  Pages.subChanged("schaetze")
+end
+
+function Page.CloseAuktion(self)
+  local was = self.auktionOpen
+  if self.auktion then self.auktion:Close() end
+  self.auktionOpen = false
+  if self.mainL and not self.fundeOpen and not self.anprobeOpen then
     self.mainL:Show()
     self.mainR:Show()
   end
@@ -575,10 +605,12 @@ Page.subs = {
   subTab("uebersicht", "toOverview", "toOverview", "overviewTip"),
   subTab("funde", "toFunde", "fundeTip", "fundeTip2"),
   subTab("anprobe", "toAnprobe", "anprobeTip", "anprobeTip2"),
+  subTab("auktion", "toAuktion", "auktionTip", "auktionTip2"),
 }
 
 function Page:GetSub()
   if self.anprobeOpen then return "anprobe" end
+  if self.auktionOpen then return "auktion" end
   return self.fundeOpen and "funde" or "uebersicht"
 end
 
@@ -586,12 +618,19 @@ function Page:ShowSub(key)
   if key == self:GetSub() then return end
   if key == "funde" then
     if self.anprobeOpen then Page.CloseAnprobe(self) end
+    if self.auktionOpen then Page.CloseAuktion(self) end
     Page.OpenFunde(self)
   elseif key == "anprobe" then
     if self.fundeOpen then Page.CloseFunde(self) end
+    if self.auktionOpen then Page.CloseAuktion(self) end
     Page.OpenAnprobe(self)
+  elseif key == "auktion" then
+    if self.fundeOpen then Page.CloseFunde(self) end
+    if self.anprobeOpen then Page.CloseAnprobe(self) end
+    Page.OpenAuktion(self)
   else
     if self.anprobeOpen then Page.CloseAnprobe(self) end
+    if self.auktionOpen then Page.CloseAuktion(self) end
     Page.CloseFunde(self)
   end
 end
@@ -867,11 +906,60 @@ local function drawHold(self, hold)
   end
 end
 
-local function flowItems(withHold)
+local function flowItems(withHold, withTrade)
   local T = Page.TEXT
   local items = { { key = "levels", label = T.toBand }, { key = "bars", label = T.toBars } }
-  if withHold then items[3] = { key = "hold", label = T.toHold, tip = { T.holdTip, T.holdTip2 } } end
+  if withHold then items[#items + 1] = { key = "hold", label = T.toHold, tip = { T.holdTip, T.holdTip2 } } end
+  if withTrade then items[#items + 1] = { key = "trade", label = T.toTrade, tip = { T.tradeTip, T.tradeTip2 } } end
   return items
+end
+
+-- view "Handel": sections (Auction House / mail / trade) in two columns, head with a rule, rows label left and value right.
+-- view.trade = { { key, head, rows = { { label, value, tip } } } } (display-ready from Schaetze.tradeView). Pools: labels 48, segs, hits.
+local TRADE_GAP, TRADE_HEAD_H, TRADE_ROW_H = 12, 18, 16
+local TRADE_VALUE_MIN, TRADE_VALUE_MAX_SHARE = 24, 0.62
+-- natural width of a label (px); without a measure (older client) the old fixed share
+local function naturalWidth(fs, fallback)
+  if fs and type(fs.GetStringWidth) == "function" then
+    local ok, w = pcall(fs.GetStringWidth, fs)
+    if ok and type(w) == "number" and w == w and w >= 0 then return w end
+  end
+  return fallback
+end
+-- tooltip of a row: the full "label: value" first (the line itself may be cut), then the lines of the model
+local function fullTip(r)
+  local head = (r.label or "") .. ": " .. (r.value or "")
+  local tip = { head }
+  if type(r.tip) == "table" then
+    for _, l in ipairs(r.tip) do tip[#tip + 1] = l end
+    tip.item, tip.itemExtra = r.tip.item, r.tip.itemExtra
+  end
+  return tip
+end
+local function drawTrade(self, sections)
+  local u = self.R
+  local colW = floor((RW - TRADE_GAP) / 2)
+  local cols = { { y = 0, x = 0 }, { y = 0, x = colW + TRADE_GAP } }
+  for _, sec in ipairs(sections) do
+    -- to the shorter column (ties: left)
+    local col = cols[2].y < cols[1].y and cols[2] or cols[1]
+    local y = col.y
+    flowLabel(u, sec.head, col.x, y, "LEFT", "sepia", colW)
+    flowRect(u, col.x, y + 14, colW, 1, "sepia", 0.45)
+    y = y + TRADE_HEAD_H
+    for _, r in ipairs(sec.rows) do
+      -- the value takes what its text needs (at most 62 % of the column), the label gets all the rest
+      local vfs = flowLabel(u, r.value, col.x + colW, y, "RIGHT", "ink", colW)
+      local vw = max(TRADE_VALUE_MIN, min(floor(colW * TRADE_VALUE_MAX_SHARE), math.ceil(naturalWidth(vfs, 100)) + 2))
+      if vfs then vfs:SetWidth(vw) end
+      local lw = colW - vw - 6
+      local lfs = flowLabel(u, r.label, col.x, y, "LEFT", "sepia", lw)
+      local cut = naturalWidth(lfs, 0) > lw or naturalWidth(vfs, 0) > vw
+      if r.tip or cut then nodeHit(u, col.x, y, colW, TRADE_ROW_H, cut and fullTip(r) or r.tip) end
+      y = y + TRADE_ROW_H
+    end
+    col.y = y + 4
+  end
 end
 
 local function drawFlow(self, view)
@@ -883,17 +971,22 @@ local function drawFlow(self, view)
   local int = Journal.Texts.int
   local series = not flow.empty and flow.levels or nil
   local hold = (not flow.empty and not self.holdError) and flow.hold or nil
+  -- view "Handel" only with a gold flow and readable AH/mail/trade numbers
+  local trade = (not flow.empty and not self.tradeError and not self.levelError) and view.trade or nil
   local mode = "bars"
-  if self.flowMode == "hold" and hold and not self.levelError then
+  if self.flowMode == "trade" and trade then
+    mode = "trade"
+  elseif self.flowMode == "hold" and hold and not self.levelError then
     mode = "hold"
-  elseif (self.flowMode == "levels" or self.flowMode == "hold") and series and not self.levelError then
+  elseif (self.flowMode == "levels" or self.flowMode == "hold" or self.flowMode == "trade") and series and not self.levelError then
     mode = "levels"
   end
-  -- the third entry (holdings) only while there is a series for it
-  local withHold = hold ~= nil
-  if self.toggleHold ~= withHold then
-    self.toggleHold = withHold
-    u.toggle:SetItems(flowItems(withHold))
+  -- the third entry (holdings) only while there is a series for it, the fourth (trade) only with trade data
+  local withHold, withTrade = hold ~= nil, trade ~= nil
+  local sig = (withHold and "h" or "-") .. (withTrade and "t" or "-")
+  if self.toggleSig ~= sig then
+    self.toggleSig = sig
+    u.toggle:SetItems(flowItems(withHold, withTrade))
   end
   u.toggle.frame:SetShown((series ~= nil or hold ~= nil) and not self.levelError)
   u.toggle:SetValue(mode)
@@ -902,6 +995,16 @@ local function drawFlow(self, view)
     set(u.flowSub, T.flowSub)
     set(u.flowTotal, "")
     return
+  end
+  if mode == "trade" then
+    set(u.flowSub, T.tradeSub)
+    set(u.flowTotal, "")
+    local ok, err = pcall(drawTrade, self, trade)
+    if ok then return end
+    -- the view cannot be drawn: back to the columns per level, the entry disappears
+    clearFlow(self)
+    self.tradeError, self.flowMode = err, "levels"
+    return drawFlow(self, view)
   end
   if mode == "hold" then
     set(u.flowSub, T.flowHold)
@@ -929,7 +1032,7 @@ local function drawFlow(self, view)
 end
 
 function Page.SetFlow(self, mode)
-  if not self.view or (mode ~= "levels" and mode ~= "bars" and mode ~= "hold") then return end
+  if not self.view or (mode ~= "levels" and mode ~= "bars" and mode ~= "hold" and mode ~= "trade") then return end
   self.flowMode = mode
   drawFlow(self, self.view)
 end
@@ -1042,6 +1145,7 @@ function Page:Refresh(data)
   self:DrawGear(view)
   drawBottom(self, view)
   if self.fundeOpen and self.funde then self.funde:Refresh(data.index) end
+  if self.auktionOpen and self.auktion then self.auktion:Refresh(data.index) end
   if self.anprobeOpen and self.anprobe then
     if Pages.guestAllows("schaetze", "anprobe") then
       self.anprobe:Refresh(data.index, view.level)
@@ -1064,6 +1168,7 @@ function Page:OnHide()
   -- the next open starts with the overview again (filter and sort of the finds stay)
   if self.fundeOpen then Page.CloseFunde(self) end
   if self.anprobeOpen then Page.CloseAnprobe(self) end
+  if self.auktionOpen then Page.CloseAuktion(self) end
 end
 
 Pages.register("schaetze", Page)

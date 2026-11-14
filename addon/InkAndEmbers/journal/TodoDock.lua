@@ -487,9 +487,10 @@ local function rowTooltip(row)
   if not r or not GameTooltip then return end
   GameTooltip:SetOwner(row, "ANCHOR_LEFT")
   GameTooltip:AddLine(r.text, 1, 0.82, 0, true)
-  local kind = T.kind[r.kind]
+  local kind = TT.rowKind(r)
   if kind then GameTooltip:AddLine(r.extra and (kind .. " · " .. r.extra) or kind, 0.9, 0.9, 0.9) end
-  GameTooltip:AddLine(T.rowHint, 0.6, 0.75, 1, true)
+  TT.rowTipExtra(r)
+  GameTooltip:AddLine(r.shop and T.shopHint or T.rowHint, 0.6, 0.75, 1, true)
   GameTooltip:Show()
 end
 
@@ -516,8 +517,9 @@ local function buildRow(i)
   if row.text.SetJustifyV then row.text:SetJustifyV("TOP") end
   row.text:SetWordWrap(true)
   if row.text.SetMaxLines then row.text:SetMaxLines(2) end
-  row:SetScript("OnClick", function()
+  row:SetScript("OnClick", function(self)
     if GameTooltip then GameTooltip:Hide() end
+    if TT.openRow(self.data) then return end
     safe(TT.openBook)
   end)
   row:SetScript("OnEnter", function(self)
@@ -670,7 +672,7 @@ function Dock.layout()
   local closed = Dock.collapsed()
   local list = st.list or {}
   local open = 0
-  for _, r in ipairs(list) do if not r.done then open = open + 1 end end
+  for _, r in ipairs(list) do if not r.done and not r.sub then open = open + 1 end end
   local S = st.style or Dock.style(st.target)
   st.style = S
   local headH, gap = S.headH or Dock.HEAD_H, S.lineGap or Dock.ROW_GAP
@@ -700,15 +702,17 @@ function Dock.layout()
   local used, hasDist = 0, false
   local lineFont
   local minH, lineH -- smallest row height by the source's rule; height of one line (nub centering)
-  for i = 1, max(#st.rows, min(#list, TT.ROWS_MAX)) do
+  local cap = TT.cap(list)
+  for i = 1, max(#st.rows, cap) do
     local row, r = st.rows[i], list[i]
-    if not row and r and i <= TT.ROWS_MAX then row = buildRow(i) end
+    if not row and r and i <= cap then row = buildRow(i) end
     if row then
-      if r and not closed and i <= TT.ROWS_MAX then
+      if r and not closed and i <= cap then
         row.data = r
         lineFont = applyFont(row.text, S.line, 12)
         applyFont(row.dash, S.line, 12)
-        local tw = max(40, w - indent - 4)
+        local ind = r.sub and (indent + TT.SUB_INDENT) or indent -- a material line of a shopping list hangs indented below its list
+        local tw = max(40, w - ind - 4)
         row.text:SetWidth(tw)
         row.text:SetHeight(0)
         row.text:SetText(lineText(r))
@@ -723,17 +727,17 @@ function Dock.layout()
         row:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y)
         row:SetSize(w, th + gap)
         row.text:ClearAllPoints()
-        row.text:SetPoint("TOPLEFT", row, "TOPLEFT", indent, 0)
+        row.text:SetPoint("TOPLEFT", row, "TOPLEFT", ind, 0)
         row.text:SetHeight(th)
         local doneMark = r.done and useAtlas(row.nub, Dock.ATLAS.check)
         if not r.done and row.nubAtlas then useAtlas(row.nub, Dock.ATLAS.nub) end
-        local icon = doneMark or row.nubAtlas
+        local icon = doneMark or ((not r.sub) and row.nubAtlas)
         row.nub:ClearAllPoints()
         row.nub:SetSize(doneMark and 14 or 10, doneMark and 14 or 10)
-        row.nub:SetPoint("TOPRIGHT", row, "TOPLEFT", indent - 3, -floor((lineH - (doneMark and 14 or 10)) / 2))
+        row.nub:SetPoint("TOPRIGHT", row, "TOPLEFT", ind - 3, -floor((lineH - (doneMark and 14 or 10)) / 2))
         row.nub:SetShown(icon and true or false)
         row.dash:ClearAllPoints()
-        row.dash:SetPoint("TOPRIGHT", row, "TOPLEFT", indent - 5, 0)
+        row.dash:SetPoint("TOPRIGHT", row, "TOPLEFT", ind - 5, 0)
         row.dash:SetShown(not icon)
         row.dash:SetTextColor(pal(r.done and "Complete" or "Normal"))
         paintRow(row)

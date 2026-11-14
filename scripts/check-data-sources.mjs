@@ -2,7 +2,8 @@
 //   - QuestieDB: gepinnte Version (addon/InkAndEmbers_QuestData/InkAndEmbers_QuestData.toc, X-QuestieDB-Version) gegen das neueste
 //     STABILE Release (kein Prerelease, kein Entwurf) von github.com/Questie/QuestieDB
 //   - What's Training?: gepinnter Commit (PINNED_COMMIT in scripts/build-trainer-data.mjs) gegen master von
-//     github.com/fusionpit/WhatsTraining; relevant sind nur Aenderungen unter Classes/Camelot/ (dazu gehoert QuestSpells.lua)
+//     github.com/fusionpit/WhatsTraining; relevant sind nur Aenderungen unter Classes/Camelot/ (dazu gehoert QuestSpells.lua) und
+//     Crafting/Recipes/Camelot/ (Rezeptdaten, scripts/build-recipe-data.mjs, derselbe gepinnte Commit)
 //
 // Aufruf:  node scripts/check-data-sources.mjs [--json] [--help]
 //   --json   eine Zeile JSON statt Text (fuer automatische Abrufe)
@@ -22,6 +23,9 @@ export const QUESTIE_REPO = "Questie/QuestieDB";
 export const TRAINING_REPO = "fusionpit/WhatsTraining";
 /** Pfade im What's-Training-Repo, deren Aenderung einen neuen Stand bedeutet (Classes/Camelot/<Klasse>.lua und QuestSpells.lua) */
 export const TRAINING_PATH = "Classes/Camelot/";
+/** Rezeptdaten der Berufe (Plaene > Handwerk), gleicher Pin */
+export const RECIPES_PATH = "Crafting/Recipes/Camelot/";
+export const TRAINING_PATHS = [TRAINING_PATH, RECIPES_PATH];
 export const GH_TIMEOUT_MS = 30_000;
 export const STATUS = Object.freeze({ NEW: "neu", CURRENT: "aktuell", UNKNOWN: "unbekannt" });
 
@@ -80,7 +84,8 @@ export function newestStable(json) {
  * Antwort von GET /repos/fusionpit/WhatsTraining/compare/<gepinnt>...master (JSON-Text oder Objekt), reduziert auf
  * { status, aheadBy, relevant: [Dateien unter Classes/Camelot/], truncated }; null bei Unbrauchbarem.
  */
-export function parseCompare(json, prefix = TRAINING_PATH) {
+export function parseCompare(json, prefix = TRAINING_PATHS) {
+  const prefixes = Array.isArray(prefix) ? prefix : [prefix];
   let o = json;
   if (typeof json === "string") {
     try {
@@ -95,7 +100,7 @@ export function parseCompare(json, prefix = TRAINING_PATH) {
   return {
     status: o.status,
     aheadBy: o.ahead_by,
-    relevant: names.filter((n) => n.startsWith(prefix)).slice(0, 20),
+    relevant: names.filter((n) => prefixes.some((p) => n.startsWith(p))).slice(0, 20),
     truncated: names.length >= COMPARE_FILE_CAP,
   };
 }
@@ -124,10 +129,10 @@ export function judgeTraining(pinned, cmp, why = "") {
     return { name, status: STATUS.UNKNOWN, text: `gepinnt ${short(pinned)}, Vergleich mit master nicht eindeutig (Status ${cmp.status.slice(0, 20)})` };
   }
   if (cmp.relevant.length > 0) {
-    return { name, status: STATUS.NEW, text: `gepinnt ${short(pinned)}, master ${cmp.aheadBy} Commits weiter, geaendert unter ${TRAINING_PATH}: ${cmp.relevant.slice(0, 5).map((f) => f.slice(TRAINING_PATH.length)).join(", ")}${cmp.relevant.length > 5 ? ", ..." : ""}` };
+    return { name, status: STATUS.NEW, text: `gepinnt ${short(pinned)}, master ${cmp.aheadBy} Commits weiter, geaendert unter ${TRAINING_PATH} bzw. ${RECIPES_PATH}: ${cmp.relevant.slice(0, 5).map((f) => (f.startsWith(RECIPES_PATH) ? f.slice("Crafting/".length) : f.slice(TRAINING_PATH.length))).join(", ")}${cmp.relevant.length > 5 ? ", ..." : ""}` };
   }
   if (cmp.truncated) return { name, status: STATUS.UNKNOWN, text: `gepinnt ${short(pinned)}, master ${cmp.aheadBy} Commits weiter, Dateiliste zu lang zum sicheren Pruefen` };
-  return { name, status: STATUS.CURRENT, text: `gepinnt ${short(pinned)}, master ${cmp.aheadBy} Commits weiter, ${TRAINING_PATH} unveraendert` };
+  return { name, status: STATUS.CURRENT, text: `gepinnt ${short(pinned)}, master ${cmp.aheadBy} Commits weiter, ${TRAINING_PATH} und ${RECIPES_PATH} unveraendert` };
 }
 
 /** Exit-Code aus den Einzelergebnissen: neuer Stand schlaegt unbekannt, unbekannt schlaegt aktuell. */
@@ -189,7 +194,7 @@ export function main(argv, { run = execFileSync, pins = readPins(), out = (s) =>
     return 3;
   }
   if (argv.includes("--help")) {
-    out("check-data-sources: prueft QuestieDB (Release) und What's Training (master, Classes/Camelot) gegen den neuesten oeffentlichen Stand.\nAufruf: node scripts/check-data-sources.mjs [--json]\nExit: 0 aktuell, 1 neuerer Stand, 2 unbekannt, 3 Aufruffehler.");
+    out("check-data-sources: prueft QuestieDB (Release) und What's Training (master, Classes/Camelot und Crafting/Recipes/Camelot) gegen den neuesten oeffentlichen Stand.\nAufruf: node scripts/check-data-sources.mjs [--json]\nExit: 0 aktuell, 1 neuerer Stand, 2 unbekannt, 3 Aufruffehler.");
     return 0;
   }
   const results = check(pins, run);

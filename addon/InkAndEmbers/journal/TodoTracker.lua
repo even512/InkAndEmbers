@@ -14,7 +14,10 @@ local TodoTracker = {}
 Journal.TodoTracker = TodoTracker
 
 TodoTracker.NAME = "EveNChronicleTodoTracker"
-TodoTracker.ROWS_MAX = 8
+TodoTracker.ROWS_MAX = 8      -- to-dos shown (the material lines of a shopping list come on top, see cap)
+TodoTracker.ROWS_POOL = 24    -- row frames built
+TodoTracker.SUB_INDENT = 12
+TodoTracker.SUB_MAX = 5
 TodoTracker.LINGER = 4
 TodoTracker.DIST_EVERY = 1
 TodoTracker.TEXT_BYTES = 400
@@ -70,6 +73,8 @@ TodoTracker.TEXT = ns.Locale.ns("TodoTracker", {
   openBook = "To Do im Buch öffnen",
   openBookHint = "Öffnet das Reisejournal auf der To-Do-Seite.",
   kind = { free = "Freies Ziel", place = "Ort erreichen", kill = "Gegner töten", item = "Gegenstände finden" },
+  shopKind = "Einkaufszettel",
+  shopHint = "Klick öffnet den Einkaufszettel.",
   optDock = "To Dos am Questtracker andocken",
   dockSideLabel = "Lage am Questtracker",
   dockSide = { below = "Unter den Quests", above = "Über den Quests" },
@@ -263,7 +268,77 @@ local function rowOf(p, done)
   local kind = (type(p.kind) == "string" and TodoTracker.KINDS[p.kind]) and p.kind or "free"
   local text = shown(p.text) or ""
   local extra, isDist = extraOf(p)
-  return { id = p.id, kind = kind, text = text, extra = extra, dist = isDist, done = done and true or false }
+  local shop = p.shop == true
+  if shop then kind = "item" end -- shopping list (Einkaufszettel): bag icon
+  return { id = p.id, kind = kind, text = text, extra = extra, dist = isDist, done = done and true or false, shop = shop or nil }
+end
+
+-- Shopping list rows (collectors/Einkaufszettel.lua): material lines in the tooltip, a click opens the slip instead of the book.
+function TodoTracker.rowKind(r)
+  if r and r.shop then return T.shopKind end
+  return r and T.kind[r.kind] or nil
+end
+
+function TodoTracker.rowTipExtra(r)
+  if not (r and r.shop and not r.sub and GameTooltip and ns.Einkauf and not r.done) then return end
+  local ok, lines = pcall(ns.Einkauf.tipLines, r.id)
+  if not (ok and type(lines) == "table") then return end
+  for _, l in ipairs(lines) do
+    if l.done then GameTooltip:AddLine(l.text, 0.6, 0.6, 0.6) else GameTooltip:AddLine(l.text, 0.95, 0.9, 0.8) end
+  end
+end
+
+-- Material lines of an open shopping list as rows of their own, like quest objectives (indented, no icon): "Kupfererz 4/20", done ones
+-- struck through / dim, at most SUB_MAX and then "… n weitere". They carry planId (click opens the slip) and sub = true (not counted).
+function TodoTracker.shopSubRows(r)
+  local E = ns.Einkauf
+  if not (r and r.shop and not r.done and E and type(E.objectiveLines) == "function") then return {} end
+  local ok, res = pcall(E.objectiveLines, r.id, TodoTracker.SUB_MAX)
+  if not (ok and type(res) == "table" and type(res.lines) == "table") then return {} end
+  local out = {}
+  for i, l in ipairs(res.lines) do
+    local text = shown(l.text, 80)
+    if text then
+      out[#out + 1] = { id = tostring(r.id) .. "#" .. i, planId = r.id, kind = "item", text = text, name = shown(l.name, 60), have = l.have,
+        need = l.need, itemID = l.id, done = l.done == true, shop = true, sub = true }
+    end
+  end
+  if (res.more or 0) > 0 and E.TEXT then
+    out[#out + 1] = { id = tostring(r.id) .. "#m", planId = r.id, kind = "item", text = E.TEXT("moreLines", tostring(res.more)), done = false,
+      shop = true, sub = true, more = true }
+  end
+  return out
+end
+
+local function expandShop(list)
+  local out = {}
+  for _, r in ipairs(list) do
+    out[#out + 1] = r
+    if r.shop and not r.done then
+      for _, s in ipairs(TodoTracker.shopSubRows(r)) do out[#out + 1] = s end
+    end
+  end
+  return out
+end
+
+-- true if the row was a shopping list (or one of its material lines) and its slip was opened
+function TodoTracker.cap(list)
+  local n, mains = 0, 0
+  for i, r in ipairs(list) do
+    if not r.sub then
+      mains = mains + 1
+      if mains > TodoTracker.ROWS_MAX then break end
+    end
+    n = i
+  end
+  return math.min(n, TodoTracker.ROWS_POOL)
+end
+
+function TodoTracker.openRow(r)
+  local Z = Journal.Einkaufszettel
+  if not (r and r.shop and Z and type(Z.open) == "function") then return false end
+  local ok, res = pcall(Z.open, { id = r.planId or r.id })
+  return ok and res == true
 end
 
 local function planList(filter)
@@ -325,12 +400,12 @@ function TodoTracker.entries()
   local order = {}
   for i, r in ipairs(out) do order[i] = r.id end
   st.prevOrder = order
-  return out
+  return expandShop(out)
 end
 
 function TodoTracker.openCount()
   local n = 0
-  for _, r in ipairs(st.shownList) do if not r.done then n = n + 1 end end
+  for _, r in ipairs(st.shownList) do if not r.done and not r.sub then n = n + 1 end end
   return n
 end
 
@@ -495,9 +570,10 @@ local function rowTooltip(row)
   if not r or not GameTooltip then return end
   GameTooltip:SetOwner(row, "ANCHOR_LEFT")
   GameTooltip:AddLine(r.text, 1, 0.82, 0, true)
-  local kind = T.kind[r.kind]
+  local kind = TodoTracker.rowKind(r)
   if kind then GameTooltip:AddLine(r.extra and (kind .. " · " .. r.extra) or kind, 0.9, 0.9, 0.9) end
-  GameTooltip:AddLine(T.rowHint, 0.6, 0.75, 1, true)
+  TodoTracker.rowTipExtra(r)
+  GameTooltip:AddLine(r.shop and T.shopHint or T.rowHint, 0.6, 0.75, 1, true)
   GameTooltip:Show()
 end
 
@@ -505,7 +581,7 @@ local function paintRow(row)
   local s = TodoTracker.settings()
   local P = s.style == "plain" and TodoTracker.PLAIN or TodoTracker.PAD
   local r = row.data
-  local c = (r and r.done) and P.done or ((row.hover and r and not r.done) and P.hover or P.text)
+  local c = (r and r.done) and P.done or ((row.hover and r and not r.done) and P.hover or (r and r.sub and P.extra or P.text))
   row.text:SetTextColor(colorOf(c))
   row.extra:SetTextColor(colorOf((r and r.done) and P.done or P.extra))
   row.icon:SetAlpha((r and r.done) and 0.5 or 1)
@@ -527,7 +603,8 @@ local function buildRow(f, i)
   row.strike2 = rect(row, "OVERLAY")
   row.line = rect(row, "BACKGROUND", 2)
   row.line2 = rect(row, "BACKGROUND", 2)
-  row:SetScript("OnClick", function()
+  row:SetScript("OnClick", function(self)
+    if TodoTracker.openRow(self.data) then return end
     if ns.Core then ns.Core.safe(TodoTracker.openBook) else TodoTracker.openBook() end
   end)
   row:SetScript("OnEnter", function(self)
@@ -901,7 +978,7 @@ function TodoTracker.build()
   st.empty = fontString(body)
   st.empty:SetJustifyH("CENTER")
   st.empty:SetWordWrap(true)
-  for i = 1, TodoTracker.ROWS_MAX do buildRow(body, i) end
+  for i = 1, TodoTracker.ROWS_POOL do buildRow(body, i) end
   st.rules = {}
   for i = 1, TodoTracker.RULES_MAX do
     local t = rect(body, "BACKGROUND", 2)
@@ -1071,7 +1148,7 @@ function TodoTracker.layout()
   st.chev.closed:SetShown(not st.expanded)
   st.chev.open:SetShown(st.expanded and true or false)
   if closed then
-    for i = 1, TodoTracker.ROWS_MAX do
+    for i = 1, TodoTracker.ROWS_POOL do
       st.rows[i]:Hide()
       st.rows[i].data = nil
     end
@@ -1148,11 +1225,14 @@ function TodoTracker.layout()
   end
   local used = 0
   local hasDist = false
-  for i = 1, TodoTracker.ROWS_MAX do
-    local row, r = st.rows[i], list[i]
+  local cap = TodoTracker.cap(list)
+  for i = 1, TodoTracker.ROWS_POOL do
+    local row, r = st.rows[i], (i <= cap) and list[i] or nil
     if r then
       row.data = r
       setIcon(row, r.kind, s.style)
+      row.icon:SetShown(not r.sub) -- a material line of a shopping list has no icon, it hangs indented below its list
+      local subInd = r.sub and TodoTracker.SUB_INDENT or 0
       row.extra:SetText(r.extra or "")
       local ew = r.extra and (row.extra:GetStringWidth() or 0) or 0
       if ew > 0 then ew = ew + 6 end
@@ -1160,9 +1240,9 @@ function TodoTracker.layout()
       local rowR, tw, th, two
       local function measure()
         rowR = narrow and curlX or (w - padR)
-        tw = max(40, rowR - textX - ew)
+        tw = max(40, rowR - textX - ew - subInd)
         row.text:SetWidth(tw)
-        if row.text.SetMaxLines then row.text:SetMaxLines(2) end
+        if row.text.SetMaxLines then row.text:SetMaxLines(r.sub and 1 or 2) end
         row.text:SetText(r.text)
         th = row.text:GetStringHeight() or M.textSize
         if not num(th) or th <= 0 then th = M.textSize end
@@ -1185,7 +1265,7 @@ function TodoTracker.layout()
         if narrow and not (y + R - 1 > bottom) then
           narrow = false
           rowR = w - padR
-          tw = max(40, rowR - textX - ew)
+          tw = max(40, rowR - textX - ew - subInd)
           row.text:SetWidth(tw)
           rx1 = lineX1
         end
@@ -1194,7 +1274,7 @@ function TodoTracker.layout()
       if y + rh > limit and i > 1 then
         row:Hide()
         row.data = nil
-        for k = i + 1, TodoTracker.ROWS_MAX do
+        for k = i + 1, TodoTracker.ROWS_POOL do
           st.rows[k]:Hide()
           st.rows[k].data = nil
         end
@@ -1208,7 +1288,7 @@ function TodoTracker.layout()
       row.icon:SetSize(M.icon, M.icon)
       row.icon:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -(textOff + max(0, floor((min(th, lineH) - M.icon) / 2))))
       row.text:ClearAllPoints()
-      row.text:SetPoint("TOPLEFT", row, "TOPLEFT", M.icon + M.gap, -textOff)
+      row.text:SetPoint("TOPLEFT", row, "TOPLEFT", M.icon + M.gap + subInd, -textOff)
       row.text:SetHeight(isPad and (two and (R + lineH) or lineH) or th)
       row.extra:ClearAllPoints()
       if isPad then
@@ -1334,9 +1414,10 @@ end
 
 local function signature(list, style)
   local parts = { style or "" }
+  local cap = TodoTracker.cap(list)
   for i, r in ipairs(list) do
     parts[#parts + 1] = table.concat({ tostring(r.id), r.kind, r.text, r.extra or "", r.done and "1" or "0" }, "\1")
-    if i > TodoTracker.ROWS_MAX + 1 then parts[#parts + 1] = tostring(#list) break end
+    if i > cap + 1 then parts[#parts + 1] = tostring(#list) break end
   end
   return table.concat(parts, "\2")
 end

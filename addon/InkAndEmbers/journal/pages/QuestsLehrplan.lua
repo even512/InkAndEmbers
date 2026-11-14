@@ -44,6 +44,8 @@ local T = ns.Locale.ns("p.QuestsLehrplan", {
   petHow = "Einmal beim Tierausbilder kaufen, dann jedem Tier über \"%s\" beibringen.",
   petAbility = "Tierausbildung",
   petTaming = "Fähigkeiten wie Klaue oder Biss lernt Ihr durch Zähmen, nicht hier.",
+  petLevelRule = "Der Ausbilder richtet sich nach Eurer Stufe, Euer Tier muss die Rangstufe selbst erreichen.",
+  petFrom = "Euer Tier kann das ab Stufe %s lernen", petFromShort = "Tier ab Stufe %s",
   petNoneHead = "Keine Tierausbildung", petNoneBody = "Die Tierausbildung gibt es nur für Jäger.",
   petEmptyNow = "Gerade gibt es nichts zu lernen. Besucht den Tierausbilder, damit Ink den Stand kennt.",
   petEmptyNext = "Nichts mehr in Sicht.", petEmptyLearned = "Noch nichts gelernt oder noch nicht gesehen. Besucht den Tierausbilder.",
@@ -149,7 +151,7 @@ function View.petAbilityName()
 end
 
 -- how it works in Forever: buy once from the trainer, teach every pet with the ability; family abilities come from taming
-function View.petHowText() return T("petHow", View.petAbilityName()) .. "\n\n" .. T.petTaming end
+function View.petHowText() return T("petHow", View.petAbilityName()) .. "\n\n" .. T.petTaming .. " " .. T.petLevelRule end
 
 -- state text of a row
 function View.stateText(r)
@@ -183,6 +185,7 @@ local function rowTip(r)
   if r.state == "quest" then tip[#tip + 1] = T.questTip end
   if r.state == "now" and r.offered == false then tip[#tip + 1] = T.unofferedTip end
   tip[#tip + 1] = View.stateText(r)
+  if r.petFrom then tip[#tip + 1] = T("petFrom", int(r.petFrom)) end
   if r.state == "unknown" then
     tip[#tip + 1] = T.unknownTip
     tip[#tip + 1] = View.petTip()
@@ -232,7 +235,9 @@ local function buildRows(self, tab)
       row.lvl:SetText(T("levelWord", int(r.level)))
       local dim = r.state == "learned" or r.state == "later"
       row.label:SetTextColor(W.color(dim and "sepia" or "ink", dim and 0.8 or 1))
-      W.setText(row.sub, r.state == "quest" and "" or (r.cost > 0 and money(r.cost) or T.free))
+      local costText = r.state == "quest" and "" or (r.cost > 0 and money(r.cost) or T.free)
+      if r.petFrom then costText = costText .. " · " .. T("petFromShort", int(r.petFrom)) end
+      W.setText(row.sub, costText)
       local warn = r.state == "missing" or r.state == "talent" or (r.state == "now" and r.offered == false)
       W.setText(row.tag, View.stateText(r))
       row.tag:SetTextColor(W.color(warn and "red" or "sepia", warn and 0.9 or 1))

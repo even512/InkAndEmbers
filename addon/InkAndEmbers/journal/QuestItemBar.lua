@@ -33,7 +33,7 @@ QIBar.TEXT = ns.Locale.ns("QuestItemBar", {
   editHint = "Quest-Gegenstände der aktuellen Zone",
 })
 
-local st = { frame = nil, bound = {}, pending = false, editing = false, slots = {}, sig = nil, installed = false }
+local st = { frame = nil, bound = {}, pending = false, editing = false, slots = {}, sig = nil, installed = false, near = {} }
 QIBar.state = st
 
 local function isSecret(v)
@@ -63,16 +63,60 @@ function QIBar.wanted()
   return ok and type(s) == "table" and s.panel and s.panel.itemBar == true
 end
 
--- quests with a special item whose place (objective, turn-in for ready quests) lies in the current zone; the focus quest first,
--- then by distance. Hidden quests are left out.
+-- Option panel.itemBarNear (default on): a quest item shows only while the player is "near" its quest place: within NEAR_YD yards of
+-- the nearest objective point (turn-in place for a ready quest; QuestTrack keeps rec.dist = metres to that point, updated by its 1 s
+-- ticker, which also asks for a redraw = QIBar.refresh). Hysteresis: it appears at <= NEAR_YD and goes only beyond NEAR_YD + HYST_YD,
+-- so the border does not flicker. Without a distance (no data) the old rule holds: shown while the quest lies in the current zone
+-- (better too often than never). A ready quest only has an item here if the game says it is needed for the turn-in (QuestTrack.itemOf).
+-- In combat the last state is kept (and the bar is frozen anyway, see refresh).
+QIBar.NEAR_YD, QIBar.HYST_YD = 140, 35
+
+local function nearOn()
+  local Q = QT()
+  local ok, s = pcall(Q.settings)
+  return not (ok and type(s) == "table" and s.panel and s.panel.itemBarNear == false)
+end
+
+-- true = in the area | false = outside | nil = no distance known
+local function inArea(rec)
+  local d = rec.dist
+  if type(d) ~= "number" or d ~= d or isSecret(d) then return nil end
+  local G = Journal.Geo
+  local yd = d / ((G and G.YARD_M) or 0.9144)
+  local id = rec.questID
+  local was = st.near[id]
+  if inCombat() and was ~= nil then return was end
+  local now
+  if yd <= QIBar.NEAR_YD then now = true
+  elseif yd > QIBar.NEAR_YD + QIBar.HYST_YD then now = false
+  else now = was == true end
+  if not inCombat() then st.near[id] = now end
+  return now
+end
+
+-- quests with a special item whose place (objective, turn-in for ready quests) lies in the current zone, or - option "near" - within
+-- reach of the objective point (see above); the focus quest first, then by distance. Hidden quests are left out.
 function QIBar.list()
   local Q = QT()
   if not (Q and type(Q.records) == "function") then return {} end
   local cur = type(Q.currentZone) == "function" and Q.currentZone() or nil
   local focus = type(Q.focus) == "function" and Q.focus() or nil
-  local out = {}
+  local near = nearOn()
+  local out, seen = {}, {}
   for _, rec in ipairs(Q.records() or {}) do
-    if type(rec) == "table" and rec.item and cur ~= nil and rec.zone == cur and not Q.isHidden(rec.questID) then out[#out + 1] = rec end
+    if type(rec) == "table" and rec.item and not Q.isHidden(rec.questID) then
+      seen[rec.questID] = true
+      local show
+      local a -- (not "near and inArea() or nil": a false would turn into nil)
+      if near then a = inArea(rec) end
+      if a ~= nil then show = a else show = cur ~= nil and rec.zone == cur end
+      if show then out[#out + 1] = rec end
+    end
+  end
+  if not inCombat() then
+    for id in pairs(st.near) do
+      if not seen[id] then st.near[id] = nil end
+    end
   end
   table.sort(out, function(a, b)
     if (a.questID == focus) ~= (b.questID == focus) then return a.questID == focus end

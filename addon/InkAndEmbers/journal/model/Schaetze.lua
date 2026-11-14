@@ -81,6 +81,24 @@ local TEXT = Loc.ns("m.Schaetze", {
   holdNow = "Jetzt im Beutel: %s",
   holdJump = "Zur Vorstufe: %s",
   holdPeak = "Höchststand insgesamt",
+  -- gold flow view "Handel": auction house, mail, trade (P4)
+  tr_ahHead = "Auktionshaus", tr_mailHead = "Post", tr_tradeHead = "Handel",
+  tr_ahIncome = "Einnahmen", tr_ahSold = "Verkäufe", tr_ahSpent = "Ausgaben", tr_ahBought = "Käufe",
+  tr_ahFee = "Provision", tr_ahDeposit = "Pfand gezahlt",
+  tr_ahTip = "Nach den Rechnungen im Briefkasten; das Haushaltsbuch bleibt unberührt.",
+  tr_ahIncomeTip = "Verkaufspreise laut Rechnung, vor Abzug der Provision.",
+  tr_ahFeeTip = "Abzug der Auktionshaus-Provision bei Verkäufen.",
+  tr_ahDepositTip = "Pfand beim Einstellen, für %s Einstellungen. Was davon verfiel oder zurückkam, steht in keiner Rechnung.",
+  tr_ahCount = "%s Rechnungen",
+  tr_mailGold = "Goldpost von %s", tr_mailItem = "Päckchen von %s", tr_cod = "Nachnahme gezahlt",
+  tr_mailGoldTip = "Größte Goldsendung, die du aus einem Brief genommen hast.",
+  tr_mailItemTip = "Größter Stapel, den du aus einem Brief genommen hast.",
+  tr_codTip = "Zur Orientierung; keine zusätzliche Ausgabe im Haushaltsbuch.",
+  tr_tradeGold = "Gold von %s", tr_tradeItem = "Gabe von %s",
+  tr_tradeGoldTip = "Der größte Goldbetrag, den du im Handel bekommen hast.",
+  tr_tradeItemTip = "Der größte Stapel, den du im Handel bekommen hast.",
+  tr_stack = "%s× %s",
+  tr_from = "Von: %s",
 })
 Schaetze.TEXT = TEXT
 
@@ -729,6 +747,170 @@ local function marginNotes(st, index)
   return out
 end
 
+-- ---- view "Handel" in the gold flow: auction house, mail, trade (spec Datenbuecher P4) ----
+-- Raw numbers once per index (language-free); the display texts are built in Schaetze.tradeView on every evaluation.
+-- Sources: index.ah[action] = { n, deposit, price } (AH lines), the lists PM/PS/TH (Index.LISTS). Only readable numbers:
+-- AH sums come from the invoices (sold/bought); the deposit that expired or came back is in no line and is not guessed.
+-- No double counting: nothing here feeds the ledger or the gold flow; AH mails (ah = 1) stay out of the mail rows.
+Schaetze.TRADE_LIST_MAX = 20000 -- records read per list (Index.LIST_MAX)
+Schaetze.TRADE_NAME_MAX = 16    -- bytes of a partner/sender name
+Schaetze.TRADE_ITEM_MAX = 22    -- bytes of an item name in a value
+
+local function ahSum(ah, action)
+  local e = ah[action]
+  if type(e) ~= "table" then return nil end
+  local n = num(e.n)
+  if not n or n <= 0 then return nil end
+  local dep, price = num(e.deposit), num(e.price)
+  return { n = floor(n), deposit = dep and dep > 0 and floor(dep) or 0, price = price and price > 0 and floor(price) or 0 }
+end
+
+-- "key*count,key,..." (item text of TH/PM/PS) -> largest single stack { key, count } or nil
+local function bestStack(text, best)
+  if type(text) ~= "string" or text == "" then return best end
+  for part in string.gmatch(text, "[^,]+") do
+    local key, c = string.match(part, "^(.-)%*(%d+)$")
+    if not key then key, c = part, "1" end
+    local count = tonumber(c)
+    if count and count >= 1 and count < 1e7 and find(key, "^%d+[%.:%d]*$") and itemIdOf(key) and (not best or count > best.count) then
+      best = { key = key, count = floor(count) }
+    end
+  end
+  return best
+end
+
+-- name of a record field: sanitized, nil if empty/unreadable ("?" = locked name)
+local function who(rec, pos)
+  local v = pos and rec[pos]
+  if type(v) ~= "string" or v == "" or v == "?" then return nil end
+  return display(v, Schaetze.TRADE_NAME_MAX)
+end
+
+local function tradeData(index, char)
+  local Idx = I()
+  local d = {}
+  local ah = type(index.ah) == "table" and index.ah or {}
+  local sold, bought, posted = ahSum(ah, "sold"), ahSum(ah, "bought"), ahSum(ah, "post")
+  if (sold and sold.price > 0) or (bought and bought.price > 0) or (sold and sold.deposit > 0) or (posted and posted.deposit > 0) then
+    d.ah = { sold = sold, bought = bought, posted = posted }
+  end
+
+  local pm = Idx.fields("PM")
+  if pm then
+    local gold, item, cod = nil, nil, 0
+    local list = Idx.list(index, "PM")
+    for i = 1, math.min(#list, Schaetze.TRADE_LIST_MAX) do
+      local r = list[i]
+      if type(r) == "table" and r[pm.ah] ~= "1" then -- AH payouts are already in the AH rows
+        local m = num(r[pm.money])
+        if m and m > 0 and (not gold or m > gold.amount) then gold = { amount = floor(m), who = who(r, pm.sender) } end
+        local s = bestStack(r[pm.items], nil)
+        if s and (not item or s.count > item.count) then item = { key = s.key, count = s.count, who = who(r, pm.sender) } end
+        local c = num(r[pm.cod])
+        if c and c > 0 then cod = cod + floor(c) end
+      end
+    end
+    if gold or item or cod > 0 then d.mail = { gold = gold, item = item, cod = cod > 0 and cod or nil } end
+  end
+
+  local th = Idx.fields("TH")
+  if th then
+    local gold, item = nil, nil
+    local list = Idx.list(index, "TH")
+    for i = 1, math.min(#list, Schaetze.TRADE_LIST_MAX) do
+      local r = list[i]
+      if type(r) == "table" then
+        local g = num(r[th.getGold])
+        if g and g > 0 and (not gold or g > gold.amount) then gold = { amount = floor(g), who = who(r, th.partner) } end
+        local s = bestStack(r[th.get], nil)
+        if s and (not item or s.count > item.count) then item = { key = s.key, count = s.count, who = who(r, th.partner) } end
+      end
+    end
+    if gold or item then d.trade = { gold = gold, item = item } end
+  end
+  if not (d.ah or d.mail or d.trade) then return nil end
+  return d
+end
+
+-- item name for a value: from the item snapshot, sanitized and shortened; else "Gegenstand <id>"
+local function stackText(char, key, count)
+  local id = itemIdOf(key)
+  local e = id and byId(snapGroup(char, "items"), id) or nil
+  local name = type(e) == "table" and display(e.name, Schaetze.TRADE_ITEM_MAX) or nil
+  return TEXT("tr_stack", int(count), name or TEXT("itemFallback", int(id or 0)))
+end
+
+local function money(c) return Schaetze.moneyText(c, true, false, 11) end
+
+-- display-ready sections { { key, head, rows = { { key, label, value, tip } } } } or nil. Rows without readable numbers are left out.
+function Schaetze.tradeView(raw, char)
+  if type(raw) ~= "table" then return nil end
+  local sections = {}
+  local function add(key, head, rows) if #rows > 0 then sections[#sections + 1] = { key = key, head = head, rows = rows } end end
+  local function nameOf(w) return w or TEXT.unknown end
+
+  if raw.ah then
+    local rows, a = {}, raw.ah
+    local ahTip = TEXT.tr_ahTip
+    if a.sold and a.sold.price > 0 then
+      rows[#rows + 1] = { key = "ahIncome", label = TEXT.tr_ahIncome, value = money(a.sold.price),
+        tip = { TEXT.tr_ahIncome, TEXT.tr_ahIncomeTip, TEXT("tr_ahCount", int(a.sold.n)), ahTip } }
+    end
+    if a.sold then
+      rows[#rows + 1] = { key = "ahSold", label = TEXT.tr_ahSold, value = int(a.sold.n), tip = { TEXT.tr_ahSold, ahTip } }
+    end
+    if a.bought and a.bought.price > 0 then
+      rows[#rows + 1] = { key = "ahSpent", label = TEXT.tr_ahSpent, value = money(a.bought.price),
+        tip = { TEXT.tr_ahSpent, TEXT("tr_ahCount", int(a.bought.n)), ahTip } }
+    end
+    if a.bought then
+      rows[#rows + 1] = { key = "ahBought", label = TEXT.tr_ahBought, value = int(a.bought.n), tip = { TEXT.tr_ahBought, ahTip } }
+    end
+    if a.sold and a.sold.deposit > 0 then
+      rows[#rows + 1] = { key = "ahFee", label = TEXT.tr_ahFee, value = money(a.sold.deposit),
+        tip = { TEXT.tr_ahFee, TEXT.tr_ahFeeTip, ahTip } }
+    end
+    if a.posted and a.posted.deposit > 0 then
+      rows[#rows + 1] = { key = "ahDeposit", label = TEXT.tr_ahDeposit, value = money(a.posted.deposit),
+        tip = { TEXT.tr_ahDeposit, TEXT("tr_ahDepositTip", int(a.posted.n)), ahTip } }
+    end
+    add("ah", TEXT.tr_ahHead, rows)
+  end
+
+  if raw.mail then
+    local rows, m = {}, raw.mail
+    if m.gold then
+      rows[#rows + 1] = { key = "mailGold", label = TEXT("tr_mailGold", nameOf(m.gold.who)), value = money(m.gold.amount),
+        tip = { TEXT("tr_from", nameOf(m.gold.who)), TEXT.tr_mailGoldTip } }
+    end
+    if m.item then
+      local info = Schaetze.itemInfo(char, m.item.key)
+      rows[#rows + 1] = { key = "mailItem", label = TEXT("tr_mailItem", nameOf(m.item.who)), value = stackText(char, m.item.key, m.item.count),
+        tip = { TEXT("tr_from", nameOf(m.item.who)), TEXT.tr_mailItemTip, item = info and info.string or nil } }
+    end
+    if m.cod then
+      rows[#rows + 1] = { key = "cod", label = TEXT.tr_cod, value = money(m.cod), tip = { TEXT.tr_cod, TEXT.tr_codTip } }
+    end
+    add("mail", TEXT.tr_mailHead, rows)
+  end
+
+  if raw.trade then
+    local rows, t = {}, raw.trade
+    if t.gold then
+      rows[#rows + 1] = { key = "tradeGold", label = TEXT("tr_tradeGold", nameOf(t.gold.who)), value = money(t.gold.amount),
+        tip = { TEXT("tr_from", nameOf(t.gold.who)), TEXT.tr_tradeGoldTip } }
+    end
+    if t.item then
+      local info = Schaetze.itemInfo(char, t.item.key)
+      rows[#rows + 1] = { key = "tradeItem", label = TEXT("tr_tradeItem", nameOf(t.item.who)), value = stackText(char, t.item.key, t.item.count),
+        tip = { TEXT("tr_from", nameOf(t.item.who)), TEXT.tr_tradeItemTip, item = info and info.string or nil } }
+    end
+    add("trade", TEXT.tr_tradeHead, rows)
+  end
+  if #sections == 0 then return nil end
+  return sections
+end
+
 local cache = setmetatable({}, { __mode = "k" })
 
 local function buildStatic(index)
@@ -754,6 +936,7 @@ local function buildStatic(index)
   st.blue = try("blue", firstBlue, index, char)
   st.quality = try("quality", qualityOf, char)
   st.margin = try("margin", marginNotes, st, index) or {}
+  st.trade = try("trade", tradeData, index, char)
   return st
 end
 
@@ -1095,6 +1278,10 @@ function Schaetze.evaluate(index, opts)
   view.gear = st.gear
   view.blue = st.blue
   view.quality = st.quality
+  if st.trade then
+    local ok, sections = pcall(Schaetze.tradeView, st.trade, st.char)
+    if ok then view.trade = sections else view.partial = true end
+  end
   return view
 end
 

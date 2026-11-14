@@ -33,9 +33,11 @@ import { KEEPOUT_LUA_HELPER, findOverlaps, formatOverlaps, keepoutFor, PAGE_W } 
 import { decodePng, encodePng, KEEPOUT, renderSpreadRaw } from "./render-media.mjs";
 
 // I12: neun Reiter (Pages.ORDER); Dungeons und Plaene haengen bestehende Unteransichten neu auf
-export const TABS = ["reise", "chronik", "dungeons", "kampf", "quests", "plaene", "schaetze", "momente", "notizen"];
+export const TABS = ["reise", "chronik", "dungeons", "kampf", "quests", "plaene", "schaetze", "handwerk", "momente", "notizen"];
 const TAB_LABEL = { reise: "Reise", chronik: "Chronik", dungeons: "Dungeons", kampf: "Kampf", quests: "Quests", plaene: "Pläne", schaetze: "Schätze",
-  momente: "Momente", notizen: "Notizen" };
+  handwerk: "Handwerk", momente: "Momente", notizen: "Notizen" };
+// Reiter ohne eigenes Pergament leihen sich eins (Theme.PAPER_OF; Dungeons/Plaene zeigen hier weiter das Standardpapier)
+const PAPER_OF = { handwerk: "schaetze" };
 const DUNGEONS_CLOSE = `
   local P = NS.Journal.DungeonsPage
   local DV = P.questsView
@@ -56,6 +58,8 @@ export const SUBVIEWS = [
   ["reise", "akt", "NS.Journal.Frame.selectAct(1) NS.Journal.Frame.seek(0.5)", "NS.Journal.Frame.select(nil)"],
   ["reise", "kapitel", "local F = NS.Journal.Frame F.selectAct(1) F.selectChapter(F.state.model.acts[1].last) F.seek(0.5)",
     "NS.Journal.Frame.select(nil)"],
+  // I15: Heatmap (Zonenliste, Glut der Zone mit der meisten Zeit)
+  ["reise", "heatmap", 'NS.Journal.Frame.showSub("heatmap") H.advance(1)', 'NS.Journal.Frame.showSub("karte")'],
   // T2: To-Do-Seite mit Zielen (Probedaten ohne Sammler: Gegner mit Fortschritt, Gegenstand, Ort mit Entfernung, frei), Zettel auf "Gegner"
   ["plaene", "todo", 'local now = time() local L = { ' +
     '{ id = 1, kind = "kill", text = "Gescheckter Eber", need = 10, have = 4, progress = "4/10", created = now - 3 * 86400 }, ' +
@@ -88,6 +92,10 @@ export const SUBVIEWS = [
   ["chronik", "tagebuch", "NS.Journal.ChronikPage:OpenDiary()", "NS.Journal.ChronikPage:CloseSub()"],
   ["chronik", "weggefaehrten", "NS.Journal.ChronikPage:OpenCompanions()", "NS.Journal.ChronikPage:CloseSub()"],
   ["chronik", "feuer", "NS.Journal.ChronikPage:OpenFire()", "NS.Journal.ChronikPage:CloseSub()"],
+  // Vermaechtnis (Paket L, nur Forever): Legacy-Attrappen mit den Probe-Werten (Punkte 30 von 65, Paladin-Challenges, drei Baeume, vier Belohnungen)
+  ["chronik", "vermaechtnis", () => LEGACY_LUA, "NS.Journal.ChronikPage:CloseSub() LEGACY_RESTORE()"],
+  ["chronik", "vermaechtnis-berufe", () => LEGACY_LUA + "\n NS.Journal.ChronikPage.vermaechtnisView:SelectGroup('g15590')", "NS.Journal.ChronikPage:CloseSub() LEGACY_RESTORE()"],
+  ["chronik", "vermaechtnis-pvp", () => LEGACY_LUA + "\n NS.Journal.ChronikPage.vermaechtnisView:SelectGroup('g15600')", "NS.Journal.ChronikPage:CloseSub() LEGACY_RESTORE()"],
   // Meilensteine (I8): Abschnitt Stufe 1-10 und die Abschlussseite (Reise bis 60)
   ["chronik", "meilensteine-10", "NS.Journal.ChronikPage:OpenMilestones() NS.Journal.ChronikPage.milestonesView:SelectKey(10)", "NS.Journal.ChronikPage:CloseSub()"],
   ["chronik", "meilensteine-60", "NS.Journal.ChronikPage:OpenMilestones() NS.Journal.ChronikPage.milestonesView:SelectKey('final')", "NS.Journal.ChronikPage:CloseSub()"],
@@ -112,15 +120,95 @@ export const SUBVIEWS = [
   ["dungeons", "quests-brs", () => DUNGEONS_LUA(58, 'DV:SetAll(true) DV:OpenDungeon("1583") DV_LONG()'), DUNGEONS_CLOSE],
   ["dungeons", "quests-brs-offen", () => DUNGEONS_LUA(58, 'DV:SetAll(true) DV:OpenDungeon("1583") DV_LONG() local it = DV_MORE() if it then DV:OnItem(it) end'), DUNGEONS_CLOSE],
   // Lehrplan (Unter-Lesezeichen "Lehrplan", nur Forever): Untoter Paladin Stufe 20, ein Teil gelernt, ein Lehrer bekannt, Talentpunkt frei
+  ["handwerk", "rezeptbuch", "NS.Journal.HandwerkPage:ShowSub('rezeptbuch')", "NS.Journal.HandwerkPage:ShowSub('berufe')"],
+  ["handwerk", "kochen", "NS.Journal.HandwerkPage:Select('l185')", "local P = NS.Journal.HandwerkPage P:Select(P.entries[1].key)"],
   ["plaene", "lehrplan", () => LEHRPLAN_LUA, 'NS.Journal.PlaenePage:ShowSub("vorhaben") LEHRPLAN_RESTORE()'],
   // Zonen (Unter-Lesezeichen "Zonen", nur Forever): echtes Datenaddon, Untoter Paladin Stufe 24, Tirisfal ganz erledigt (Stempel)
   ["quests", "zonen", () => ZONES_LUA(24), ZONES_CLOSE],
   ["schaetze", "funde", "NS.Journal.SchaetzePage:OpenFunde()", "NS.Journal.SchaetzePage:CloseFunde()"],
   ["schaetze", "quellen", 'NS.Journal.SchaetzePage:SetFlow("bars")', 'NS.Journal.SchaetzePage:SetFlow("levels")'],
   ["schaetze", "besitz", 'NS.Journal.SchaetzePage:SetFlow("hold")', 'NS.Journal.SchaetzePage:SetFlow("levels")'],
+  // Auktionshaus (Unter-Lesezeichen): Rechnungen mit Namen, langen Namen, Mengen und Preisen; ein Eintrag ohne lesbaren Preis
+  ["schaetze", "auktion", () => `local A, P = NS.Journal.Auktionshaus, NS.Journal.SchaetzePage
+    AH_SAVED = A.rowsSource
+    local list = {
+      { "sold", "Leinenstoff", 20, 52000 }, { "bought", "Kupfererz", 10, 3000 }, { "sold", "Kristallisierter Blutrubin der Tiefen", 1, 1850000 },
+      { "sold", "Heiltrank", 5, 12500 }, { "bought", "Mondkraut", 40, 96000 }, { "sold", "Seidenstoff", 60, 410000 },
+      { "bought", "Schwerer Bogen der Wanderer", 1, 3400000 }, { "sold", "Eisenbarren", 15, 27000 }, { "sold", "Lebenswurz", 8, 6400 },
+      { "bought", "Gegenstand ohne Preis", 1, nil }, { "sold", "Zauberstoff", 12, 7800 }, { "bought", "Mithrilerz", 7, 112000 },
+      { "sold", "Wolfsfell", 25, 4400 }, { "bought", "Granatsplitter", 3, 8100 } }
+    A.rowsSource = function(index)
+      local out = {}
+      for i, e in ipairs(list) do
+        out[i] = { id = i, t = (index.lastT or time()) - (#list - i + 1) * 5400, kind = e[1], name = e[2], count = e[3], price = e[4], fee = e[1] == "sold" and math.floor((e[4] or 0) / 20) or nil }
+      end
+      return out
+    end
+    A.build(P.index, true)
+    P:OpenAuktion()`, "local P = NS.Journal.SchaetzePage P:CloseAuktion() NS.Journal.Auktionshaus.rowsSource = AH_SAVED"],
   ["momente", "buch", "local P = NS.Journal.MomentePage P:Read(P.view.library.books[1].key)", "NS.Journal.MomentePage:CloseBook()"],
   ["notizen", "edit", 'NS.Journal.NotizenPage:SetMode("edit")', 'NS.Journal.NotizenPage:SetMode("read")'],
 ];
+// Vermaechtnis-Vorschau: Attrappen des Forever-Clients (Werte wie in tests/vermaechtnis.test.mjs), nach dem Schliessen zurueckgesetzt
+export const LEGACY_LUA = `
+  LG_SAVED = LG_SAVED or { GetCategoryList = GetCategoryList, GetAchievementNumCriteria = GetAchievementNumCriteria, GetAchievementCriteriaInfo = GetAchievementCriteriaInfo, C_Traits = C_Traits, C_MajorFactions = C_MajorFactions, C_Spell = C_Spell, GetAchievementInfo = GetAchievementInfo,
+    GetCategoryNumAchievements = GetCategoryNumAchievements, GetCategoryInfo = GetCategoryInfo,
+    LOCALIZED_CLASS_NAMES_MALE = LOCALIZED_CLASS_NAMES_MALE }
+  function LEGACY_RESTORE()
+    for _, k in ipairs({ "C_Traits", "C_MajorFactions", "GetAchievementInfo", "GetCategoryNumAchievements", "GetCategoryInfo", "LOCALIZED_CLASS_NAMES_MALE", "GetCategoryList", "GetAchievementNumCriteria", "GetAchievementCriteriaInfo" }) do _G[k] = LG_SAVED[k] end
+    NS.Journal.Vermaechtnis.clearCache()
+  end
+  local TREE_NAMES = {
+    [1187] = { "Überstunden", "Reiche Ernte", "Ködermeister", "Leistungsprämie", "Feilschen", "Meisterkoch", "Eifriges Studium", "Sammlerglück", "Kräuterkenner" },
+    [1188] = { "Gut ausgeruht", "Abenteuerlust", "Feldmedizin", "Feldführer", "Begabt", "Wachsamkeit", "Vielflieger", "Weitblick", "Beinarbeit" },
+    [1189] = { "Feinschmecker", "Schnell und tot", "Verstärken", "Diplomat", "Beständigkeit", "Für die Ehre", "Zähigkeit", "Glückspilz", "Ausdauer" },
+  }
+  local RANKS = { 5, 5, 2, 3, 2, 5, 1, 4, 3 }
+  C_Traits = {
+    GetConfigIDByTreeID = function(t) return 9000 + t end,
+    GetTreeNodes = function(t) local o = {} for k = 1, 9 do o[k] = t * 100 + k end return o end,
+    GetNodeInfo = function(c, n) local k = n % 100 return { currentRank = ({ 5, 3, 2, 0, 2, 4, 1, 0, 0 })[k], maxRanks = RANKS[k], isVisible = true, activeEntry = { entryID = n } } end,
+    GetEntryInfo = function(c, e) return { definitionID = e } end,
+    GetDefinitionInfo = function(d) local k = d % 100 if k == 9 then return {} end return { overrideName = TREE_NAMES[math.floor(d / 100)][k] } end,
+    GetTreeCurrencyInfo = function() return { { traitCurrencyID = 4225, quantity = 14, spent = 5, maxQuantity = 16 } } end,
+    GetTraitCurrencyForAchievement = function(cur, id) return id % 3 == 0 and 2 or 1 end,
+    GetMaxAvailableTraitCurrency = function() return 65 end,
+  }
+  C_MajorFactions = {
+    GetMajorFactionData = function() return { name = "Vermächtnisstrecke", renownLevel = 30, maxLevel = 90 } end,
+    GetCurrentRenownLevel = function() return 30 end,
+    GetRenownRewardsForLevel = function(f, l) return ({
+      [15] = { { itemID = 1015, name = "Nachbau der Eisenschmiede-Büchse", isCollected = true } },
+      [25] = { { itemID = 1025, name = "Geisterbärenjunges", isCollected = false } },
+      [40] = { { itemID = 1040, name = "Wappenrock des Geisterbären", isCollected = false } },
+      [55] = { { itemID = 1055, name = "Zügel des Geisterbären", isCollected = false } } })[l] or {} end,
+  }
+  LOCALIZED_CLASS_NAMES_MALE = { DRUID = "Druide", HUNTER = "Jäger", MAGE = "Magier", PALADIN = "Paladin", PRIEST = "Priester", ROGUE = "Schurke",
+    SHAMAN = "Schamane", WARLOCK = "Hexenmeister", WARRIOR = "Krieger" }
+  local CATS = { [15568] = { "Legacy-Herausforderungen", -1 }, [15590] = { "Berufe", -1 }, [15591] = { "Schmiedekunst", 15590 }, [15592] = { "Alchemie", 15590 },
+    [15593] = { "Ingenieurskunst", 15590 }, [15600] = { "PvP", -1 },
+    [15610] = { "Dungeons", -1 }, [15620] = { "Schlachtfelder", -1 }, [15630] = { "Spieler gegen Spieler", -1 }, [15640] = { "Abenteuer", -1 } }
+  GetCategoryList = function() return { 15568, 15577, 15580, 15585, 15590, 15591, 15592, 15593, 15600, 15610, 15620, 15630, 15640 } end
+  GetCategoryInfo = function(id) local c = CATS[id] if c then return c[1], c[2], 0 end return "Klasse " .. id, 15568, 0 end
+  GetCategoryNumAchievements = function(id) if id == 15590 or id == 15568 then return 0 end if id == 15600 then return 5 end if id >= 15610 then return 4 end return 3, 3, 0 end
+  GetAchievementNumCriteria = function(id) if id % 10 == 2 then return 1 end return 0 end
+  GetAchievementCriteriaInfo = function(id) return "Skill", 0, false, 150 + (id % 7) * 10, 225 end
+  -- Paladin: Novize und Erfahren erledigt (Novize mit Datum), Druide und Krieger Novize erledigt
+  GetAchievementInfo = function(cat, i)
+    local id = cat * 10 + i
+    local done = (cat == 15580 and i <= 2) or ((cat == 15577 or cat == 15585) and i == 1)
+    local names = { [15591] = { "Lehrling der Schmiedekunst", "Geselle der Schmiedekunst", "Meister der Schmiedekunst" }, [15592] = { "Lehrling der Alchemie", "Geselle der Alchemie", "Meister der Alchemie" },
+      [15593] = { "Lehrling der Ingenieurskunst", "Geselle der Ingenieurskunst", "Meister der Ingenieurskunst" } }
+    local nm = (names[cat] and names[cat][i]) or ("Erfolg " .. id)
+    if cat == 15600 then nm = ({ "Erster Sieg", "Kriegsheld", "Schlachtfeld-Veteran", "Meister der Arena", "Ehrenhafter Kämpfer" })[i] end
+    if cat == 15591 and i <= 2 then done = true end
+    if done then return id, nm, 10, true, 11, 4 + i, 26, "", 0, 0, "", false, true, "Ich", false end
+    return id, nm, 10, false, nil, nil, nil, "", 0, 0, "", false, false, nil, false
+  end
+  NS.Journal.Vermaechtnis.clearCache()
+  NS.Journal.ChronikPage:OpenVermaechtnis()
+  H.advance(3) -- the discovery scan (timer ticks) finds the groups by their Legacy points`;
+
 // Offene Quests: das echte Datenaddon (wird erst beim Oeffnen der Rubrik gelesen), Kartenkunst als Platzhalter-Kachel
 const QUEST_DATA_DIR = path.join(ROOT, "addon", "InkAndEmbers_QuestData");
 const QUEST_DATA_LUA = () => `
@@ -239,6 +327,7 @@ export const EMPTY_VIEWS = [
   ["dungeons", "", "", ""],
   ["plaene", "", "", "", "reise"],
   ["schaetze", "", "", ""],
+  ["handwerk", "", "", ""],
   ["schaetze", "quellen", 'NS.Journal.SchaetzePage:SetFlow("bars")', 'NS.Journal.SchaetzePage:SetFlow("levels")'],
   ["momente", "", "", ""],
   ["notizen", "", "", ""],
@@ -258,6 +347,18 @@ end
     'item = { kind = "text", label = cut(plain(c._text), 28), full = KO_FULL(c._text), rect = { l, t, tw, th } }')
   .replace('item = { kind = "control", label = (c._text and cut(plain(c._text), 22)) or kind, rect = { r[1], r[2], r[3], r[4] } }',
     'item = { kind = "control", label = (c._text and cut(plain(c._text), 22)) or kind, full = (kind == "EditBox" and c._text and c._text ~= "") and KO_FULL(c._text) or nil, rect = { r[1], r[2], r[3], r[4] } }')
+  // P5: Linien (CreateLine: Skillkurve, Goldfluss) als Elemente "line" mit Anfang/Ende (Pixel relativ zum umschliessenden Rechteck);
+  // Anfang/Ende der Attrappe sind relativ zum Elternrahmen (oben links) gemeint
+  .replace('elseif CONTROL[kind] and r[3] > 0 and r[4] > 0 then',
+    'elseif kind == "Line" and c._start and c._end then\n' +
+    '            local pr = rectOf(o)\n' +
+    '            if pr then\n' +
+    '              local x1, y1, x2, y2 = pr[1] + c._start[1], pr[2] - c._start[2], pr[1] + c._end[1], pr[2] - c._end[2]\n' +
+    '              local l, t = math.min(x1, x2), math.min(y1, y2)\n' +
+    '              item = { kind = "line", label = "line", rect = { l, t, math.max(math.abs(x2 - x1), 1), math.max(math.abs(y2 - y1), 1) },\n' +
+    '                ln = { x1 - l, y1 - t, x2 - l, y2 - t, c._thickness or 1 } }\n' +
+    '            end\n' +
+    '          elseif CONTROL[kind] and r[3] > 0 and r[4] > 0 then')
   // To Do u. ae.: ganzflaechiges Blatt (Pergament) einer Ueberlagerung ueber der Karten-Ebene mitzeichnen, damit es abdeckt, was
   // darunter liegt (KO_BIG_MIN = Frame-Ebene; der Keepout-Sammler laesst so grosse Texturen weg). Im Bericht zaehlt es nicht.
   .replace("r[3] * r[4] <= pageArea * 0.35", "(r[3] * r[4] <= pageArea * 0.35 or (KO_BIG_MIN and (o._level or 0) >= KO_BIG_MIN))")
@@ -265,10 +366,10 @@ end
     'item = { kind = "tex", label = cut(name, 28), big = r[3] * r[4] > pageArea * 0.35 or nil, rect = { r[1], r[2], r[3], r[4] } }')
   .replace("out[#out + 1] = { kind = item.kind, label = item.label, x = rc[1] + ox, y = rc[2] + oy, w = rc[3], h = rc[4] }",
     `out[#out + 1] = { kind = item.kind, label = item.label, x = rc[1] + ox, y = rc[2] + oy, w = rc[3], h = rc[4],
-              full = item.full, big = item.big, font = c._font and c._font[1] or nil, size = c._font and c._font[2] or nil, color = c._color,
+              full = item.full, big = item.big, ln = item.ln, font = c._font and c._font[1] or nil, size = c._font and c._font[2] or nil, color = c._color,
               tex = type(c._tex) == "string" and c._tex or nil, coords = c._coords, jh = c._justifyH, desat = c._desat,
               alpha = c._alpha, wrap = c._wordWrap, fw = c._w, ml = c._maxLines, sw = c._kind == "FontString" and c:GetStringWidth() or nil, shOff = c._shadowOff, shCol = c._shadowColor, sp = c._spacing, ux = item.rect[1] + ox, uy = item.rect[2] + oy, uw = item.rect[3], uh = item.rect[4],
-              lvl = (c._kind == "Texture" or c._kind == "FontString") and (o._level or 0) or (c._level or 0) }`);
+              lvl = (c._kind == "Texture" or c._kind == "FontString" or c._kind == "Line") and (o._level or 0) or (c._level or 0) }`);
 
 // Ausruestungsfunde (B2d): ein paar Dutzend Beute-Eintraege ab Gruen, damit die Fundliste (Schaetze -> Unteransicht) Zeilen hat
 const FUNDE_LUA = `
@@ -304,6 +405,60 @@ const NOTES_LUA = String.raw`
   add("Wolfsrudel am Nordhang", "- {tod} **Vorsicht** nach Einbruch der Nacht\n- drei Elitewölfe {rt8}", false, false)
   add("Kräuterroute", "Friedensblume wächst entlang des Flusses. Silberblatt eher an den Hängen.", false, false)
   add("Erzader am See", "# Was ich brauche\n- Kupfererz {rt1}\n- Stoff: |Hitem:2589:0|h[Leinenstoff]|h\n[ ] 10 Kupferbarren schmelzen\n[x] Spitzhacke gekauft\n---\n{rot}Achtung:{/} Der **Murloc-Anführer** {selten} streift um den See.\nZurück zum {ruhestein} in Goldhain.", true, true)
+  return "ok"`;
+
+// Handwerk (P5): Probedaten fuer den Reiter. Die Zeilen SK/SP des Reise-Laufs (tests/fixtures/journey.lua) sind Zufallsrauschen
+// (Berufe und Waffen durcheinander); darum rechnet das echte Modell (journal/model/Handwerk.lua) hier auf einem eigenen, kleinen
+// Zeitstrahl: Bergbau und Schmiedekunst mit Skillkurve ueber 150, Kochkunst, Angeln, Erste Hilfe, Rezepte, Herstellungen, Zaehler.
+// Dann ersetzt eine Attrappe die Auswertung, damit die Seite diese Daten zeigt (nur in der Vorschau).
+export const HANDWERK_LUA = String.raw`
+  local I, HW = NS.Journal.Index, NS.Journal.Handwerk
+  local real = I.get({ sync = true })
+  local t0 = real and real.startT or H.now - 100 * 3600
+  local H0 = 3600
+  local lines = {}
+  local function line(t, code, ...)
+    local f = { ... }
+    for i = 1, #f do f[i] = tostring(f[i] == nil and "" or f[i]) end
+    lines[#lines + 1] = { t = t, text = code .. "~" .. table.concat(f, "~") }
+  end
+  local function rise(name, lineID, start, step, r0, r1, lvl0, lvl1)
+    for r = r0, r1 do
+      local cap = r <= 75 and 75 or (r <= 150 and 150 or (r <= 225 and 225 or 300))
+      local lvl = lvl0 + math.floor((lvl1 - lvl0) * (r - r0) / math.max(1, r1 - r0))
+      local t = start + (r - r0) * step + ((r * 37) % 11) * 20
+      line(t, "SK", name, r, cap, lineID, lvl, r == r0 and "new" or "up")
+    end
+  end
+  rise("Bergbau", 186, t0 + 1.5 * H0, 500, 1, 168, 4, 41)
+  rise("Schmiedekunst", 164, t0 + 2.2 * H0, 640, 1, 142, 5, 38)
+  rise("Kochkunst", 185, t0 + 3 * H0, 900, 1, 95, 6, 33)
+  rise("Angeln", 356, t0 + 5 * H0, 1300, 1, 60, 8, 30)
+  rise("Erste Hilfe", 129, t0 + 4 * H0, 700, 1, 75, 7, 22)
+  local RECIPES = { { 2.3, 5, "Raue Wetzsteine" }, { 2.4, 5, "Kupferbarren" }, { 3.4, 9, "Kupferne Röhre" }, { 4.1, 12, "Bronzebarren" },
+    { 6.2, 17, "Schwerer Wetzstein" }, { 9.8, 22, "Eisenbarren" }, { 12.5, 26, "Gehärtete Eisenbarren" }, { 3.1, 6, "Gebackenes Brot" },
+    { 5.3, 14, "Würziges Wolfsfleisch" }, { 8.2, 20, "Gebratener Murloc" }, { 4.2, 7, "Leinenverband" }, { 6.5, 15, "Schwerer Leinenverband" } }
+  for _, r in ipairs(RECIPES) do line(t0 + r[1] * H0 * 5, "SP", "", "recipe", r[2], 1420, r[3]) end
+  local function at(name, rank)
+    for _, l in ipairs(lines) do
+      if l.text:find("^SK~" .. name .. "~" .. rank .. "~") then return l.t end
+    end
+    return t0
+  end
+  table.sort(lines, function(a, b) return a.t < b.t end)
+  local body, hdr = {}, math.floor(t0)
+  for i, l in ipairs(lines) do body[i] = string.format("%d~%s", math.floor(l.t - hdr), l.text) end
+  local fake = {
+    char = { log = { "#~" .. hdr .. "~0\n" .. table.concat(body, "\n") },
+      snapshots = { items = { [3576] = { name = "Kupferbarren" }, [2840] = { name = "Bronzebarren" } } },
+      counters = { gather = { ore = 842, herb = 133, leather = 211 }, fishing = { [6291] = 57, [6358] = 12 },
+        crafted = { [2840] = 31, [2592] = 24 } } },
+    startT = t0, firstT = t0, lastT = real and real.lastT or t0 + 100 * 3600,
+    lists = { LT = { { t = at("Schmiedekunst", 10) + 2, ln = 1, "3576", "2", "2", "craft", "", "9", "1420" },
+      { t = at("Schmiedekunst", 60) + 3, ln = 2, "2840", "3", "2", "craft", "", "21", "1420" } } },
+  }
+  local res = HW.aggregate(fake)
+  HW.aggregate = function() return res end
   return "ok"`;
 
 const HELP = `Vorschaubilder aller Doppelseiten mit Probedaten (Headless-Browser)
@@ -377,7 +532,7 @@ function texUrl(tex) {
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const rgba = (c, a = 1) => (Array.isArray(c) ? `rgba(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)},${(c[3] ?? 1) * a})` : null);
 // weisse Zeichen, die im Spiel per SetVertexColor eingefaerbt werden
-const WHITE_TEX = /(DiaryCircle|DiaryStroke|Stroke|Arrow|Dash|Disc|Glow|RoundRect|RoundRing|ClockBar|Grave|Markers|Sword|MapFade|PageFade|TodoMarks)$/i;
+const WHITE_TEX = /(DiaryCircle|DiaryStroke|Stroke|Arrow|Dash|Disc|Glow|RoundRect|RoundRing|ClockBar|Grave|Markers|Sword|MapFade|PageFade|TodoMarks|HeatBlob)$/i;
 const DIARY_MARK_WHITE = /DiaryMarks$/i;
 
 function fontCss(file, size) {
@@ -407,6 +562,13 @@ function itemHtml(tmp, it) {
     const sz = it.size || 12;
     const lh = it.sp > 0 ? `line-height:${sz + it.sp}px;margin-top:${-((sz + it.sp) - sz * 1.2) / 2}px` : "line-height:1.2";
     return `<div style="position:absolute;left:${it.x}px;top:${it.y}px;width:${Math.max(it.w, 1) + (multi ? 0 : 60)}px;${multi ? `height:${it.h}px;` : ""}${jh === "right" && !multi ? `margin-left:-60px;` : ""}${jh === "center" && !multi ? `margin-left:-30px;` : ""}text-align:${jh};color:${color};${textShadow(it)}${fontCss(it.font, it.size)};${lh};white-space:${multi ? "normal" : "nowrap"};overflow:${it.sp > 0 ? "visible" : "hidden"}">${esc(it.full ?? it.label)}</div>`;
+  }
+  if (it.kind === "line" && Array.isArray(it.ln)) {
+    const [x1, y1, x2, y2, th] = it.ln;
+    const ax = it.x + x1, ay = it.y + y1, bx = it.x + x2, by = it.y + y2;
+    const len = Math.hypot(bx - ax, by - ay), ang = (Math.atan2(by - ay, bx - ax) * 180) / Math.PI;
+    const col = rgba(it.color) || "rgba(43,33,24,0.9)";
+    return '<div style="position:absolute;left:' + ax + 'px;top:' + (ay - th / 2) + 'px;width:' + len + 'px;height:' + th + 'px;background:' + col + ';transform-origin:0 50%;transform:rotate(' + ang + 'deg)"></div>';
   }
   if (it.kind !== "tex") return "";
   const alpha = it.alpha ?? 1;
@@ -460,7 +622,7 @@ function spreadHtml(tmp, paperPng, items, decor) {
   const top = KEEPOUT.top;
   // P2: nach Frame-Ebene, darin erst Texturen, dann Texte (wie --buch); Ueberlagerungen wie das To-Do-Blatt decken so ab.
   // N1: Eingabefelder mit Inhalt (control + full) zeichnen wie Texte.
-  const drawn = items.filter((i) => i.kind === "tex" || i.kind === "text" || (i.kind === "control" && i.full));
+  const drawn = items.filter((i) => i.kind === "tex" || i.kind === "text" || i.kind === "line" || (i.kind === "control" && i.full));
   const sorted = drawn.map((it, i) => ({ it, i })).sort((a, b) => (a.it.lvl ?? 0) - (b.it.lvl ?? 0)
     || (a.it.kind !== "tex") - (b.it.kind !== "tex") || a.i - b.i).map((e) => e.it);
   const body = sorted.map((i) => itemHtml(tmp, { ...i, y: i.y + top, uy: (i.uy ?? i.y) + top })).join("\n");
@@ -496,6 +658,7 @@ ${UIMOCK}` });
   if (profil === "voll") {
     vm.exec(FUNDE_LUA);
     vm.exec(NOTES_LUA);
+    vm.exec(HANDWERK_LUA);
   }
   vm.slash("/chronik");
   vm.exec(PREVIEW_LUA + "\nreturn 'ok'");
@@ -832,14 +995,22 @@ export function main(argv) {
       if (map) {
         const [mx, my, mw, mh] = map;
         const inMap = (i) => i.x >= mx && i.y >= my && i.x + i.w <= mx + mw && i.y + i.h <= my + mh;
-        items = items.filter((i) => !inMap(i));
+        // I15: die Glut der Heatmap (eigene Textur Media/HeatBlob) bleibt ueber dem Platzhalter sichtbar, aber wie im Client
+        // (Kartenbox mit SetClipsChildren) auf die Kartenflaeche beschnitten: sichtbares Rechteck = Schnitt mit der Karte,
+        // ux/uy/uw/uh (ungekuerztes Rechteck) bleiben fuer den Texturausschnitt
+        const isBlob = (i) => i.kind === "tex" && /HeatBlob$/i.test(i.tex || "");
+        const clipToMap = (i) => {
+          const l = Math.max(i.x, mx), t = Math.max(i.y, my), r = Math.min(i.x + i.w, mx + mw), bt = Math.min(i.y + i.h, my + mh);
+          return r > l && bt > t ? { ...i, ux: i.ux ?? i.x, uy: i.uy ?? i.y, uw: i.uw ?? i.w, uh: i.uh ?? i.h, x: l, y: t, w: r - l, h: bt - t } : null;
+        };
+        items = items.filter((i) => !inMap(i) || isBlob(i)).map((i) => (isBlob(i) ? clipToMap(i) : i)).filter(Boolean);
         items.unshift({ kind: "tex", tex: "MAP", x: mx + 20, y: my + 20, w: mw - 40, h: mh - 40, label: "Karte" },
           { kind: "text", full: "Karte (Kunst aus dem Spiel)", x: mx + 20, y: my + mh / 2 - 8, w: mw - 40, h: 16, size: 13, jh: "CENTER",
             font: "ARIALN", color: [0.42, 0.31, 0.2, 0.8], label: "Karte" });
       }
       const paper = path.join(tmp, `paper_${id}.png`);
       if (!existsSync(paper)) {
-        const img = renderSpreadRaw(browser, tmp, id);
+        const img = renderSpreadRaw(browser, tmp, PAPER_OF[id] ?? id);
         writeFileSync(paper, encodePng(img.w, img.h, img.rgba));
       }
       const file = path.join(SCREENS, `${prefix}-${name}.png`);

@@ -35,6 +35,24 @@ Theme.FONT = {
   label = "Fonts\\ARIALN.TTF",
 }
 Theme.FONT.note = Theme.FONT.title
+Theme.FONT_FALLBACK = "Fonts\\FRIZQT__.TTF" -- last resort of Theme.font if the client cannot load the chosen file
+
+-- Russian: the Latin client files above have no Cyrillic glyphs (boxes). Only when the active language is ruRU the Blizzard
+-- Cyrillic variants take over (Arial Narrow already has Cyrillic; the bundled Caveat and Spectral cover it too). The language is
+-- known after Locale.apply (ADDON_LOADED, Core.lua), so this runs then and changes the shared Theme.FONT table (Widgets.FONT is the
+-- same table) and the few modules that keep their own font path. Every other language leaves the fonts untouched.
+Theme.CYRILLIC_FONT = { title = "Fonts\\MORPHEUS_CYR.TTF", text = "Fonts\\FRIZQT___CYR.TTF" }
+function Theme.applyLocaleFonts()
+  local L = ns.Locale
+  if not (L and L.active == "ruRU") then return false end
+  local C = Theme.CYRILLIC_FONT
+  Theme.FONT.title, Theme.FONT.note, Theme.FONT.text = C.title, C.title, C.text
+  local J = ns.Journal
+  if J and J.QuestTracker and J.QuestTracker.FONT then J.QuestTracker.FONT.head = C.text end
+  if J and J.Smoke then J.Smoke.FONT = C.title end
+  if J and J.TodoDock then J.TodoDock.FALLBACK_FILE = C.text end
+  return true
+end
 
 local MEDIA = "Interface\\AddOns\\InkAndEmbers\\Media\\"
 Theme.MEDIA = MEDIA
@@ -45,6 +63,7 @@ Theme.TEX = {
   ring = MEDIA .. "RoundRing", dash = MEDIA .. "Dash", mapFade = MEDIA .. "MapFade", pageFade = MEDIA .. "PageFade",
   seals = MEDIA .. "Seals", zoneSeal = MEDIA .. "ZoneSeal",
   toast = MEDIA .. "Toast", glow = MEDIA .. "Glow", disc = MEDIA .. "Disc",
+  heatBlob = MEDIA .. "HeatBlob", -- soft round ember of the heat map (journal/HeatmapView.lua)
   welcomeCard = MEDIA .. "WelcomeCard",
   welcomeBack = MEDIA .. "WelcomeBack",
   hatch = MEDIA .. "Hatch",
@@ -63,7 +82,8 @@ Theme.BOOK_SLICE = { w = 1888, h = 1275, margin = 48, ring = 72, corner = 160, s
 -- Parchment per tab: one page pair per tab, split at the fold from one image (Media/Page_<tab>_L/_R, SPREAD_CROPS in
 -- scripts/render-media.mjs). Unknown tabs get the journey parchment. Tabs without an own page pair borrow one (Theme.PAPER_OF,
 -- I12): Dungeons sits on the Chronik parchment (its runs came from there), Pläne on the Quests parchment (to-dos, training).
-Theme.PAPER_OF = { dungeons = "chronik", plaene = "quests" }
+-- Handwerk (change "datenbuecher" P5) sits on the Schätze parchment (gold, finds and crafting belong together).
+Theme.PAPER_OF = { dungeons = "chronik", plaene = "quests", handwerk = "schaetze" }
 function Theme.paper(id)
   id = Theme.PAPER_OF[id] or id
   local known = false
@@ -162,6 +182,7 @@ local TT = ns.Locale.ns("Theme", {
   tab_quests = "Quests",
   tab_plaene = "Pläne",
   tab_schaetze = "Schätze",
+  tab_handwerk = "Handwerk",
   tab_momente = "Momente",
   tab_notizen = "Notizen",
 })
@@ -179,6 +200,7 @@ Theme.TABS = {
   tab("quests"),
   tab("plaene"),
   tab("schaetze"),
+  tab("handwerk"),
   tab("momente"),
   tab("notizen"),
 }
@@ -240,12 +262,13 @@ function Theme.sealLayers(seal, tier)
 end
 
 -- Cell per tab id (not per order) of the main tabs (Media/BookmarksBronze.tga, BOOKMARK_IDS in render-media.mjs): 0..6 from the
--- first Gemini image, 7 (dungeons) and 8 (plaene) from the second (TAB_BAND_CROP2).
-Theme.BOOKMARK_CELL = { reise = 0, chronik = 1, kampf = 2, quests = 3, schaetze = 4, momente = 5, notizen = 6, dungeons = 7, plaene = 8 }
+-- first Gemini image, 7 (dungeons) and 8 (plaene) from the second (TAB_BAND_CROP2), 9 (handwerk) from the third (TAB_BAND_CROP3).
+Theme.BOOKMARK_CELL = { reise = 0, chronik = 1, kampf = 2, quests = 3, schaetze = 4, momente = 5, notizen = 6, dungeons = 7, plaene = 8,
+  handwerk = 9 } -- 9: anvil with hammer (third source, TAB_BAND_CROP3 in render-media.mjs)
 -- Sub-bookmark atlas (Media/Bookmarks.tga, 512 x 1024): seven cells of 512 x 96 stacked (SUB_BOOKMARK_IDS/BOOKMARK_ATLAS in
 -- render-media.mjs; cell ratio 512 : 96). The two newer tabs borrow a colour there: Dungeons the Kampf ribbon, Pläne the Reise one.
 Theme.BOOKMARK_ATLAS = { w = 512, h = 1024, cellW = 512, cellH = 96 }
-Theme.SUB_BOOKMARK_CELL = { reise = 0, chronik = 1, kampf = 2, quests = 3, schaetze = 4, momente = 5, notizen = 6, dungeons = 2, plaene = 0 }
+Theme.SUB_BOOKMARK_CELL = { reise = 0, chronik = 1, kampf = 2, quests = 3, schaetze = 4, momente = 5, notizen = 6, dungeons = 2, plaene = 0, handwerk = 4 }
 function Theme.bookmarkCoords(id)
   local i = Theme.SUB_BOOKMARK_CELL[id]
   if i == nil then return nil end
@@ -580,7 +603,15 @@ end
 
 function Theme.font(fs, kind, size, color, flags)
   local file = Theme.FONT[kind] or Theme.FONT.text
-  local ok = pcall(fs.SetFont, fs, file, size or 12, flags or "")
+  local ok, res = pcall(fs.SetFont, fs, file, size or 12, flags or "")
+  ok = ok and res ~= false -- the client reports a missing font file (e.g. a _CYR file) as false: never leave the text invisible
+  if not ok then
+    local std = type(STANDARD_TEXT_FONT) == "string" and STANDARD_TEXT_FONT or Theme.FONT_FALLBACK
+    if std ~= file then
+      local ok2, res2 = pcall(fs.SetFont, fs, std, size or 12, flags or "")
+      if ok2 and res2 ~= false then ok, file = true, std end
+    end
+  end
   if not ok and fs.SetFontObject and GameFontNormal then fs:SetFontObject(GameFontNormal) end
   Theme.ink(fs, kind, ok and file or nil, size or 12)
   if color then Theme.color(fs, color) end

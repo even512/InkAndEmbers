@@ -28,6 +28,8 @@ ignore:
   - addon/InkAndEmbers/journal/FireProbe.lua
   - addon/InkAndEmbers/journal/WardrobeProbe.lua
   - addon/InkAndEmbers/journal/QuestTrackerProbe.lua
+  - addon/InkAndEmbers/journal/LegacyProbe.lua
+  - addon/InkAndEmbers/journal/ProfessionProbe.lua
   - .github
   - .gitignore
   - .gitattributes

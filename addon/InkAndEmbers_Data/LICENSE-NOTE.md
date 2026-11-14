@@ -20,3 +20,10 @@ ergänzt). Den genauen Stand nennt der Kopf der Dateien.
 
 Die Daten dürfen unter den Bedingungen der GPL-3.0 weitergegeben und verändert werden (Quellenangabe, Lizenztext,
 Hinweis auf Änderungen beibehalten). Es gibt keine Gewähr.
+
+**Zusatz / Addition - `Recipes.lua`:** Die Berufsrezepte (Pläne > Handwerk) stammen aus **"What's Training?"** (Sveng/fusionpit,
+https://github.com/fusionpit/WhatsTraining, `Crafting/Recipes/Camelot`, Lizenz **MIT**, Copyright (c) 2019; Lizenztext unverändert in
+`LICENSE-WhatsTraining.txt`), umgeformt in ein kompaktes Textformat mit `scripts/build-recipe-data.mjs` (nichts hinzugefügt, Rezepte ohne
+Quelle ausgelassen). MIT-lizenzierter Inhalt darf in diesem GPL-3.0-Ordner mitgeliefert werden; der MIT-Hinweis bleibt dabei erhalten. /
+The profession recipes in `Recipes.lua` come from "What's Training?" (MIT, see `LICENSE-WhatsTraining.txt`), converted by
+`scripts/build-recipe-data.mjs`; the MIT notice is kept.

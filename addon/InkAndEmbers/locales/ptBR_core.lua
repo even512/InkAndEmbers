@@ -8,13 +8,18 @@ L.add("ptBR", "Locale", {
   deDE = "Deutsch",
   enUS = "English",
   ptBR = "Português (Brasil)",
-  tip = "Idioma do diário de viagem. Automático: alemão em clientes alemães, português brasileiro em clientes ptBR e inglês nos demais. Entra em vigor após /reload.",
+  frFR = "Français",
+  esES = "Español",
+  esMX = "Español (México)",
+  ruRU = "Русский",
+  itIT = "Italiano",
+  tip = "Idioma do diário de viagem. Automático: o idioma do cliente, se o diário o falar (alemão, inglês, português, francês, espanhol, russo, italiano); caso contrário, inglês. Entra em vigor após /reload.",
   reloadLabel = "Aplicar idioma",
   reloadButton = "Salvar e recarregar",
   reloadTip = "Abre a janela de salvamento (como /chronik save): ao salvar, a interface é recarregada e o idioma escolhido é aplicado.",
   changed = "Idioma: %s. Entra em vigor após /reload (ou /chronik save).",
   unchanged = "Idioma: %s.",
-  usage = "Idioma: /chronik language auto | de | en | ptbr (atual: %s).",
+  usage = "Idioma: /chronik language auto | de | en | ptbr | fr | es | mx | ru | it (atual: %s).",
 })
 
 L.add("ptBR", "Core", {
@@ -49,7 +54,7 @@ L.add("ptBR", "Core", {
   helpOpen = "/chronik open - missões abertas (aba \"Abertas\" em Missões)",
   helpOpenTest = "/chronik open test - ativa o modo de teste no Retail (\"test off\" encerra)",
   helpTrain = "/chronik training - seu plano de treinamento de classe (aba \"Treinamento\" em Missões, apenas no WoW Forever); \"training status\" mostra o estado",
-  helpLanguage = "/chronik language - escolher idioma: \"language auto\", \"language de\", \"language en\" ou \"language ptbr\" (entra em vigor após /reload)",
+  helpLanguage = "/chronik language - escolher idioma: \"language auto\", \"language de\", \"language en\", \"language ptbr\" ou \"language fr | es | mx | ru | it\" (entra em vigor após /reload)",
   helpReset = "/chronik reset - restaurar o tamanho e a posição do diário de viagem",
   helpSave = "/chronik save - abrir a janela de salvamento (salvar recarrega a interface)",
   helpBackup = "/chronik backup - estado da segurança dos dados: cópia de segurança deste personagem, último salvamento e ocupação do arquivo",
@@ -315,4 +320,30 @@ L.add("ptBR", "col.Campfire", {
   noGuest = "Não há convidado simulado com esse nome.",
   guestSays = "[Sim] %s diz: %s",
   sayError = "Falar: %s",
+})
+
+-- collectors/CraftTodo.lua
+L.add("ptBR", "col.CraftTodo", {
+  todo_one = "Ao instrutor de profissão: %s nova receita (%s)",
+  todo_other = "Ao instrutor de profissão: %s novas receitas (%s)",
+  unitG = "g",
+  unitS = "s",
+  unitK = "c",
+})
+
+-- collectors/Einkaufszettel.lua (change "runde3", package E)
+L.add("ptBR", "col.Einkauf", {
+  title = "Lista de compras: %s× %s",
+  ready = "pronta",
+  errOff = "A lista de compras só existe no WoW Forever.",
+  errCount = "Escolha um número de 1 a 999.",
+  errRecipe = "Esta receita ainda não está salva no livro de receitas. Abra a janela da profissão uma vez.",
+  errNotReady = "Ainda faltam materiais.",
+  errNoApi = "No momento não é possível fabricar.",
+  errWindow = "Abra primeiro a janela da profissão: %s.",
+  errBlocked = "O jogo bloqueia a fabricação daqui. Fabrique na janela da profissão: %s.",
+  errCombat = "Não é possível em combate.",
+  errFull = "A lista de tarefas está cheia.",
+  moreLines = "… %s a mais",
+  errNotReadyChar = "O personagem ainda não está pronto.",
 })

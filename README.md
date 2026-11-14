@@ -42,10 +42,10 @@ that you can say in /say with a click, or throw away. Who sat with you is writte
 Smaller things: pop-ups for new medals and areas, a welcome greeting, a short introduction book (`/chronik tutorial`), and
 HUD elements that can be moved in the game's Edit Mode.
 
-**Languages:** English, German and Brazilian Portuguese. The Portuguese translation is by paulovnas (thank you! PR #1). It is
-selected automatically on a ptBR client; on another client choose it in the language setting or with `/chronik language ptbr`,
-then reload. Texts added after the translation, the tutorial illustrations and the bundled offline search names show in
-English until they are translated (`node scripts/locale-missing.mjs ptBR` lists them).
+**Languages:** English, German, French, Spanish (Spain and Mexico), Russian, Italian and Brazilian Portuguese. The Portuguese translation is by paulovnas (thank you! PR #1); French, Spanish, Russian and Italian were translated by machine, so improvements are welcome. The language follows the game client automatically;
+on another client choose it in the language setting or with `/chronik language fr|es|mx|ru|it|ptbr`, then reload. Texts added after a
+translation, the tutorial illustrations and the bundled offline search names show in English until they are translated
+(`node scripts/locale-missing.mjs <lang>` lists them, for example `frFR` or `ptBR`).
 
 ## Installation
 
@@ -77,7 +77,7 @@ New files such as textures and fonts are only picked up after a full restart of 
 | `/chronik note` | show or hide the quick note field |
 | `/chronik open` | open the Open tab under Quests |
 | `/chronik training` | open the Training tab under Plans (WoW Forever only; `training status` prints the state) |
-| `/chronik language` | `auto`, `de`, `en` or `ptbr`; takes effect after `/reload` |
+| `/chronik language` | `auto`, `de`, `en`, `fr`, `es`, `mx`, `ru`, `it` or `ptbr`; takes effect after `/reload` |
 | `/chronik save` | open the save window; saving reloads the interface |
 | `/chronik milestone [level]` | preview of the milestone note (WoW Forever) |
 | `/chronik backup` | state of the data safety: this character's backup copy, last save, how full the main file is, last restore |
@@ -155,6 +155,9 @@ If an input is missing, the generator stops and names the missing path and the o
 The training plan (`addon/InkAndEmbers/data/TrainerSpells.lua`) comes from "What's Training?" (MIT, branch `forever`, pinned commit).
 Regenerate it with `node scripts/build-trainer-data.mjs --src <local copy of github.com/fusionpit/WhatsTraining>`; the script checks
 the SHA-256 of every source file against the pinned commit and stops on a difference (`--unpinned` allows it and marks the output).
+The profession recipes of Pläne > Handwerk (`addon/InkAndEmbers_Data/Recipes.lua`, load on demand) come from the same source and the
+same pinned commit (`Crafting/Recipes/Camelot`): `node scripts/build-recipe-data.mjs --src <local copy of github.com/fusionpit/WhatsTraining>`.
+The login check of the to-do "Zum Berufslehrer" loads this add-on only when the character has a profession with recipes.
 
 Releases are built by the BigWigs packager from a tag `v*` (`.pkgmeta`, `.github/workflows/release.yml`). The development
 simulation `journal/SimPanel.lua` is left out of the package.

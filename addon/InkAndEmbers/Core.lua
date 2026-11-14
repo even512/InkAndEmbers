@@ -64,7 +64,7 @@ local T = ns.Locale.ns("Core", {
   helpLevelSlip = "/chronik stufe - Meldung des Erzählers zum Stufenaufstieg als Vorschau zeigen: was Ihr beim Lehrer lernen könnt (nur WoW Forever)",
   helpMilestone = "/chronik meilenstein [Stufe] - Bilanz des Erzählers zu einem Meilenstein (Stufe 10, 20, … 60) als Vorschau zeigen (nur WoW Forever)",
   helpTrain = "/chronik lehrplan - Lehrplan Eurer Klasse (Rubrik \"Lehrplan\" unter Pläne, nur WoW Forever); \"lehrplan status\" zeigt den Stand",
-  helpLanguage = "/chronik sprache - Sprache wählen: \"sprache auto\", \"sprache de\", \"sprache en\" oder \"sprache ptbr\" (wirkt nach /reload)",
+  helpLanguage = "/chronik sprache - Sprache wählen: \"sprache auto\", \"sprache de\", \"sprache en\", \"sprache ptbr\" oder \"sprache fr | es | mx | ru | it\" (wirkt nach /reload)",
   helpReset = "/chronik reset - Größe und Position des Reisejournals zurücksetzen",
   helpSave = "/chronik sichern - Sichern-Fenster öffnen (Sichern lädt die Oberfläche neu)",
   helpBackup = "/chronik sicherung - Stand der Datensicherung: Sicherungskopie dieses Charakters, letztes Speichern, Füllstand der Datei",
@@ -192,7 +192,6 @@ Core.BASE_APIS = {
 -- APIs whose absence is normal on some clients: reported as expected in /chronik diag, not as an error.
 -- No collector depends on them (professions come from GetProfessions and the skill-increase message).
 Core.EXPECTED_ABSENT = {
-  ["C_SkillInfo.GetSkillLineInfo"] = "fehlt (erwartet auf Retail)", -- stored as-is in diag.apis, not translated
   ["C_GameRules.GetForeverExperiencePreset"] = "fehlt (nur auf Forever vorhanden)",
   -- Forever-exclusive names (warcraft.wiki.gg, Category:Exclusive_API/forever)
   ["C_PetInfo.GetPetHappiness"] = "fehlt (nur auf Forever vorhanden)",
@@ -800,6 +799,8 @@ frame:SetScript("OnEvent", function(_, event, ...)
   if event == "ADDON_LOADED" then
     if (...) == ADDON_NAME then
       if ns.Locale then Core.safe(ns.Locale.apply) end -- language from the SavedVariables, before anything else
+      local theme = ns.Journal and ns.Journal.Theme
+      if theme and theme.applyLocaleFonts then Core.safe(theme.applyLocaleFonts) end -- ruRU: Cyrillic client fonts (journal/Theme.lua)
       Core.safe(ns.Store.init)
       Core.syncDiag()
     end
@@ -1450,6 +1451,18 @@ function Core.slash(msg)
   elseif cmd == "anprobe" and ns.WardrobeProbe and type(ns.WardrobeProbe.slash) == "function" then
     -- development probe for the equipment journey (journal/WardrobeProbe.lua, not in the release package: there this word is unknown)
     ns.WardrobeProbe.slash(string.match(type(msg) == "string" and msg or "", "^%s*%S+%s+(.-)%s*$") or "")
+  elseif cmd == "probe" and ((ns.LegacyProbe and type(ns.LegacyProbe.slash) == "function")
+      or (ns.ProfessionProbe and type(ns.ProfessionProbe.slash) == "function")) then
+    -- development probes (journal/LegacyProbe.lua "probe legacy", journal/ProfessionProbe.lua "probe beruf"; not in the release package:
+    -- there this word is unknown). "probe beruf ..." goes to the profession probe, everything else to the Legacy probe.
+    local probeArg = string.match(type(msg) == "string" and msg or "", "^%s*%S+%s+(.-)%s*$") or ""
+    local probeTopic = string.lower(string.match(probeArg, "^(%S*)") or "")
+    local professionProbe = ns.ProfessionProbe and type(ns.ProfessionProbe.slash) == "function" and ns.ProfessionProbe or nil
+    if professionProbe and (probeTopic == "beruf" or probeTopic == "berufe" or probeTopic == "ah" or probeTopic == "auktionshaus" or not ns.LegacyProbe) then
+      professionProbe.slash(probeArg)
+    else
+      ns.LegacyProbe.slash(probeArg)
+    end
   elseif cmd == "sim" and Core.hasDevTools() then
     -- whole rest of the line (name and class of the dummy guest need several words)
     local all = string.match(type(msg) == "string" and msg or "", "^%s*%S+%s+(.-)%s*$") or ""

@@ -174,6 +174,8 @@ local function copy(p)
     if p.done then c.have = c.need end
     c.progress = string.format("%d/%d", c.have, c.need)
   end
+  -- shopping list (collectors/Einkaufszettel.lua): own text, progress "3/5" (material lines ticked) and p.shop flag, read live
+  if type(p.shop) == "table" and ns.Einkauf and type(ns.Einkauf.decorate) == "function" then pcall(ns.Einkauf.decorate, p, c) end
   return c
 end
 
@@ -354,6 +356,7 @@ function Plans.add(a, b)
     e.text = Plans.cleanText(spec.text)
     if not e.text then return nil, "leer" end
     e.mapID = validMap(spec.mapID)
+    if type(spec.shop) == "table" and not isSecret(spec.shop) then e.shop = spec.shop end -- shopping list data (Einkaufszettel)
   elseif kind == "place" then
     e.mapID, e.x, e.y = validMap(spec.mapID), coord01(spec.x), coord01(spec.y)
     if not (e.mapID and e.x and e.y) then return nil, "ort" end
@@ -458,6 +461,31 @@ function Plans.finishAuto(tag, how)
   local list = id and store()
   local p = list and find(list, id)
   if not p then return false end
+  p.done = floor(time())
+  p.counted = true
+  local plan = copy(p)
+  plan.how, plan.label = type(how) == "string" and how or "auto", Plans.label(p)
+  for i = 1, #doneHooks do Core.safe(doneHooks[i], plan) end
+  Plans.watchPlaces()
+  changed()
+  return true
+end
+
+-- Shopping list (collectors/Einkaufszettel.lua): the stored entry itself (raw, for that collector only) and a completion by id
+-- without a VE line (like finishAuto: a shopping list is no own travel goal), the done hooks (sound, card) still run.
+function Plans.raw(id)
+  local list = store()
+  return list and find(list, num(id)) or nil
+end
+
+function Plans.rawList()
+  return store()
+end
+
+function Plans.finishPlan(id, how)
+  local list = store()
+  local p = list and find(list, num(id))
+  if not (p and valid(p)) or p.done then return false end
   p.done = floor(time())
   p.counted = true
   local plan = copy(p)

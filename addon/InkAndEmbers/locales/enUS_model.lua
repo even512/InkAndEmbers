@@ -36,6 +36,19 @@ L.add("enUS", "m.Lehrplan", {
   spellFallback = "Spell %s",
 })
 
+-- journal/model/Rezepte.lua
+L.add("enUS", "m.Rezepte", {
+  spellFallback = "Recipe %s",
+  profFallback = "Profession %s",
+  rankJ = "Journeyman", rankE = "Expert", rankA = "Artisan",
+  srcT = "Trainer", srcV = "Vendor", srcQ = "Quest", srcD = "Drop", srcC = "Crafted", srcO = "Found",
+  favor = "%s Merchant's Favor",
+  repText = "Reputation: %s",
+  repFallback = "Reputation with a faction",
+  NO_RECIPES = "Recipe list missing in the data add-on (reinstall it)",
+  NO_API = "Professions cannot be read right now",
+})
+
 L.add("enUS", "m.ChronikTexts", {
   diary_level_zone_dur = "Reached level {=level}, right in the middle of {zone}. Took {=dur}.",
   diary_level_zone = "Reached level {=level} in {zone}.",
@@ -1522,6 +1535,13 @@ L.add("enUS", "m.Momente", {
   guessedSome = "%s (%s of them presumed)",
   fish_one = "%s fish caught", fish_other = "%s fish caught",
   afkDozed = "%s away",
+  favSpell = "Favourite spell: %s (%s ×)", spellUnknown = "Spell no. %s",
+  favItem = "Most used: %s (%s ×)",
+  jumps_one = "%s jump into the air", jumps_other = "%s jumps into the air",
+  rollsHead = "Rolls: %s",
+  rollNeed = "%s Need", rollGreed = "%s Greed", rollPass = "Rolls passed: %s",
+  rollsWon_one = "%s roll won", rollsWon_other = "%s rolls won",
+  duels = "Duels: %s won, %s lost",
 })
 
 -- journal/model/Schaetze.lua
@@ -1572,6 +1592,23 @@ L.add("enUS", "m.Schaetze", {
   holdNow = "In the purse now: %s",
   holdJump = "Vs. previous level: %s",
   holdPeak = "Highest ever held",
+  tr_ahHead = "Auction House", tr_mailHead = "Mail", tr_tradeHead = "Trade",
+  tr_ahIncome = "Income", tr_ahSold = "Sales", tr_ahSpent = "Spent", tr_ahBought = "Purchases",
+  tr_ahFee = "Cut", tr_ahDeposit = "Deposits paid",
+  tr_ahTip = "From the invoices in your mailbox; the ledger stays untouched.",
+  tr_ahIncomeTip = "Sale prices per invoice, before the Auction House cut.",
+  tr_ahFeeTip = "The Auction House's cut taken from sales.",
+  tr_ahDepositTip = "Deposit paid when posting, for %s listings. What expired or came back is in no invoice.",
+  tr_ahCount = "%s invoices",
+  tr_mailGold = "Gold from %s", tr_mailItem = "Parcel from %s", tr_cod = "C.O.D. paid",
+  tr_mailGoldTip = "The largest sum of gold you took from a letter.",
+  tr_mailItemTip = "The largest stack you took from a letter.",
+  tr_codTip = "For orientation; not an extra expense in the ledger.",
+  tr_tradeGold = "Gold from %s", tr_tradeItem = "Gift from %s",
+  tr_tradeGoldTip = "The largest sum of gold you received in a trade.",
+  tr_tradeItemTip = "The largest stack you received in a trade.",
+  tr_stack = "%s× %s",
+  tr_from = "From: %s",
   margin_sch_training_1 = "Training at {=level} ruined me: {=amount}.",
   margin_sch_training_2 = "At level {=level} I learned a lot and paid {=amount} for it.",
   margin_sch_repair_1 = "At level {=level} repairs ate up {=amount}.",
@@ -1590,6 +1627,12 @@ L.add("enUS", "m.Schaetze", {
 })
 
 -- journal/model/Funde.lua
+L.add("enUS", "m.Auktionshaus", {
+  kind_sold = "Sale", kind_bought = "Purchase",
+  itemFallback = "Unknown item", itemNo = "Item #%s",
+  dateTime = "{m}/{d} {H}:{M}", dateOnly = "{m}/{d}", dateUnknown = "–",
+  sumAll = "Balance", sumSold = "Total sales", sumBought = "Total purchases",
+})
 L.add("enUS", "m.Funde", {
   q2 = "Uncommon", q3 = "Rare", q4 = "Epic", q5 = "Legendary", q6 = "Artifact", q7 = "Heirloom", q8 = "Token",
   INVTYPE_HEAD = "Head", INVTYPE_NECK = "Neck", INVTYPE_SHOULDER = "Shoulder", INVTYPE_CLOAK = "Back",
@@ -1804,4 +1847,12 @@ L.add("enUS", "m.Dungeons", {
   diff_1 = "Normal", diff_2 = "Heroic", diff_3 = "10 Player", diff_4 = "25 Player", diff_5 = "10 Player (Heroic)",
   diff_6 = "25 Player (Heroic)", diff_8 = "Mythic Keystone", diff_14 = "Normal", diff_15 = "Heroic",
   diff_16 = "Mythic", diff_17 = "Raid Finder", diff_23 = "Mythic", diff_24 = "Timewalking",
+})
+L.add("enUS", "m.Rezeptbuch", {
+  profFallback = "Profession %s",
+  recipeFallback = "Recipe %s",
+  diff_orange = "optimal", diff_yellow = "medium", diff_green = "easy", diff_grey = "no gain",
+})
+L.add("enUS", "m.Handwerk", {
+  rank_75 = "Apprentice", rank_150 = "Journeyman", rank_225 = "Expert", rank_300 = "Artisan",
 })

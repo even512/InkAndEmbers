@@ -1,20 +1,23 @@
 ## Interface: 120105, 16001
 ## Title: Ink & Embers - Data
 ## Title-deDE: Ink & Embers - Data
-## Notes: Enemy and item lists for the to-do goals of Ink & Embers. Loaded on demand only.
-## Notes-deDE: Gegner- und Gegenstandsliste für die To-Do-Ziele von Ink & Embers. Wird nur bei Bedarf geladen.
+## Notes: Enemy and item lists for the to-do goals and profession recipes of Ink & Embers. Loaded on demand only.
+## Notes-deDE: Gegner- und Gegenstandsliste für die To-Do-Ziele und Berufsrezepte von Ink & Embers. Wird nur bei Bedarf geladen.
 ## Author: EveN
 ## Version: @project-version@
 ## LoadOnDemand: 1
 ## Dependencies: InkAndEmbers
-## X-QuestieDB-Version: 1.0.12
-## X-Attribution: Data: QuestieDB (Questie team and contributors), version 1.0.12. License: GPL-3.0 (see LICENSE and LICENSE-NOTE.md). Game world content (c) Blizzard Entertainment.
+## X-QuestieDB-Version: 1.1.0
+## X-Attribution: Data: QuestieDB (Questie team and contributors), version 1.1.0. License: GPL-3.0 (see LICENSE and LICENSE-NOTE.md). Recipes.lua: What's Training? (Sveng/fusionpit), MIT License, see LICENSE-WhatsTraining.txt. Game world content (c) Blizzard Entertainment.
 ## X-License: GPL-3.0
 ## X-Source-License: https://github.com/Questie/QuestieDB/blob/master/LICENSE.md
 
+# Loaded on demand. Recipes.lua comes in the same load as the to-do lists; the login check of the to-do "Zum Berufslehrer" (CraftTodo)
+# loads this add-on only when the character has a profession with recipes (no profession, or only herbalism/skinning/fishing: no load).
 Zones.lua
 Npcs.lua
 Items.lua
 ZonesEn.lua
 NpcsEn.lua
 ItemsEn.lua
+Recipes.lua

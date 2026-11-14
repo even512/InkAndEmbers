@@ -275,6 +275,7 @@ Mates.TEXT = ns.Locale.ns("p.ChronikViews.Mates", {
 local MT = Mates.TEXT
 -- number with plural key (<key>_one / <key>_other)
 local function countText(T, n, key) return T(ns.Locale.plural(n, key .. "_one", key .. "_other"), int(n)) end
+
 Mates.ROWS, Mates.ROW_H = 6, 52   -- 6 rows down to above the seals bottom left; paging on the right in the control line
 
 -- class colours for ink on parchment (the game colours, darkened so priest/rogue stay readable)
@@ -511,6 +512,7 @@ function Mates.new(page, left, right)
     u.blocks[key] = { head = head, lines = lines, x = bx }
   end
   self.card = u
+
   l:Hide()
   r:Hide()
   return self

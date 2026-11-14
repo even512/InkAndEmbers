@@ -15,7 +15,8 @@ Alles Folgende behaelt seine eigene Lizenz; die Lizenztexte liegen bei den Datei
 | Caveat Bold | `Media\Fonts\` | SIL Open Font License 1.1, (c) 2014 The Caveat Project Authors, `OFL.txt` | https://github.com/googlefonts/caveat |
 | 6 book and writing sounds | `Media\Sounds\` | CC0 1.0 (Kenney, StarNinjas, Kawgrim, NachtmahrTV and others), details and processing in `Media\Sounds\LICENSES.txt` | see that file |
 
-| Class trainer spell data ("What's Training?", branch `master`, `Classes/Camelot`, commit `567bfa0`) | `data\TrainerSpells.lua` | MIT, Copyright (c) 2019 (Sveng/fusionpit), `data\LICENSE-WhatsTraining.txt`; converted to a compact text format by `scripts/build-trainer-data.mjs`, nothing added | https://github.com/fusionpit/WhatsTraining |
+| Class trainer spell data ("What's Training?", branch `master`, `Classes/Camelot`, commit `e402ec3`) | `data\TrainerSpells.lua` | MIT, Copyright (c) 2019 (Sveng/fusionpit), `data\LICENSE-WhatsTraining.txt`; converted to a compact text format by `scripts/build-trainer-data.mjs`, nothing added | https://github.com/fusionpit/WhatsTraining |
+| Profession recipe data ("What's Training?", branch `master`, `Crafting/Recipes/Camelot`, commit `e402ec3`) | `..\InkAndEmbers_Data\Recipes.lua` (data add-on) | MIT, Copyright (c) 2019 (Sveng/fusionpit), `InkAndEmbers_Data\LICENSE-WhatsTraining.txt`; converted to a compact text format by `scripts/build-recipe-data.mjs` (recipes without a source left out), nothing added | https://github.com/fusionpit/WhatsTraining |
 
 The fonts are not renamed or modified.
 
@@ -23,10 +24,12 @@ The fonts are not renamed or modified.
 
 `InkAndEmbers_QuestData` and `InkAndEmbers_Data` contain data derived from
 **QuestieDB** (https://github.com/Questie/QuestieDB, Questie team and contributors, version
-1.0.12). They are distributed under the GNU General Public License v3
+1.1.0). They are distributed under the GNU General Public License v3
 (see `LICENSE` and `LICENSE-NOTE.md` in those folders). Further data: German names and zone
 assignment from the Forever database (data.morthen.net); map overlay numbers from the client
 tables of the Forever build via wago.tools. The name and logo "Questie" are not used.
+`InkAndEmbers_Data` also ships `Recipes.lua` (profession recipes, MIT, from "What's Training?", see the table above and
+`LICENSE-WhatsTraining.txt` in that folder); MIT content may be included in a GPL-3.0 folder, its notice is kept.
 
 ## Optional runtime dependency: QuestieDB (not shipped)
 

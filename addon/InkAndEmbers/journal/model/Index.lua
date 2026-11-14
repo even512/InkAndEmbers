@@ -10,7 +10,9 @@
 --   lists[code]   records of Index.LISTS (rec.t = epoch, rec.ln = running line number, rec[i] = field i): KI only
 --                 elite/rare/boss, KF only close wins (close = 1),
 --                 LT quality >= 2 (unknown kept), GD only lines where the balance first reaches a step of
---                 Index.RICH_STEPS; LF = campfire rounds
+--                 Index.RICH_STEPS; LF = campfire rounds,
+--                 TH = trades, PM = received mail (sent mail PS is not read: not a record),
+--                 AH = only the invoices sold/bought (the sums of all actions stay in ah[action])
 --   kills         { total, stamp = { normal, elite, rare, boss, unknown }, npc[npcID] = { n, stamp, map[mapID] = n,
 --                 group, [1] = min level, [2] = max level },
 --                   npcCount, npcUnknown, map[mapID], day[key], group, withPos, heat[mapID][cell] (Index.HEAT_GRID^2,
@@ -83,6 +85,9 @@ Index.LISTS = {
   LG = true, -- finds of other group members in instances (1.0.8)
   LF = true, -- VE is not here: H.VE keeps only the first line per to-do
 }
+
+-- trade, mail received: rare enough for records (view "Handel" of the gold flow reads the best ones, journal/model/Schaetze.lua)
+Index.LISTS.TH, Index.LISTS.PM = true, true
 
 local XP_SOURCES = { kill = true, quest = true, explore = true, other = true }
 local STAMP = { normal = "normal", trivial = "normal", minus = "normal", elite = "elite", rare = "rare",
@@ -527,6 +532,8 @@ H.AH = function(S)
   local d, p = toNum(SF[6]), toNum(SF[5])
   if d and d > 0 then e.deposit = e.deposit + d end
   if p and p > 0 then e.price = e.price + p end
+  -- invoices (sold/bought) are also kept as records: the auction house table (journal/model/Auktionshaus.lua) reads them
+  return a == "sold" or a == "bought"
 end
 
 -- quest objective progress (QO): final state per (questID, idx), no record list (a step per kill would be too much)

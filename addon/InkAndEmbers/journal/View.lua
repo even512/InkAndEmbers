@@ -884,6 +884,56 @@ function View.zoneAt(contID, vx, vy)
   return z and z.id or nil
 end
 
+-- Heat map (I15, core journal/model/Heatmap.lua): zone list and grids of the journey model, read only and in pcall.
+-- heatZones -> list (empty without the core or on an error); heatGridStep -> grid | nil, job | nil, failed (true on an error)
+function View.heatZones(model)
+  local Hm = Journal.Heatmap
+  if type(model) ~= "table" or not (Hm and type(Hm.zones) == "function") then return {} end
+  local ok, list = pcall(Hm.zones, model)
+  if not ok or type(list) ~= "table" then
+    if not ok and ns.Core then ns.Core.coreError("Heatmap: " .. tostring(list)) end
+    return {}
+  end
+  -- zones with deaths but without a trail (Heatmap.zones lists trail zones only) are listed too, with time 0, after the others;
+  -- deaths in instances (no map) stay out. A copy: the core's list is shared and read only.
+  local M = Model()
+  local okS, src = pcall(M and M.heatSource or error, model)
+  local out, have, extra, order = {}, {}, {}, {}
+  for i, z in ipairs(list) do
+    out[i] = z
+    have[z.mapID] = true
+  end
+  for _, d in ipairs(okS and type(src) == "table" and src.deaths or {}) do
+    local id = type(d) == "table" and not d.inst and num(d.map) or nil
+    if id and not have[id] then
+      if not extra[id] then order[#order + 1] = id end
+      extra[id] = (extra[id] or 0) + 1
+    end
+  end
+  table.sort(order, function(a, b)
+    if extra[a] ~= extra[b] then return extra[a] > extra[b] end
+    return a < b
+  end)
+  for _, id in ipairs(order) do
+    local okN, name = pcall(M.mapName, model, id)
+    out[#out + 1] = { mapID = id, name = okN and name or View.mapName(id), seconds = 0, deaths = extra[id], noTrail = true }
+  end
+  return out
+end
+
+function View.heatGridStep(model, mapID, kind, opts)
+  local Hm = Journal.Heatmap
+  if type(model) ~= "table" or not (Hm and type(Hm.gridStep) == "function") then return nil, nil, true end
+  local ok, g, job = pcall(Hm.gridStep, model, mapID, kind, opts)
+  if not ok then
+    if ns.Core then ns.Core.coreError("Heatmap: " .. tostring(g)) end
+    return nil, nil, true
+  end
+  if type(g) == "table" then return g, nil, false end
+  if type(job) == "table" then return nil, job, false end
+  return nil, nil, true
+end
+
 function View.mapArt(mapID)
   if not mapID or type(C_Map) ~= "table" or type(C_Map.GetMapArtLayers) ~= "function"
     or type(C_Map.GetMapArtLayerTextures) ~= "function" then

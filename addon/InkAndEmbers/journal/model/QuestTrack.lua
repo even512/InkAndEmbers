@@ -29,7 +29,7 @@
 --   QuestTrack.difficulty(level, playerLevel) -> token ("red"|"orange"|"yellow"|"green"|"gray"), { r, g, b }
 --   E4 (window after the design template, additive):
 --   settings() also holds filter = { done, group }, focus = { show, dist, bar, giver, rewards }, panel = { hover, delay (ms 0-2000),
---     scale (0.8-1.4), notify, todo ("top"|"bottom"), itemBar, pinned }, look.objs / look.icons; set("group.key", v) for all of them.
+--     scale (0.8-1.4), notify, todo ("top"|"bottom"), itemBar, itemBarNear (quest items only near the objective), pinned }, look.objs / look.icons; set("group.key", v) for all of them.
 --     Defaults after the template: done "inZone", look.doneObj "strike" (finished objectives stay, pale), look.dist false.
 --   order "level" = one flat list by level (then distance). build() also returns readyCount, total, maxQuests, filtered (count
 --     removed by filter.done/filter.group) and focus (the focus record while focus.show; it stays in the groups too, the row is marked).
@@ -55,7 +55,8 @@
 --            mapID, name (display-safe | nil: the UI supplies "Ohne Zone"/"Abgeben"), current, collapsed, count, quests = { record, ... } }
 --   Rules: order "zones" = current zone first (open), other zones folded unless the user unfolded them (remembered per zone),
 --   inside a group by distance; order "distance" = one flat list; order "log" = groups = quest log headers in log order.
---   done "group" = ready quests in their own group "turnin" on top; done "inZone" = they stay in their zone group.
+--   done "group" = ready quests in their own group "turnin" on top; done "inZone" = they stay in their zone group / list, at its END
+--   (open quests keep their order).
 --   next = the nearest OPEN (not ready) visible quest whose place lies in the current zone (a quest without place counts if its log
 --   header is the current zone), exactly one, or nil.
 --   Selection: "tracked" = Blizzard watch list, "log" = all quests of the log, "zone" = place in the current zone (a quest without a
@@ -91,7 +92,7 @@ QuestTrack.DEFAULTS = {
   collapsed = { todo = false, quests = false, turnin = false },
   filter = { done = false, group = false, zoneOnly = false },
   focus = { show = true, dist = true, bar = true, giver = true, rewards = true },
-  panel = { hover = true, delay = 600, scale = 1, gripScale = 1, gripAlpha = 0.4, notify = true, todo = "top", itemBar = true, pinned = false, syncFocus = true,
+  panel = { hover = true, delay = 600, scale = 1, gripScale = 1, gripAlpha = 0.4, notify = true, todo = "top", itemBar = true, itemBarNear = true, pinned = false, syncFocus = true,
     bgAlpha = 0.96, fadeWidth = 36, fadeTime = 0.3, fontScale = 1, fontHead = "", fontText = "", panMap = true, hideInfo = true },
 }
 QuestTrack.GROUP_TAG = 1 -- Enum.QuestTag.Group
@@ -252,7 +253,7 @@ local NESTED = {
   look = { marker = QuestTrack.MARKERS, doneObj = QuestTrack.DONE_OBJ, dist = true, objs = true, icons = true },
   filter = { done = true, group = true, zoneOnly = true },
   focus = { show = true, dist = true, bar = true, giver = true, rewards = true },
-  panel = { hover = true, delay = "range", scale = "range", gripScale = "range", gripAlpha = "range", notify = true, todo = QuestTrack.TODO_AT, itemBar = true, pinned = true,
+  panel = { hover = true, delay = "range", scale = "range", gripScale = "range", gripAlpha = "range", notify = true, todo = QuestTrack.TODO_AT, itemBar = true, itemBarNear = true, pinned = true,
     syncFocus = true, bgAlpha = "range", fadeWidth = "range", fadeTime = "range", fontScale = "range", fontHead = "font", fontText = "font", panMap = true, hideInfo = true },
 }
 QuestTrack.NESTED = NESTED
@@ -1707,6 +1708,19 @@ local function inCurrentZone(rec, cur)
   return cur ~= nil and rec.zone == cur
 end
 
+-- ready-to-turn-in quests (done = "inZone": they stay in their list) go to the END of that list; the order of the open ones and
+-- the order among the ready ones stay as they were (stable, in place)
+local function readyLast(list)
+  local open, ready = {}, {}
+  for _, rec in ipairs(list) do
+    if rec.complete then ready[#ready + 1] = rec else open[#open + 1] = rec end
+  end
+  if #ready == 0 or #open == 0 then return list end
+  for i, rec in ipairs(open) do list[i] = rec end
+  for i, rec in ipairs(ready) do list[#open + i] = rec end
+  return list
+end
+
 function QuestTrack.build()
   local st = QuestTrack.settings()
   local cur = S.here and S.here.zone or nil
@@ -1753,6 +1767,7 @@ function QuestTrack.build()
   if st.order == "distance" then
     if #visible > 0 then
       sort(visible, byDist)
+      readyLast(visible)
       view.groups[#view.groups + 1] = { id = "all", kind = "flat", count = #visible, quests = visible, current = false, collapsed = false }
     end
   elseif st.order == "level" then
@@ -1762,11 +1777,13 @@ function QuestTrack.build()
         if la ~= lb then return la < lb end
         return byDist(a, b)
       end)
+      readyLast(visible)
       view.groups[#view.groups + 1] = { id = "level", kind = "flat", count = #visible, quests = visible, current = false, collapsed = false }
     end
   elseif st.order == "log" then
     local byKey, list = {}, {}
     sort(visible, byOrd)
+    readyLast(visible)
     for _, rec in ipairs(visible) do
       local key = headerKey(rec)
       local g = byKey[key]
@@ -1799,7 +1816,8 @@ function QuestTrack.build()
     end
     for _, g in ipairs(list) do
       sort(g.quests, byDist)
-      g.first = g.quests[1]
+      g.first = g.quests[1] -- the group order still follows the nearest quest, ready or not
+      readyLast(g.quests)
     end
     sort(list, function(a, b)
       if a.current ~= b.current then return a.current end

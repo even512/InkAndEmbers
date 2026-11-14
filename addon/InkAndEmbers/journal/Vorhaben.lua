@@ -223,8 +223,21 @@ Vorhaben.isArchived = archived
 
 local function viewPlans()
   local out, arch = {}, V.view == "archive"
+  local TT = Journal.TodoTracker
   for _, p in ipairs(allPlans()) do
-    if archived(p) == arch then out[#out + 1] = p end
+    if archived(p) == arch then
+      out[#out + 1] = p
+      -- an open shopping list (Einkaufszettel) is followed by its material lines, each on a line of the ruled paper
+      if p.shop == true and not arch and not (p.done ~= nil and p.done ~= false) and TT and type(TT.shopSubRows) == "function" then
+        local ok, subs = pcall(TT.shopSubRows, { id = p.id, shop = true, done = false })
+        if ok and type(subs) == "table" then
+          for _, s in ipairs(subs) do
+            s.mat = true
+            out[#out + 1] = s
+          end
+        end
+      end
+    end
   end
   return out
 end
@@ -277,6 +290,14 @@ function Vorhaben.rows(page)
     local p = list[i]
     local done = p.done ~= nil and p.done ~= false
     local kind = kindOf(p)
+    local shop = p.shop == true
+    if p.mat then
+      -- material line of a shopping list: name + count, no tick box, nothing to delete
+      out[#out + 1] = { plan = p, id = p.id, planId = p.planId, mat = true, shop = true, kind = "item", done = done,
+        text = shown(p.more and p.text or (p.name or p.text)) or "", date = "", sub = "",
+        progress = (not p.more and num(p.have) and num(p.need)) and string.format("%d/%d", p.have, p.need) or nil }
+    else
+    if shop then kind = "item" end -- shopping list (Einkaufszettel): bag icon, progress "3/5", click opens the slip
     local zone = p.mapID and zoneName(p.mapID) or nil
     local d = safeDate(done and p.done or p.created)
     local dateText = d and string.format(done and T.done or T.created, d) or ""
@@ -286,7 +307,9 @@ function Vorhaben.rows(page)
     if dist then parts[#parts + 1] = dist end
     if dateText ~= "" then parts[#parts + 1] = dateText end
     out[#out + 1] = { plan = p, id = p.id, text = shown(p.text) or "", zone = zone, date = dateText, done = done,
-      kind = kind, progress = progressOf(p), dist = dist, sub = table.concat(parts, " · ") }
+      kind = kind, progress = shop and shown(p.progress, 16) or progressOf(p), dist = dist, sub = table.concat(parts, " · "),
+      shop = shop or nil }
+    end
   end
   return out, page
 end
@@ -521,6 +544,30 @@ local function paintRow(row)
     return
   end
   row:Show()
+  -- a material line of a shopping list: indented name + count on its own ruled line, no tick box, nothing to delete
+  row.subLabel:SetShown(d.mat == true)
+  row.tickBtn:SetShown(d.mat ~= true)
+  row.delBtn:SetShown(d.mat ~= true)
+  if d.mat then
+    W.setText(row.label, "")
+    W.setText(row.subLabel, d.text)
+    row.subLabel:SetTextColor(W.color(d.done and "sepia" or "ink"))
+    W.setText(row.progress, d.progress or "")
+    row.progress:SetShown(d.progress ~= nil)
+    row.progress:SetTextColor(W.color(d.done and "sepia" or "red"))
+    row.kindIcon:Hide()
+    row.pin:Hide()
+    row.tick:Hide()
+    row.strike:SetShown(d.done)
+    if d.done then row.strike:SetWidth(max(8, min(strWidth(row.subLabel, #d.text * 7) + 6, row.textW - 20))) end
+    row.strike:ClearAllPoints()
+    row.strike:SetPoint("LEFT", row, "TOPLEFT", 53, -17)
+    W.setText(row.zone, "")
+    W.setText(row.date, "")
+    return
+  end
+  row.strike:ClearAllPoints()
+  row.strike:SetPoint("LEFT", row, "TOPLEFT", 29, -13)
   W.setText(row.label, d.text)
   row.label:SetTextColor(W.color(d.done and "sepia" or "ink"))
   local prog = d.progress
@@ -759,6 +806,13 @@ local function buildRow(panel, i)
   label:SetJustifyH("LEFT")
   label:SetWordWrap(false)
   row.label = label
+  local subLabel = D.font(row, "text", 14, "ink")
+  subLabel:SetPoint("TOPLEFT", row, "TOPLEFT", 52, -9)
+  subLabel:SetWidth(row.textW - 20 - Vorhaben.PROGRESS_W)
+  subLabel:SetJustifyH("LEFT")
+  subLabel:SetWordWrap(false)
+  subLabel:Hide()
+  row.subLabel = subLabel
   local strike = D.NewInkStroke(row, 40, "ink", 0.8, "OVERLAY")
   strike:SetPoint("LEFT", row, "TOPLEFT", 29, -13)
   strike:Hide()
@@ -859,8 +913,14 @@ local function buildRow(panel, i)
     if d and d.text ~= "" then
       local lines = { d.text }
       if d.sub ~= "" then lines[2] = d.sub end
+      if d.shop and Journal.TodoTracker then lines[#lines + 1] = Journal.TodoTracker.TEXT.shopHint end
       W.tip(r, lines)
     end
+  end)
+  row:SetScript("OnClick", function(r)
+    local d = r.data
+    local Z = Journal.Einkaufszettel
+    if d and d.shop and not d.done and Z and type(Z.open) == "function" then W.call(Z.open, { id = d.planId or d.id, anchor = r }) end
   end)
   row:SetScript("OnLeave", function(r)
     r.hoverRow = false

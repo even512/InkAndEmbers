@@ -4,6 +4,8 @@
 --   Lehrplan      (key "lehrplan", WoW Forever only)   = pages/QuestsLehrplan.lua (Journal.LehrplanView), until I12 under Quests
 --   Tierausbildung (key "tierausbildung", hunters only, or the development preview /chronik sim jaeger) = the same file in pet mode
 --                 (Journal.TierView); tierView/tierOpen
+--   Handwerk      (key "handwerk", WoW Forever only)   = pages/PlaeneHandwerk.lua (Journal.RezepteView): which profession recipes to learn next;
+--                 craftView/craftOpen
 -- (The open quests stay under the tab Quests, key "offen": pages/Quests.lua + pages/QuestsOffen.lua.)
 -- The views get this page as their owner (View.new(page, left, right)): page.data = last Refresh data. Fields kept as before for
 -- the slash commands and the diagnostics: trainView/trainOpen. Esc in "Lehrplan" leads to "To Do" (Pages.escape); on "To Do" Esc
@@ -29,6 +31,8 @@ local T = ns.Locale.ns("p.Plaene", {
   subTrainTip = "Was Euch der Klassenlehrer ab welcher Stufe beibringt (nur WoW Forever)",
   subPets = "Tierausbildung",
   subPetsTip = "Was der Tierausbilder Eurem Tier ab welcher Stufe beibringt (nur Jäger)",
+  subCraft = "Handwerk",
+  subCraftTip = "Welche Rezepte Ihr als Nächstes lernen könnt (nur WoW Forever)",
 })
 Page.TEXT = T
 
@@ -42,6 +46,7 @@ Page.subs = {
   subTab("vorhaben", "subTodo", "subTodoTip"),
   subTab("lehrplan", "subTrain", "subTrainTip"),
   subTab("tierausbildung", "subPets", "subPetsTip"),
+  subTab("handwerk", "subCraft", "subCraftTip"),
 }
 Page.FIRST = "vorhaben"
 
@@ -54,6 +59,7 @@ end
 function Page:GetSub()
   if self.trainOpen then return "lehrplan" end
   if self.tierOpen then return "tierausbildung" end
+  if self.craftOpen then return "handwerk" end
   return "vorhaben"
 end
 
@@ -72,7 +78,17 @@ function Page:ShowSub(key)
   if key ~= "lehrplan" then self.trainOpen = false end
   if key ~= "tierausbildung" and self.tierView and self.tierOpen then self.tierView:Close() end
   if key ~= "tierausbildung" then self.tierOpen = false end
-  if key == "tierausbildung" then
+  if key ~= "handwerk" and self.craftView and self.craftOpen then self.craftView:Close() end
+  if key ~= "handwerk" then self.craftOpen = false end
+  if key == "handwerk" then
+    local CV = Journal.RezepteView
+    if not (CV and self.holderL) then return end
+    if not self.craftView then self.craftView = CV.new(self, self.holderL, self.holderR) end
+    if not self.craftOpen then
+      self.craftOpen = true
+      self.craftView:Open()
+    end
+  elseif key == "tierausbildung" then
     local TV = Journal.TierView
     if not (TV and self.holderL) then return end
     if not self.tierView then self.tierView = TV.new(self, self.holderL, self.holderR) end
@@ -104,6 +120,8 @@ function Page:Refresh(data)
     self.trainView:Refresh()
   elseif key == "tierausbildung" and self.tierView then
     self.tierView:Refresh()
+  elseif key == "handwerk" and self.craftView then
+    self.craftView:Refresh()
   end
 end
 
@@ -114,7 +132,7 @@ function Page:OnHide()
     if V.cancelPick then pcall(V.cancelPick, true) end
     if todoOpen() then pcall(V.close) end
   end
-  for _, view in ipairs({ self.trainView or false, self.tierView or false }) do
+  for _, view in ipairs({ self.trainView or false, self.tierView or false, self.craftView or false }) do
     if view then
       for _, r in ipairs(view.ui.rowsList.rows) do W.hideTip(r) end
     end
@@ -136,4 +154,10 @@ end)
 Pages.hideSub("plaene", "tierausbildung", function()
   local L = Journal.Lehrplan
   return not (L ~= nil and type(L.petTabVisible) == "function" and L.petTabVisible() == true)
+end)
+
+-- Handwerk: profession recipes to learn next (Journal.Rezepte); never in Retail (the data is Forever's)
+Pages.hideSub("plaene", "handwerk", function()
+  local R = Journal.Rezepte
+  return not (R ~= nil and Journal.RezepteView ~= nil and type(R.active) == "function" and R.active() == true)
 end)

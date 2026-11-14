@@ -30,8 +30,8 @@ import luaparse from "luaparse";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const DEFAULT_OUT = path.join(ROOT, "addon", "InkAndEmbers", "data");
-export const PINNED_COMMIT = "567bfa06720351aa90ac2a73409cfe83ff61eed3";
-export const PINNED_DATE = "2026-11-12";
+export const PINNED_COMMIT = "e402ec39d1e934e0b21271468a2b83dd9fb53dab";
+export const PINNED_DATE = "2026-11-13";
 export const SOURCE_URL = "https://github.com/fusionpit/WhatsTraining/tree/master/Classes/Camelot";
 export const CLASSES = ["DRUID", "HUNTER", "MAGE", "PALADIN", "PRIEST", "ROGUE", "SHAMAN", "WARLOCK", "WARRIOR"];
 const FILE_OF = { DRUID: "Druid", HUNTER: "Hunter", MAGE: "Mage", PALADIN: "Paladin", PRIEST: "Priest", ROGUE: "Rogue",

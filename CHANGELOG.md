@@ -1,5 +1,55 @@
 # Changelog
 
+## 1.0.12
+
+**At a glance:** Ink & Embers now speaks French, Spanish, Russian and Italian, and the book gains a Heatmap, Auction House, Recipe book, Legacy page and a crafting shopping list. The quest tracker also got tidier.
+
+### New
+
+**French, Spanish, Russian and Italian:** the whole journal, options, chat commands and tooltips are translated (Spanish for Spain and Mexico), following your game client's language automatically. Switch it under Options > AddOns > Ink & Embers or with `/chronik language fr|es|mx|ru|it|auto`; the translations are machine-made, so feedback is welcome on GitHub or CurseForge.
+
+**Heatmap:** a new bookmark on the Journey page lights up each zone map with embers where you spent your time (AFK time is ignored), and a switch shows where you died instead. Hovering gives details, and continents are clickable headings that show the embers of the whole continent with its zones below.
+
+**More curiosities:** the Curiosities list now also covers your favourite spell, most-used potion or food, jumps, loot rolls and duel results. Only things the book actually knows about appear.
+
+**Flight and Hearthstone log:** the Journey overview now shows your flights, favourite and longest route, flight fares, favourite bind spot and hearthstone uses.
+
+**Trade, Mail and Auction House:** the Gold flow under Treasures has a new "Trade" view with your Auction House balance, your biggest mail gold and parcel, cash on delivery paid, and your best trade deal.
+
+**Crafting bookmark (WoW Forever only):** one page per profession shows your skill curve, the milestones at 75, 150, 225 and 300, your first crafted item, learned recipes and a tally of what you gathered and crafted. It is written from what the journal already knew, without new tracking.
+
+**Plans > Crafting, "learn next" (WoW Forever only):** a new view lists the recipes you can learn now and those coming within 25 skill points, with source, price and minimum skill. A to-do reminds you when your profession trainer has something new.
+
+**Auction House page:** a new bookmark under Treasures lists every sale and purchase from your Auction House mails as a sortable, filterable table with real item tooltips. A balance on the right sums up what you sold, bought and paid in cuts.
+
+**Recipe book (WoW Forever only):** a new bookmark on the Crafting tab lists all recipes of a profession, learned and open, with difficulty colours, results, materials and a filter. Open each profession window once so the book can read the recipes fully.
+
+**Shopping list and the next skill point (WoW Forever only):** any recipe can become a to-do shopping list such as "20× Copper Bar", counted live from your bags and bank, with "Craft now" where the game allows it. "For the next skill point" suggests the most efficient recipe and adds its crafts to your list in one click.
+
+**Bar at the profession window (WoW Forever only):** a narrow bar at the profession window turns a selected recipe into a shopping list and shows the best recipes for your next skill point. You can switch it off under Options > AddOns > Ink & Embers ("Bar at the profession window").
+
+**Shopping list at the Auction House (WoW Forever only):** a small window beside the Auction House lists your missing materials, searches them and shows the cheapest offer. Buying always needs a second click on "Confirm", so nothing is bought on its own; switch it off under Options > AddOns > Ink & Embers ("Shopping list at the auction house").
+
+**Legacy page (WoW Forever only):** a new bookmark on the Chronicle page shows your account's Legacy points, class challenges, talent trees, track rewards and further challenge groups such as professions and PvP. It is never read during combat, and the last known state is kept meanwhile.
+
+**Pet Training: a note about your pet's level (GitHub #2):** hunters now see a hint on abilities whose rank needs a higher pet level than yours ("Your pet can learn this from level X"). Thanks to Tairgire for the report.
+
+### Changes
+
+**Journey overview tidied:** the red side notes about your first death and death count are gone from the Whole Journey page, so the flight log and stations move up.
+
+**Quest tracker, finished quests:** completed quests are now listed compactly at the end of the list instead of among the open ones.
+
+**Quest tracker, quest items:** the new option "Quest items only in the objective area" (on by default) shows a quest item only near its objective, or at the turn-in place for finished quests.
+
+**Quest data updated to QuestieDB 1.1.0:** the list grew from 5,749 to 5,877 quests, about 580 quests were corrected, and 179 more have their quest giver on the map. Creature and item data grew along (5,858 creatures, 11,856 items), and the dungeon quest lists are unchanged.
+
+**Training and recipe data updated to the latest What's Training data (commit e402ec3, 13 November):** 92 recipes that the source has since removed are gone (1,884 before, 1,792 now), so the Recipe book, shopping list and "Learn next" simply show fewer entries. The class trainer data is unchanged.
+
+### Fixes
+
+**Quest tracker, focus panel:** the "Spoken" button in the focus panel now works as intended.
+
 ## 1.0.11
 
 **At a glance:** hunters get their own **Pet Training** page, the quest data now comes from **QuestieDB 1.0.15** with over 500 more quests, and a few fixes. For WoW Forever there is also an **optional quest tracker**, which is off by default.

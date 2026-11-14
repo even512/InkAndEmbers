@@ -321,6 +321,8 @@ L.add("ptBR", "Options", {
   diagTip = "Grava o estado do addon no chat (como /chronik diag).",
   soundTip = "Som para “%s”. Ele é reproduzido como uma prévia quando você o seleciona; “Desligado” silencia o evento.",
   previewTip = "Reproduz o som selecionado para “%s” uma vez.",
+  qtItemBarNearLabel = "Itens de missão só na área do objetivo",
+  qtItemBarNearTip = "Um item de missão só aparece na barra quando você está na área do objetivo da missão (cerca de 140 jardas ao redor do ponto de objetivo mais próximo) e some quando você se afasta. Missões prontas mostram o item apenas no local de entrega. Sem dados do objetivo, ele continua visível. Em combate, a barra não muda.",
 })
 
 L.add("ptBR", "Model", {
@@ -452,6 +454,56 @@ L.add("ptBR", "Model", {
   cls_elite = "Elite",
   cls_rare = "Raro",
   cls_boss = "Chefe",
+})
+
+L.add("ptBR", "HeatmapView", {
+  head = "Heatmap",
+  headRight = "Brasas da jornada",
+  title = "Heatmap",
+  zones_one = "%s zona",
+  zones_other = "%s zonas",
+  summary = "%s · tempo sem AFK, paradas limitadas",
+  modeStay = "Tempo passado",
+  modeStayTip = "Onde você passou quanto tempo: quanto mais brilhantes as brasas, mais longo foi.",
+  modeDeath = "Mortes",
+  modeDeathTip = "Onde você morreu nesta zona.",
+  mapHint = "Roda do mouse: zoom · Arrastar: mover · Clique duplo: redefinir",
+  statStay = "%s nesta zona",
+  deaths_one = "%s morte",
+  deaths_other = "%s mortes",
+  noDeathsShort = "sem mortes",
+  stayTip = "cerca de %s aqui",
+  stayBrief = "só brevemente aqui",
+  stayShare = "%s %% do seu tempo nesta zona",
+  stayShareSmall = "menos de 1 por cento do seu tempo nesta zona",
+  deathLine = "Nível %s · %s",
+  deathLineWhen = "Nível %s · %s · %s",
+  deathMore = "… e mais %s",
+  cause_enemy = "Inimigo",
+  cause_fall = "Queda",
+  cause_drown = "Afogamento",
+  cause_fatigue = "Fadiga",
+  cause_lava = "Lava",
+  cause_fire = "Fogo",
+  cause_slime = "Limo",
+  cause_environment = "Ambiente",
+  cause_unknown = "Causa desconhecida",
+  legendStayLow = "breve",
+  legendStayHigh = "longo",
+  legendDeathLow = "uma morte",
+  legendDeathHigh = "muitas",
+  loading = "Atiçando as brasas …",
+  noTrail = "Ainda não há rastro. Assim que você estiver na estrada, a crônica registra seus caminhos – então os lugares onde você se demorou brilham aqui.",
+  noTrailList = "Ainda não há zonas com rastro.",
+  noDeaths = "Você nunca morreu nesta zona. Que continue assim!",
+  noStay = "Você só estava de passagem por aqui.",
+  noTrailZone = "Aqui não há trilha – só locais de morte.",
+  otherLands = "Outras terras",
+  failed = "Não foi possível preparar o heatmap. Detalhes: /chronik diag",
+  tipZone = "Clique: mostrar as brasas desta zona",
+  tipScroll = "Roda do mouse: mais zonas",
+  tipTime = "Tempo: %s",
+  tipDeaths = "Mortes: %s",
 })
 
 L.add("ptBR", "Stations", {
@@ -873,6 +925,8 @@ L.add("ptBR", "EditMode", {
 })
 
 L.add("ptBR", "Frame", {
+  sub_heatmap = "Heatmap",
+  subTip_heatmap = "Onde você passou quanto tempo e onde morreu: como brasas no mapa da zona",
   sub_gesamt = "Jornada inteira",
   subTip_gesamt = "Todo o percurso no mapa do continente, com os totais gerais e os marcos da viagem à esquerda",
   row_played = "Tempo de jogo",
@@ -1106,4 +1160,130 @@ L.add("ptBR", "Tutorial", {
   title_farewell = "Boas viagens!",
   text_farewell = "Isso é tudo o que você precisa saber por enquanto. A jornada contará o resto.\nContinuarei escrevendo sobre os grandes momentos e os pequenos desvios. Consulte o livro de vez em quando; você vai se surpreender com tudo que se acumula.\nVejo você na fogueira!",
   text_farewell_retail = "Isso é tudo o que você precisa saber por enquanto. A jornada contará o resto.\nContinuarei escrevendo sobre os grandes momentos e os pequenos desvios. Consulte o livro de vez em quando; você vai se surpreender com tudo que se acumula.\nVejo você na estrada!",
+})
+
+-- 1.0.12 data books
+L.add("ptBR", "FlightBook", {
+  title = "Diário de voos e Pedra de Regresso",
+  flights = "Voos",
+  hearths = "Pedra de Regresso",
+  hearthsValue_one = "%s volta para casa",
+  hearthsValue_other = "%s voltas para casa",
+  route = "Rota favorita",
+  routeValue = "%s – %s (%s×)",
+  longest = "Voo mais longo",
+  bind = "Local de vínculo favorito",
+  bindValue = "%s (%s×)",
+  tipFlights_one = "%s voo",
+  tipFlights_other = "%s voos",
+  tipCost = "Tarifas de voo no total: %s",
+  tipHearths_one = "%s volta pela Pedra de Regresso",
+  tipHearths_other = "%s voltas pela Pedra de Regresso",
+  tipRoute = "%s – %s, voada %s vezes",
+  tipLongest = "Duração: %s",
+  tipLongestRoute = "%s – %s",
+  tipBind = "%s, para casa %s vezes com a Pedra de Regresso",
+})
+
+-- 1.0.12 data books: tab Crafting
+L.add("ptBR", "Pages", {
+  tab_handwerk = "Ofícios",
+})
+L.add("ptBR", "Theme", {
+  tab_handwerk = "Ofícios",
+})
+L.add("ptBR", "Frame", {
+  tabTip_handwerk = "Profissões com curva de habilidade, marcos e receitas, além do balanço de coleta e fabricação.",
+})
+
+-- change "runde3" (packages F, E)
+L.add("ptBR", "HeatmapView", {
+  statCont = "%s neste continente",
+  tipContinent = "Clique: mostrar as brasas do continente inteiro",
+})
+L.add("ptBR", "TodoTracker", {
+  shopKind = "Lista de compras",
+  shopHint = "Um clique abre a lista de compras.",
+})
+
+-- journal/Einkaufszettel.lua (change "runde3", package E)
+L.add("ptBR", "j.Einkaufszettel", {
+  title = "Lista de compras",
+  countLabel = "Quantidade",
+  minusTip = "Um a menos (Shift: dez)",
+  plusTip = "Um a mais (Shift: dez)",
+  resolve = "Resolver produtos intermediários",
+  resolveTip = "Materiais que você mesmo pode fabricar são trocados pelos ingredientes deles. O que já está nas suas bolsas não é contado de novo.",
+  add = "Adicionar às tarefas",
+  addTip = "Salva a lista de compras como tarefa e conta os materiais nas suas bolsas.",
+  update = "Alterar a lista",
+  craft = "Fabricar agora",
+  craftTip = "Fabrica a quantidade escolhida. A janela da profissão precisa estar aberta.",
+  craftWait = "Só quando todos os materiais estiverem aqui.",
+  remove = "Remover das tarefas",
+  close = "Fechar",
+  bank = "%s no banco",
+  viaOne = "Produto intermediário: fabricar %s×",
+  made = "Fabricado: %s de %s",
+  saved = "Nas tarefas.",
+  changed = "Lista alterada.",
+  removed = "Removida da lista de tarefas.",
+  noRecipe = "Esta receita ainda não está salva. Abra a janela da profissão uma vez.",
+  rowTip = "Lista de compras",
+  rowTip2 = "Coloca esta receita com uma quantidade na lista de tarefas e conta os materiais.",
+  empty = "Nenhum material conhecido.",
+  rowAdd = "+ Lista de compras",
+  rowOpen = "Lista: %s×",
+})
+
+L.add("ptBR", "ProfessionBar", {
+  head = "LISTA DE COMPRAS",
+  pick = "Escolha uma receita na janela de profissão.",
+  loading = "Esta receita ainda não está salva no livro de receitas. Ela será lida em instantes.",
+  add = "Para a lista de compras",
+  open = "Abrir lista",
+  openTip = "Abre a lista de compras com todas as opções.",
+  choose = "Clique: escolher a receita na janela de profissão",
+  optLabel = "Barra na janela de profissão",
+  optTip = "Uma barra estreita junto à janela de profissão: a lista de compras da receita escolhida e “Para o próximo ponto de habilidade” (somente WoW Forever).",
+})
+
+L.add("ptBR", "AuctionDock", {
+  head = "LISTA DE COMPRAS",
+  allDone = "Todos os materiais estão aqui.",
+  listHead = "%s× %s",
+  need = "faltam %s",
+  bank = "Banco: %s",
+  price = "a partir de %s",
+  search = "Buscar",
+  searchTip = "Busca este item na casa de leilões e mostra aqui a oferta mais barata.",
+  buy = "Comprar (%s)",
+  buyTip = "Busca o preço total de %s×. Só se compra depois que você clicar em “Confirmar”.",
+  buyNeedSearch = "Clique primeiro em “Buscar”: a compra precisa da lista de ofertas deste item.",
+  buyBusy = "Já há uma compra em andamento.",
+  single = "Leilão individual: compre na janela da casa de leilões.",
+  unitFrom = "Oferta mais barata: %s cada",
+  tipNeed = "Necessário: %s",
+  tipHave = "Nas bolsas: %s",
+  tipMissing = "Faltam: %s",
+  tipBank = "No banco: %s",
+  priceWait = "Buscando o preço de %s× %s …",
+  confirm = "%s× %s por %s – confirmar?",
+  changed = "O preço mudou.",
+  noGold = "Você não tem ouro suficiente para isso.",
+  confirmBtn = "Confirmar",
+  cancelBtn = "Cancelar",
+  buying = "Compra em andamento …",
+  bought = "%s× %s comprado(s).",
+  unavailable = "Não há oferta para essa quantidade.",
+  failed = "A compra não deu certo. “Comprar” fica desligado até o próximo recarregamento, “Buscar” continua funcionando.",
+  blocked = "O jogo bloqueia a compra daqui. “Buscar” continua funcionando, compre na janela da casa de leilões.",
+  blockedNote = "A compra está bloqueada, só “Buscar”.",
+  busy = "A casa de leilões está ocupada agora. Tente de novo daqui a pouco.",
+  noSearch = "A busca não é possível aqui.",
+  noPrice = "Nenhum preço chegou. A compra foi cancelada.",
+  unknownResult = "Nenhum resultado informado. Veja suas bolsas.",
+  more = "… mais %s",
+  optLabel = "Lista de compras na casa de leilões",
+  optTip = "Uma janela pequena na casa de leilões com os materiais que faltam em todas as listas de compras abertas: “Buscar” e compra rápida de mercadorias (somente WoW Forever). Só se compra após um segundo clique, com o preço visível.",
 })

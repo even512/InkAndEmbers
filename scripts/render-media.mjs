@@ -1091,10 +1091,12 @@ const BOOK_KEY = (rgba, w, h) => keyNeutralEdge(rgba, w, h);
 // Reiter-Reihenfolge (Pages.ORDER). Zellen 7 und 8 (dungeons, plaene) kommen aus einer zweiten Quelle (TAB_BAND_CROP2). Die
 // Unter-Lesezeichen (Media/Bookmarks.tga) haben nur die ersten sieben Zellen (SUB_BOOKMARK_IDS); dungeons/plaene leihen sich dort
 // eine vorhandene Farbe (Theme.SUB_BOOKMARK_CELL).
-export const BOOKMARK_IDS = ["reise", "chronik", "kampf", "quests", "schaetze", "momente", "notizen", "dungeons", "plaene"];
+export const BOOKMARK_IDS = ["reise", "chronik", "kampf", "quests", "schaetze", "momente", "notizen", "dungeons", "plaene", "handwerk"];
 export const SUB_BOOKMARK_IDS = BOOKMARK_IDS.slice(0, 7);
 /** Reihenfolge der Reiter im Buch (= Pages.ORDER / Theme.TABS), unabhaengig von den Zellen */
-export const TAB_ORDER = ["reise", "chronik", "dungeons", "kampf", "quests", "plaene", "schaetze", "momente", "notizen"];
+export const TAB_ORDER = ["reise", "chronik", "dungeons", "kampf", "quests", "plaene", "schaetze", "handwerk", "momente", "notizen"];
+/** Reiter ohne eigene Unter-Lesezeichen-Zelle (Media/Bookmarks.tga hat nur sieben): leihen die Farbe eines anderen (Theme.SUB_BOOKMARK_CELL) */
+export const SUB_BORROWED = { handwerk: "schaetze" };
 export const BOOKMARK_MID_Y = [192.5, 427.5, 664.5, 902.5, 1137, 1371];
 export const BOOKMARK_SYNTH = {
   notizen: { from: 0, word: "Notizen", tail: 1560, tile: [925, 1215], center: 300, size: 58, hue: 190, sat: 0.78, val: 0.56,
@@ -1208,13 +1210,26 @@ export const TAB_BAND_CROP2 = {
   file: "bookmarks_bronze_neu2.jpg", srcW: 2752, srcH: 1536, baseH: 228,
   rows: [[304, 732, 2691], [793, 1205, 2690]],
 };
-/** Quelle der Zelle i: { file, srcW, srcH, row, s } (Zellen 0..6 alte Quelle mit s = 1, ab 7 TAB_BAND_CROP2) */
+// Datenbuecher P5: dritte Quelle fuer Zelle 9 (handwerk, Amboss mit Hammer, goldene Naht = obere Lasche):
+// art/journal/bookmark_handwerk_v1.jpg (2752 x 1536, Gemini, Magenta-Grund, freigegeben 13.11.2026). Gemessen 13.11.2026 (gleiche Regel,
+// Chrome-Canvas): obere Lasche y 304..732 (ohne Schlagschatten), rechte Kappenkante x 2691, links ab x 62 - wie bei neu2.
+export const TAB_BAND_CROP3 = {
+  file: "bookmark_handwerk_v1.jpg", srcW: 2752, srcH: 1536, baseH: 228,
+  rows: [[304, 732, 2691]],
+};
+/** Quelle der Zelle i: { file, srcW, srcH, row, s } (Zellen 0..6 alte Quelle mit s = 1, 7..8 TAB_BAND_CROP2, 9 TAB_BAND_CROP3) */
 export function tabBandSource(i) {
   const n = TAB_BAND_CROP.rows.length;
   if (i < n) return { file: TAB_BAND_CROP.file, srcW: TAB_BAND_CROP.srcW, srcH: TAB_BAND_CROP.srcH, row: TAB_BAND_CROP.rows[i], s: 1 };
-  const c2 = TAB_BAND_CROP2, row = c2.rows[i - n];
-  if (!row) return null;
-  return { file: c2.file, srcW: c2.srcW, srcH: c2.srcH, row, s: (row[1] - row[0] + 1) / c2.baseH };
+  let k = i - n;
+  for (const c of [TAB_BAND_CROP2, TAB_BAND_CROP3]) {
+    if (k < c.rows.length) {
+      const row = c.rows[k];
+      return { file: c.file, srcW: c.srcW, srcH: c.srcH, row, s: (row[1] - row[0] + 1) / c.baseH };
+    }
+    k -= c.rows.length;
+  }
+  return null;
 }
 /** Zuschnitt (Quellpixel) der Lasche i -> { x, y, w, h } */
 export function tabBandCrop(i) {
@@ -2377,6 +2392,9 @@ export const TEXTURES = [
   // und hebt rechts duenn ab) und Grabstein des Graeberfelds. Weiss auf durchsichtig, im Spiel per SetVertexColor in Tinte.
   { name: "Stroke", w: 64, h: 16, pixels: () => strokePixels(64, 16) },
   { name: "Grave", w: 32, h: 32, pixels: () => gravePixels(32, 32) },
+  // Heatmap (I15, journal/HeatmapView.lua): weicher runder Glutfleck. Weiss, Deckkraft faellt glockenfoermig zum Rand auf 0 (kein
+  // harter Rand, auch bei Ueberlappung vieler Flecken), im Spiel per SetVertexColor in Bernstein/Orange/Glutgelb bzw. Rot getoent.
+  { name: "HeatBlob", w: 64, h: 64, pixels: () => heatBlobPixels(64, 64) },
   // Rauchzeichen (journal/Smoke.lua): ein Stueck Rauchfaden. Laengs weiches Fenster (bei 50 % Ueberlappung gleichmaessig), quer dunkler Kern
   // mit breiterem hellen Saum, Farben fest in der Textur, Deckkraft je Sprite im Spiel.
   { name: "SmokeThread", w: 128, h: 128, pixels: () => smokeThreadPixels(128, 128) },
@@ -2635,6 +2653,23 @@ export function strokePixels(w, h) {
     for (let y = 0; y < h; y++) {
       const d = Math.abs((y + 0.5) / h - 0.5);
       const a = clamp01((half - d) * h * 0.9) * ink * ends;
+      rgba[(y * w + x) * 4 + 3] = Math.round(255 * a);
+    }
+  }
+  return rgba;
+}
+
+// weicher Glutfleck der Heatmap: Deckkraft = Glocke (exp) mit sanftem Auslauf, am Rand exakt 0
+export function heatBlobPixels(w, h) {
+  const rgba = Buffer.alloc(w * h * 4, 255);
+  const cx = (w - 1) / 2;
+  const cy = (h - 1) / 2;
+  const r = Math.min(w, h) / 2;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const d = Math.hypot(x - cx, y - cy) / r;
+      const fade = d >= 1 ? 0 : (1 - d * d) ** 2; // weicher Auslauf zum Rand
+      const a = Math.exp(-3.2 * d * d) * fade;
       rgba[(y * w + x) * 4 + 3] = Math.round(255 * a);
     }
   }

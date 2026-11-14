@@ -479,10 +479,19 @@ local function sampleTraining(pets)
   return pt
 end
 
+-- Level of the current pet (UnitLevel("pet"), read with pcall); nil without a pet or when the value is unreadable.
+-- The pet trainer follows the hunter's level, but the pet itself must reach the rank level before it can use the ability.
+function Lehrplan.petLevel()
+  local lv = num((call(UnitLevel, "pet")))
+  if lv == nil or lv < 1 then return nil end
+  return floor(lv)
+end
+
 function Lehrplan.evaluatePets(pets, level, names, preview)
   local pt = preview and sampleTraining(pets) or Lehrplan.petTraining()
+  local petLevel = Lehrplan.petLevel()
   local out = { preview = preview == true or nil, rows = {}, seen = pt ~= nil and pt.visited == true, at = pt and pt.at, learned = { n = 0 }, now = { n = 0, cost = 0 },
-    missing = { n = 0 }, later = { n = 0 }, unknown = { n = 0 }, todo = { n = 0, cost = 0 }, next = {} }
+    missing = { n = 0 }, later = { n = 0 }, unknown = { n = 0 }, todo = { n = 0, cost = 0 }, next = {}, petLevel = petLevel }
   local nextBy = {}
   for _, e in ipairs(pets.list) do
     local r = { id = e.id, level = e.level, cost = e.cost, req = e.req, pet = true }
@@ -517,6 +526,8 @@ function Lehrplan.evaluatePets(pets, level, names, preview)
       r.state = "unknown"
       out.unknown.n = out.unknown.n + 1
     end
+    -- bought or learnable rank above the current pet's level: the pet can only use it from that level on (B24e)
+    if petLevel and (r.state == "learned" or r.state == "now") and e.level > petLevel then r.petFrom = e.level end
     if names then
       local info = Lehrplan.spellInfo(e.id)
       if info then r.name, r.rank, r.icon, r.missingName = info.name, info.rank, info.icon, info.missing end

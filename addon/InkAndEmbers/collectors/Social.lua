@@ -198,6 +198,11 @@ end
 
 local function endGroup(self, g, seconds)
   local mapID = here()
+  -- members still present at the end get their GL line too (time together until the end of the group)
+  local now = time()
+  for _, old in pairs(g.members or {}) do
+    Store.append("GL", old.name, old.class, old.level, now - old.at)
+  end
   Store.append("GE", seconds, g.maxSize, g.kills, g.quests, g.instances, playerLevel(), mapID)
   self.group = nil
   persistGroup(self)
@@ -642,14 +647,17 @@ function Social.mailTake(self, index, what, attach)
     local it = m.items[a]
     if not it then return end
     m.items[a] = nil
-    writeMail(self, m, 0, { it }, m.cod)
+    local cod = m.cod
+    m.cod = 0 -- cash on delivery counts once per letter, not per taken item
+    writeMail(self, m, 0, { it }, cod)
   else
     local money, items = m.money, {}
     for j = 1, MAIL_ATTACH do
       if m.items[j] then items[#items + 1] = m.items[j] end
     end
-    m.money, m.items = 0, {}
-    writeMail(self, m, money, items, #items > 0 and m.cod or nil)
+    local cod = #items > 0 and m.cod or nil
+    m.money, m.items, m.cod = 0, {}, (#items > 0 and 0 or m.cod)
+    writeMail(self, m, money, items, cod)
   end
 end
 

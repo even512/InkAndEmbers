@@ -813,6 +813,7 @@ local function speakButton(parent, h)
   end
   b:SetScript("OnClick", function(self)
     safe(function()
+      self:Paint() -- ask again: the voice packs may have loaded since the last paint (the answer is cached, so this is cheap)
       if not (self.rec and self.has) then return end -- without a recording the button does nothing
       local S = Journal.Spoken
       if S then S.toggle(self.rec.questID, self.event, self.rec.title, function() self:Paint() end, self.rec.starter) end
@@ -1227,8 +1228,8 @@ local function layoutSettings(block)
 end
 
 -- one objective line (marker + count + text); bar optional (focus card)
-local function newObj(parent)
-  local f = CreateFrame("Frame", nil, parent)
+local function newObj(parent, asButton)
+  local f = asButton and makeButton(parent, CW, 15) or CreateFrame("Frame", nil, parent)
   size(f, CW, 15)
   f.mark = font(f, "text", 11, QTR.C.muted, "LEFT")
   f.mark:SetText("·")
@@ -1241,6 +1242,16 @@ local function newObj(parent)
   height(f.track, 2)
   f.bar = solid(f, QTR.C.gold, "OVERLAY")
   height(f.bar, 2)
+  return f
+end
+
+-- a material line of a shopping list in the to-do section: an objective line that is a button (click opens the slip)
+local function newShopObj(parent)
+  local f = newObj(parent, true)
+  f:SetScript("OnClick", function(self)
+    local Tr = TT()
+    if Tr and Tr.openRow then Tr.openRow({ shop = true, id = self.planId }) end
+  end)
   return f
 end
 
@@ -1529,16 +1540,10 @@ local function fillQuest(q, rec, s, view)
     end
   end
   -- objectives / turn-in line
-  y = y or math.ceil(22 * k)
+  y = y or math.ceil((rec.complete and 20 or 22) * k) -- ready: the row is just the title line
   q.objs = {} -- the pooled children were released (hidden) at the start of the layout
   if rec.complete then
-    local t = acquire("turnin", newTurnin, q)
-    pt(t, "TOPLEFT", q, "TOPLEFT", 18 + ox, -y)
-    t.text:SetText(turninText(rec))
-    width(t.text, CW - 18 - 14 - ox)
-    q.objs[#q.objs + 1] = t
-    t.isTurnin = true
-    y = y + math.ceil(17 * QTR.lineK())
+    -- ready to turn in: one compact row (green frame, arrow, level, title) WITHOUT the "Abgeben ..." line; the focus card keeps it
   elseif s.look.objs then
     for _, o in ipairs(rec.objectives or {}) do
       if not (o.done and s.look.doneObj == "hide") then
@@ -1676,6 +1681,9 @@ local function newFocus(parent)
   if f.title.SetWordWrap then f.title:SetWordWrap(true) end
   f.titleBtn:SetScript("OnClick", function(_, button) if f.rec then QTR.rowClick({ rec = f.rec, title = f.titleBtn }, button) end end)
   f.speak = speakButton(f, 18)
+  -- the button lies inside the area of the title button (short title): it must always be the one that gets the mouse, so it sits
+  -- two frame levels above it (fillFocus also cuts the title button's hit area at the end of the title text)
+  if f.speak.SetFrameLevel and f.titleBtn.GetFrameLevel then f.speak:SetFrameLevel(f.titleBtn:GetFrameLevel() + 2) end
   f.speak:Hide()
   f.sub = font(f, "text", 10, QTR.C.sub, "LEFT")
   if f.sub.SetWordWrap then f.sub:SetWordWrap(false) end
@@ -1738,11 +1746,14 @@ local function fillFocus(f, rec, s, view)
   width(f.title, tw)
   local th = max(16, (num(f.title:GetStringHeight()) or 15) + 1)
   size(f.titleBtn, tw, th)
+  local hitCut = 0
   if sp > 0 then
     local lineW = min(tw, num(f.title:GetStringWidth()) or tw)
     clear(f.speak)
     pt(f.speak, "TOPLEFT", f, "TOPLEFT", x + lineW + 2, -25)
+    hitCut = max(0, tw - lineW) -- the title button reacts only on the title text, never on the read-aloud button
   end
+  if f.titleBtn.SetHitRectInsets then f.titleBtn:SetHitRectInsets(0, hitCut, 0, 0) end
   -- sub line: level (difficulty colour) · zone · tag
   local c = diffColor(rec)
   local hex = string.format("|cff%02x%02x%02x", floor(c[1] * 255 + 0.5), floor(c[2] * 255 + 0.5), floor(c[3] * 255 + 0.5))
@@ -1917,7 +1928,8 @@ local function signature(view, todos, s)
   end
   p[#p + 1] = "T" .. #todos
   if not s.collapsed.todo then
-    for _, r in ipairs(todos) do p[#p + 1] = tostring(r.id) .. (r.done and "d" or "") end
+    -- (the text of a material line carries its count: a changed count lays out again)
+    for _, r in ipairs(todos) do p[#p + 1] = tostring(r.id) .. (r.done and "d" or "") .. (r.sub and r.text or "") end
   end
   return table.concat(p, ",")
 end
@@ -1928,7 +1940,7 @@ local function layoutTodo(content, y, todos, s)
   pt(b, "TOPLEFT", content, "TOPLEFT", 0, -y)
   b.name:SetText(upper(T.todo))
   local open = 0
-  for _, r in ipairs(todos) do if not r.done then open = open + 1 end end
+  for _, r in ipairs(todos) do if not r.done and not r.sub then open = open + 1 end end
   b.count:SetText(tostring(open))
   local collapsed = s.collapsed.todo == true
   QTR.paintChev(b, collapsed, "todo")
@@ -1939,11 +1951,23 @@ local function layoutTodo(content, y, todos, s)
   y = y + 8 + math.ceil(20 * QTR.lineK())
   if not collapsed then
     for _, r in ipairs(todos) do
-      local row = acquire("todo", newTodo, content)
-      pt(row, "TOPLEFT", content, "TOPLEFT", 0, -y)
-      y = y + fillTodo(row, r) + 1
-      st.blocks[#st.blocks + 1] = row
-      st.todoRows[r.id] = row
+      if r.sub then
+        -- material line of a shopping list: drawn like a quest objective ("4/20 Kupfererz"), done ones as the objective setting says
+        if not (r.done and s.look.doneObj == "hide") then
+          local f = acquire("todoobj", newShopObj, content)
+          pt(f, "TOPLEFT", content, "TOPLEFT", 0, -y)
+          local o = r.more and { done = false, label = r.text } or { done = r.done, need = r.need, have = r.have, label = r.name or r.text }
+          y = y + fillObj(f, o, 18, CW, false, nil) + 1
+          f.planId = r.planId
+          st.blocks[#st.blocks + 1] = f
+        end
+      else
+        local row = acquire("todo", newTodo, content)
+        pt(row, "TOPLEFT", content, "TOPLEFT", 0, -y)
+        y = y + fillTodo(row, r) + 1
+        st.blocks[#st.blocks + 1] = row
+        st.todoRows[r.id] = row
+      end
     end
   end
   return y + 4
@@ -2069,6 +2093,7 @@ local function updateInPlace(view, s)
     local rec = QT().record(id)
     if rec and q.rec then
       q.rec = rec
+      if q.speak:IsShown() then q.speak:Bind(rec) end -- fresh record, and the voice packs may have loaded since the layout
       if q.dist:IsShown() then
         local d = dist(rec.dist)
         if d then q.dist.text:SetText(d) end
@@ -2090,6 +2115,7 @@ local function updateInPlace(view, s)
   local f = st.focusFrame
   if f and f.rec and view.focus and view.focus.questID == f.rec.questID then
     local rec = view.focus
+    if f.speak:IsShown() then f.speak:Bind(rec) end
     local d = dist(rec.dist)
     if f.comp and f.comp:IsShown() then f.comp.dist:SetText(d or "–") end
     local shown = {}

@@ -90,7 +90,7 @@ Frame.SUBTAB.fit = {
   { scale = 0.74, pad = 4, gap = 3, minW = 30 },
 }
 Frame.SUBTABS_OUT = Frame.SUBTAB.out + Frame.SUBTAB.pull + Frame.SUBTAB.hover
--- most sub-bookmarks of one tab: Chronik has four (Steckbrief, Tagebuch, Weggefährten, Meilensteine); one slot spare
+-- most sub-bookmarks of one tab: Chronik has five (Steckbrief, Tagebuch, Weggefährten, Meilensteine, Vermächtnis)
 Frame.SUBTABS_MAX = 5
 -- Journey subpages from left to right: total journey · chapter journey (= zone map, key "karte", the default view on open
 -- even though it sits last). The To Do moved to the tab Pläne (I12, pages/Plaene.lua). The other tabs register theirs via
@@ -102,8 +102,8 @@ local function subtabDef(key)
     return nil
   end })
 end
--- K4 (10.11.): "Inhalt" first (default view, key "karte"), then the total journey
-Frame.SUBTABS_REISE = { subtabDef("karte"), subtabDef("gesamt") }
+-- K4 (10.11.): "Inhalt" first (default view, key "karte"), then the total journey; I15: then the heat map (journal/HeatmapView.lua)
+Frame.SUBTABS_REISE = { subtabDef("karte"), subtabDef("gesamt"), subtabDef("heatmap") }
 Frame.SUBTABS_REISE[1].art = "contents"
 -- K4: the sub-bookmark "Inhalt" is a painted hanging band (Media/SubContentsDE|EN, scripts/render-media.mjs SUB_CONTENTS) with the
 -- word embroidered: no label from the code (the tooltip stays). Texture 256 x 512 (band 256 x 441 at the top), shown 66 px wide
@@ -124,6 +124,7 @@ Frame.TAB_WOBBLE = {
   quests = { dx = -3, dy = -1, deg = -1.5 },
   plaene = { dx = -1, dy = 0, deg = -1.2 },
   schaetze = { dx = 2, dy = 1, deg = 1.0 },
+  handwerk = { dx = -1, dy = 0, deg = 1.4 },
   momente = { dx = -2, dy = -2, deg = -2.0 },
   notizen = { dx = 1, dy = 1, deg = 1.5 },
 }
@@ -137,6 +138,8 @@ Frame.TEXT = ns.Locale.ns("Frame", {
   subTip_gesamt = "Die ganze Route auf der Kontinentkarte, links die Gesamtwerte und die Stationen der Reise",
   sub_karte = "Inhalt",
   subTip_karte = "Inhaltsverzeichnis der Reise: Bände, Akte und Kapitel mit der Zonenkarte (Standardansicht)",
+  sub_heatmap = "Heatmap",
+  subTip_heatmap = "Wo Ihr wie lange wart und wo Ihr gestorben seid: als Glut auf der Zonenkarte",
   -- K2: acts as the first level, their chapters as the second
   actUpper = "AKT %s",
   actStory = "%s Kapitel: %s",
@@ -172,6 +175,7 @@ Frame.TEXT = ns.Locale.ns("Frame", {
   tabTip_plaeneRetail = "Eure To Dos.",
   tabTip_notizen = "Eure eigenen Notizen, gern mit einem Pin auf der Karte.",
   tabTip_schaetze = "Gold im Beutel, Haushaltsbuch, Goldfluss und Ausrüstung.",
+  tabTip_handwerk = "Berufe mit Skillkurve, Meilensteinen und Rezepten, dazu die Bilanz des Sammelns und Herstellens.",
   tabTip_momente = "Album der besonderen Augenblicke, Spielzeit-Uhr und Bibliothek.",
   closeTip = "Schließen (Esc)",
   levelHint = "Stufe %s erreicht",
@@ -226,7 +230,7 @@ Frame.SCRIBBLE = { size = 30, rise = 5, gap = 9, top = 16, underline = 2, lineGa
 Frame.HINT_SECONDS = 2.4
 Frame.HINT_FADE = 0.7
 
-local Theme, View, Map, Playback, Stations
+local Theme, View, Map, Playback, Stations, FlightBook
 
 -- mapMode: "zone" (default: uncovered zone map) | "continent" (continent view with route). contWhole: the continent view shows
 -- the WHOLE continent map (button "Continent", right click, continent choice); otherwise (fallback without zone art) the
@@ -238,6 +242,7 @@ local updateMode
 
 local function deps()
   Theme, View, Map, Playback, Stations = Journal.Theme, Journal.View, Journal.Map, Journal.Playback, Journal.Stations
+  FlightBook = Journal.FlightBook
 end
 
 local function int(n) return tostring(floor(tonumber(n) or 0)) end
@@ -496,6 +501,14 @@ function Frame.fitCardLine(card, sub)
     if rw <= 0 then rw = 110 end
     reserve = nw - 4 + 6 + rw + Frame.CARD_LINE_GAP
   end
+  -- total journey: the page turner of the stations sits in the same spot (P3: fewer rows -> sooner a second page)
+  local sb = J.stations
+  if reserve == 0 and sb and sb.nav and sb.frame:IsShown() and sb.nav.frame:IsShown() then
+    local nw = tonumber(sb.nav.frame:GetWidth()) or 54
+    local rw = strWidth(card.measure, sb.range and sb.range:GetText() or "")
+    if rw <= 0 then rw = 90 end
+    reserve = nw - 4 + 6 + rw + Frame.CARD_LINE_GAP
+  end
   local avail = L.w - (lw > 0 and lw or 110) - Frame.CARD_LINE_GAP - reserve
   card.sub:SetWidth(max(40, avail))
   local list = Frame.subVariants(sub)
@@ -583,6 +596,7 @@ local function tabAvailable(id)
   local P = Journal.Pages
   -- another character's book (read only) leaves out what belongs to the logged-in character (Pages.guestAllows)
   if P and P.guestAllows and not P.guestAllows(id) then return false end
+  if P and P.tabHidden and P.tabHidden(id) then return false end -- a client without this tab (Handwerk in Retail)
   if id == Frame.HOME then return true end
   return P ~= nil and P.isAvailable(id) == true
 end
@@ -762,12 +776,18 @@ end
 
 function Frame.updateTabs()
   if not J.tabs then return end
+  local slot = 0 -- visible bookmarks close the gaps of the hidden ones (guest book, Retail without Handwerk)
   for _, b in ipairs(J.tabs) do
     local current = J.page == b.tabId
     local available = tabAvailable(b.tabId)
     local P = Journal.Pages
-    local gone = P ~= nil and P.guestAllows ~= nil and not P.guestAllows(b.tabId) -- guest book: the bookmark is gone, not dimmed
+    -- guest book / client without this tab: the bookmark is gone, not dimmed
+    local gone = P ~= nil and ((P.guestAllows ~= nil and not P.guestAllows(b.tabId)) or (P.tabHidden ~= nil and P.tabHidden(b.tabId)))
     b:SetShown(not gone)
+    if not gone then
+      b.baseY = -(Frame.TAB.y0 + slot * Frame.TAB.pitch + b.wobble.dy)
+      slot = slot + 1
+    end
     -- Bookmark: fixed size, only the position on the book frame changes: active sticks out further by pull and fully bright,
     -- inactive by the small spread dx and clearly darkened, minimally raised under the mouse. The left end stays under the cover.
     local k = Frame.TAB
@@ -787,7 +807,7 @@ function Frame.updateTabs()
 end
 
 Frame.TAB_TIP_IDS = { reise = true, chronik = true, dungeons = true, kampf = true, quests = true, plaene = true, schaetze = true,
-  momente = true, notizen = true }
+  handwerk = true, momente = true, notizen = true }
 Frame.TAB_TIP = setmetatable({}, { __index = function(_, id)
   if Frame.TAB_TIP_IDS[id] then
     -- Retail: no campfire guests (switch "Am Feuer" hidden) and none of the WoW Forever parts (Lehrplan, Zonen, Dungeon-Quests)
@@ -920,6 +940,7 @@ function Frame.subList(id)
 end
 
 function Frame.reiseSub()
+  if J.reiseHeat then return "heatmap" end
   if Frame.isTotal() then return "gesamt" end
   return "karte"
 end
@@ -932,6 +953,28 @@ function Frame.currentSub()
 end
 
 local function showReiseSub(key)
+  if key == "heatmap" then
+    if not J.reiseHeat then
+      J.reiseHeat = true
+      Frame.render(View.status, View.model, View.stale)
+    end
+    return
+  end
+  if J.reiseHeat then
+    -- leaving the heat map: back to the journey view the bookmark asks for (the journey parts were hidden, full redraw)
+    J.reiseHeat = false
+    local HV = Journal.HeatmapView
+    if HV and J.heat then HV.hide(J.heat) end
+    if (key == "gesamt") ~= Frame.isTotal() then
+      J.sel, J.contWhole = {}, false
+      J.mapMode = key == "gesamt" and "continent" or "zone"
+      Frame.clearFollow()
+      J.tocBand = nil
+    end
+    J.over:Show()
+    Frame.render(View.status, View.model, View.stale)
+    return
+  end
   local total = Frame.isTotal()
   if (key == "gesamt") ~= total then
     J.sel, J.contWhole = {}, false
@@ -1347,6 +1390,8 @@ function Frame.resetLayout()
 end
 
 local function releaseHome()
+  local HV = Journal.HeatmapView
+  if HV and J.heat then HV.hide(J.heat) end
   View.setActive(false)
   Frame.clearFollow() -- closing the book or leaving the journey: next time the map starts from the selection again
   if J.st then J.st.playing = false end
@@ -1405,6 +1450,9 @@ end
 function Frame.onGuestChange(guid)
   deps()
   J.sel, J.contWhole, J.mapMode = {}, false, "zone"
+  J.reiseHeat = false
+  if Journal.HeatmapView and J.heat then Journal.HeatmapView.reset(J.heat) end
+  if J.over and J.frame and J.frame:IsShown() and J.page == Frame.HOME then J.over:Show() end
   Frame.clearFollow()
   J.actCardsFor, J.actCards, J.tocBand = nil, nil, nil
   J.zoneCards, J.stationsFor, J.stationList, J.stationSel, J.axisModel = nil, nil, nil, nil, nil
@@ -1752,6 +1800,10 @@ function Frame.build()
     sb.range:SetPoint("RIGHT", sb.nav.frame, "LEFT", -6, 0)
     sb.frame:Hide()
     J.stations = sb
+    -- P3 flight and hearthstone book: own block above the stations (Frame.updateFlightBook / Frame.placeLower)
+    if FlightBook then
+      J.flightBook = FlightBook.create(over, SA.x, SA.y, SA.w)
+    end
     local I = Journal.Index
     if I and I.onReady then
       I.onReady(function()
@@ -2310,8 +2362,29 @@ function Frame.back()
   return false
 end
 
+-- Reise > Heatmap (I15): the journey parts (overlay, map, replay) rest, the heat map panel (journal/HeatmapView.lua) shows the
+-- zone list and the embers of the same journey model; status texts as on the journey map
+function Frame.renderHeat(status, model)
+  local HV = Journal.HeatmapView
+  if J.st then J.st.playing = false end
+  if J.pb then Playback.stopTicking(J.pb) end
+  Theme.hideTooltip()
+  J.over:Hide()
+  J.map.viewport:Hide()
+  J.model, J.scene, J.map.scene = nil, nil, nil
+  if not J.heat then J.heat = HV.build(J.spread, J.over:GetFrameLevel()) end
+  local msg = (status ~= "ready" or not model) and (Frame.TEXT[status] or Frame.TEXT.loading) or nil
+  HV.show(J.heat, model, msg)
+  Frame.updateSubTabs()
+end
+
 function Frame.render(status, model, stale)
   if not J.frame or J.page ~= Frame.HOME then return end
+  if J.reiseHeat then
+    if Journal.HeatmapView then return Frame.renderHeat(status, model) end
+    J.reiseHeat = false
+    J.over:Show()
+  end
   J.staleOn = stale and true or false
   J.staleHint:SetShown(J.staleOn)
   if status ~= "ready" or not model then
@@ -2418,9 +2491,12 @@ function Frame.refresh(keepPlay)
   Playback.setTicks(J.pb, Playback.ticks(J.axisLevels, r0, r1, J.pb.trackW))
   Playback.setLevelMarks(J.pb, Playback.levelFracs(J.axisLevels, r0, r1))
   local total = Frame.isTotal()
+  -- Runde 3: no red margin notes on the total journey ("Tag 3 · erster Tod" ...); flight book and stations move up under the table
+  if total then scene.notes = {} end
   Playback.setGridShown(J.pb, false) -- K4: no stickers; acts and chapters are in the table of contents (Frame.updateContents)
   Frame.updateContents()
   Frame.updateStations(total)
+  Frame.updateFlightBook(total)
   Frame.setCard(cardFor(J.st.playing and Playback.mapP(J.st) or huge))
   updateTitle(scene)
   updateContinents(scene)
@@ -2726,6 +2802,18 @@ function Frame.updateStations(on, fromReady)
   return true
 end
 
+-- P3 flight and hearthstone book: fills the block from model.total.flightBook (total journey only; nothing to show -> hidden,
+-- placeLower then gives the space back to the stations). -> true when the block shows
+function Frame.updateFlightBook(on)
+  local fb = J.flightBook
+  if not (fb and FlightBook) then return false end
+  local model = J.model
+  local data = on and model and type(model.total) == "table" and model.total.flightBook or nil
+  local h = FlightBook.set(fb, data)
+  FlightBook.setShown(fb, on and h > 0)
+  return on and h > 0 or false
+end
+
 -- K4 table of contents ------------------------------------------------------------------------------------------------
 Frame.CONTENTS_BOTTOM = 604
 
@@ -2814,7 +2902,20 @@ function Frame.placeLower()
   local top = notes > 0 and G.y or Frame.NOTE.y
   if J.pb then Playback.placeGrid(J.pb, G.x, top, notes > 0 and G.rows or free.gridRows) end
   Frame.placeNotes()
-  if J.stations and Stations then Stations.place(J.stations, J.over, SA.x, top, notes > 0 and SA.rows or free.stationRows) end
+  local stTop, stRows = top, notes > 0 and SA.rows or free.stationRows
+  -- P3: the flight and hearthstone book takes the top of the stations' space; the stations keep the rows that still fit above
+  -- the page foot (Frame.CONTENTS_BOTTOM)
+  local fb = J.flightBook
+  if fb and FlightBook and fb.frame:IsShown() and (fb.height or 0) > 0 then
+    FlightBook.place(fb, J.over, SA.x, top)
+    stTop = top + fb.height
+    stRows = max(1, math.min(stRows, floor((Frame.CONTENTS_BOTTOM - stTop - Stations.HEAD_H - 4) / Stations.ROW_H)))
+  end
+  if J.stations and Stations then Stations.place(J.stations, J.over, SA.x, stTop, stRows) end
+  -- the row count decides whether the stations page (nav + "Page x of y" at the top of the page): fit the card's sub line again
+  local card = J.card
+  local c = card and card.chapter
+  if c and c.total and card:IsShown() and not c.unexplored then Frame.fitCardLine(card, c.subtitle or c.label or "") end
   return top
 end
 

@@ -12,7 +12,7 @@ Journal.Momente = Momente
 
 local floor, huge, min, max = math.floor, math.huge, math.min, math.max
 local format, find, match, lower, upper, sub = string.format, string.find, string.match, string.lower, string.upper, string.sub
-local tsort = table.sort
+local tsort, tinsert = table.sort, table.insert
 
 Momente.GROUPS = { "all", "levels", "fights", "finds", "places" }
 Momente.FILTER_OK = { all = true, levels = true, fights = true, finds = true, places = true }
@@ -25,6 +25,10 @@ Momente.PAGES_PER_BOOK = 200 -- pages per book (the rest is not read)
 Momente.NAME_MAX = 60        -- bytes for names and titles
 Momente.CURIO_LINES = 7      -- lines under "Kurioses"
 Momente.EMOTE_SCAN = 500     -- emote counters read
+Momente.CURIO_SCAN = 8000    --spell/consumable counters read (favourite spell, most used item)
+Momente.EMOTE_POOL = 6       -- emote sentences in the pool of the curiosities
+Momente.DATA_TTL = 30        -- seconds: how long the data sentences of the curiosities stay cached per index
+Momente.CURIO_CAND = 12      -- favourite spell / most used item: top candidates looked at (filter, readable name)
 Momente.HOUR_PIECES = 400000 -- hour pieces for the clock (unusually large SV -> truncated)
 Momente.SESSION_DAYS = 400   -- longest session the clock still counts
 
@@ -80,6 +84,13 @@ local TEXT = Loc.ns("m.Momente", {
   guessedSome = "%s (davon %s vermutet)",
   fish_one = "%s Fisch geangelt", fish_other = "%s Fische geangelt",
   afkDozed = "%s abwesend",
+  favSpell = "Lieblingszauber: %s (%s ×)", spellUnknown = "Zauber Nr. %s",
+  favItem = "Meistverbraucht: %s (%s ×)",
+  jumps_one = "%s Sprung in die Luft", jumps_other = "%s Sprünge in die Luft",
+  rollsHead = "Würfe: %s",
+  rollNeed = "%s Bedarf", rollGreed = "%s Gier", rollPass = "Würfe gepasst: %s",
+  rollsWon_one = "%s Wurf gewonnen", rollsWon_other = "%s Würfe gewonnen",
+  duels = "Duelle: %s gewonnen, %s verloren",
 })
 Momente.TEXT = TEXT
 
@@ -704,7 +715,175 @@ local function fallCount(index)
   return n, guessed
 end
 
-local function buildCurios(index, char, seed, falls, now)
+-- the `keep` biggest entries { id, n } of an id -> count table (ids as numbers or digit strings); ties: lower id first
+local function topEntries(g, keep)
+  if not g then return {} end
+  -- single pass, bounded insertion list (the tables can hold thousands of ids; no full sort per evaluation)
+  local list, scanned = {}, 0
+  for k, v in pairs(g) do
+    scanned = scanned + 1
+    if scanned > Momente.CURIO_SCAN then break end
+    local n = count(v)
+    if n and n > 0 and (#list < keep or n >= list[#list].n) then
+      local id = posId(k)
+      if id then
+        local pos = #list + 1
+        while pos > 1 and (list[pos - 1].n < n or (list[pos - 1].n == n and list[pos - 1].id > id)) do pos = pos - 1 end
+        if pos <= keep then
+          tinsert(list, pos, { id = id, n = n })
+          if #list > keep then list[#list] = nil end
+        end
+      end
+    end
+  end
+  return list
+end
+
+-- spell name from the client (C_Spell.GetSpellName, else the old GetSpellInfo), display-ready; nil if unknown
+local function spellNameOf(id)
+  local Live = Journal.Live
+  local raw = Live and Live.spellName and Live.spellName(id) or nil
+  if not raw then
+    local f = rawget(_G, "GetSpellInfo")
+    if type(f) == "function" then
+      local ok, v = pcall(f, id)
+      if ok and type(v) == "table" and not isSecret(v) then v = v.name end
+      if ok then raw = rawStr(v) end
+    end
+  end
+  return raw and display(raw, 24) or nil
+end
+
+-- item name: snapshot of the character, else the client; display-ready, nil if unknown
+local function itemNameOf(char, id)
+  local raw = nameIn(snapGroup(char, "items"), id)
+  if not raw then
+    local Live = Journal.Live
+    raw = Live and Live.itemName and Live.itemName(id) or nil
+  end
+  return raw and display(raw, 24) or nil
+end
+
+-- favourite spell: only real class/player spells. Not counted: hearthstone, profession actions (fishing, cooking, first aid,
+-- mining ...), mounts, companions, recipes and passives (SP lines with that kind, C_MountJournal), and - if the client has a spell
+-- book API - everything that is not in the spell book (eating, drinking, item use).
+Momente.SPELL_BLOCK = {}
+for _, id in ipairs({
+  8690, 7620, 7731, 7732, 18248, 33095, 2550, 3102, 3413, 18260, 33359, 3273, 3274, 7924, 10846, 27028, 2656, 13262, 31252,
+  51005, 2366, 2368, 3570, 11993, 28695, 2575, 2576, 3564, 10248, 29354, 8613, 8617, 8618, 10768, 32678, 2383, 2580, 21651, 21652,
+}) do Momente.SPELL_BLOCK[id] = true end
+
+local function callG(f, ...)
+  if type(f) ~= "function" then return nil end
+  local ok, a = pcall(f, ...)
+  if not ok or isSecret(a) then return nil end
+  return a
+end
+
+-- true / false: the client answers whether the player knows the spell; nil: no spell book API (then only the block list counts)
+local function inSpellBook(id)
+  local SB = rawget(_G, "C_SpellBook")
+  local E = rawget(_G, "Enum")
+  local bank = type(E) == "table" and not isSecret(E) and type(E.SpellBookSpellBank) == "table" and E.SpellBookSpellBank.Player or nil
+  local have = false
+  if type(SB) == "table" and not isSecret(SB) then
+    if type(SB.IsSpellKnown) == "function" then
+      have = true
+      if callG(SB.IsSpellKnown, id, bank) == true then return true end
+    end
+    if type(SB.IsSpellInSpellBook) == "function" then
+      have = true
+      if callG(SB.IsSpellInSpellBook, id, bank, false) == true then return true end
+    end
+  end
+  if type(rawget(_G, "IsPlayerSpell")) == "function" then
+    have = true
+    if callG(rawget(_G, "IsPlayerSpell"), id) == true then return true end
+  end
+  if type(rawget(_G, "IsSpellKnown")) == "function" then
+    have = true
+    if callG(rawget(_G, "IsSpellKnown"), id) == true then return true end
+  end
+  if have then return false end
+  return nil
+end
+
+-- spell IDs the SP lines name as recipe, mount, companion or passive
+local NOT_FAVOURITE = { recipe = true, mount = true, companion = true, passive = true }
+local function otherSpells(index)
+  local set = {}
+  local Idx = I()
+  if not (Idx and index) then return set end
+  for _, r in ipairs(Idx.list(index, "SP")) do
+    local id = posId(Idx.str(r, "SP", "spellID"))
+    if id and NOT_FAVOURITE[Idx.str(r, "SP", "kind") or ""] then set[id] = true end
+  end
+  return set
+end
+
+local function realSpell(id, other)
+  if Momente.SPELL_BLOCK[id] or other[id] then return false end
+  local MJ = rawget(_G, "C_MountJournal")
+  if type(MJ) == "table" and not isSecret(MJ) and callG(MJ.GetMountFromSpell, id) ~= nil then return false end
+  return inSpellBook(id) ~= false
+end
+
+-- Datenbuecher P1: sentences from counters that were collected but never shown. In priority order, each only with data.
+-- casts (favourite spell), consumables (most used item), misc.jumps, rolls (need/greed/pass, won), duels (won/lost).
+local function dataCurios(index, char)
+  local out = {}
+  -- favourite spell: of the top candidates the real spells; the first with a readable name, else the top one with a placeholder
+  local other = otherSpells(index)
+  local real = {}
+  for _, e in ipairs(topEntries(counterGroup(char, "casts"), Momente.CURIO_CAND)) do
+    if realSpell(e.id, other) then real[#real + 1] = e end
+  end
+  if #real > 0 then
+    local pick, name
+    for _, e in ipairs(real) do
+      local n = spellNameOf(e.id)
+      if n then
+        pick, name = e, n
+        break
+      end
+    end
+    if not pick then pick, name = real[1], TEXT("spellUnknown", format("%.0f", real[1].id)) end
+    out[#out + 1] = TEXT("favSpell", name, int(pick.n))
+  end
+  -- most used consumable (the kind is not stored per item: potion, flask, food and drink together)
+  for _, e in ipairs(topEntries(counterGroup(char, "consumables"), Momente.CURIO_CAND)) do
+    local name = itemNameOf(char, e.id)
+    if name then
+      out[#out + 1] = TEXT("favItem", name, int(e.n))
+      break
+    end
+  end
+  local misc = counterGroup(char, "misc")
+  local jumps = misc and count(misc.jumps) or nil
+  if jumps and jumps > 0 then out[#out + 1] = plural(jumps, "jumps") end
+  local rolls = counterGroup(char, "rolls")
+  if rolls then
+    local parts = {}
+    -- the page rows are 300 px wide and one line: need/greed in one sentence, pass in its own (kept short in every language)
+    for _, p in ipairs({ { "need", "rollNeed" }, { "greed", "rollGreed" } }) do
+      local n = count(rolls[p[1]])
+      if n and n > 0 then parts[#parts + 1] = TEXT(p[2], int(n)) end
+    end
+    if #parts > 0 then out[#out + 1] = TEXT("rollsHead", table.concat(parts, " · ")) end
+    local pass = count(rolls.pass)
+    if pass and pass > 0 then out[#out + 1] = TEXT("rollPass", int(pass)) end
+    local won = count(rolls.won)
+    if won and won > 0 then out[#out + 1] = plural(won, "rollsWon") end
+  end
+  local duels = counterGroup(char, "duels")
+  if duels then
+    local win, loss = count(duels.win) or 0, count(duels.loss) or 0
+    if win + loss > 0 then out[#out + 1] = TEXT("duels", int(win), int(loss)) end
+  end
+  return out
+end
+
+local function buildCurios(index, char, seed, falls, now, st)
   local facts = {}
   -- away time (AFK) from the character SV, read by Chronik.afk (journal/model/Chronik.lua)
   local Chr = Journal.Chronik
@@ -734,11 +913,27 @@ local function buildCurios(index, char, seed, falls, now)
       fish = fish + (count(v) or 0)
     end
   end
-  local lines = emoteLines(char, seed, max(1, Momente.CURIO_LINES - #facts - 1))
+  -- the page has CURIO_LINES rows: the old facts and the fish line stay, one emote line stays; the new data sentences take
+  -- the free rows and replace emote lines beyond the first
+  -- counters can hold thousands of ids: the sentences are rebuilt at most every DATA_TTL seconds per index
+  local extras = st and st.dataLines
+  if not extras or not st.dataAt or now - st.dataAt >= Momente.DATA_TTL or now < st.dataAt then
+    extras = dataCurios(index, char)
+    if st then st.dataLines, st.dataAt = extras, now end
+  end
+  local firstEmote = #emoteLines(char, seed, 1)
+  local nExtra = max(0, min(#extras, Momente.CURIO_LINES - #facts - 1 - firstEmote))
+  local lines = emoteLines(char, seed, max(1, Momente.CURIO_LINES - #facts - nExtra - 1))
   for _, f in ipairs(facts) do lines[#lines + 1] = f end
+  for i = 1, nExtra do lines[#lines + 1] = extras[i] end
   if fish > 0 or #lines > 0 then lines[#lines + 1] = plural(fish, "fish") end
   while #lines > Momente.CURIO_LINES do lines[#lines] = nil end
-  return { lines = lines, any = #lines > 0 }
+  -- pool: every sentence (old and new); the page shows CURIO_LINES of them at a time and pages through the rest
+  local pool = emoteLines(char, seed, Momente.EMOTE_POOL)
+  for _, f in ipairs(facts) do pool[#pool + 1] = f end
+  for _, f in ipairs(extras) do pool[#pool + 1] = f end
+  if fish > 0 or #pool > 0 then pool[#pool + 1] = plural(fish, "fish") end
+  return { lines = lines, any = #lines > 0, data = extras, pool = pool }
 end
 
 local cache = setmetatable({}, { __mode = "k" })
@@ -767,6 +962,6 @@ function Momente.evaluate(index, opts)
   return {
     now = now, album = st.album, library = st.library,
     clock = clockView(index, st.clock, db, now),
-    curios = buildCurios(index, st.char, st.seed, st.falls, now),
+    curios = buildCurios(index, st.char, st.seed, st.falls, now, st),
   }
 end

@@ -1385,3 +1385,76 @@ L.add("ptBR", "m.OpenQuestsRetail", {
   diagWaiting = ", %d pendente",
   diagNoApi = "Missões abertas: Retail, interface do mapa mundial (C_QuestLine) ausente",
 })
+
+-- 1.0.12 data books
+L.add("ptBR", "m.Momente", {
+  favSpell = "Feitiço favorito: %s (%s ×)",
+  spellUnknown = "Feitiço n.º %s",
+  favItem = "O mais usado: %s (%s ×)",
+  jumps_one = "%s salto no ar",
+  jumps_other = "%s saltos no ar",
+  rollsHead = "Dados: %s",
+  rollNeed = "%s Necessidade",
+  rollGreed = "%s Ganância",
+  rollPass = "Disputas passadas: %s",
+  rollsWon_one = "%s disputa vencida",
+  rollsWon_other = "%s disputas vencidas",
+  duels = "Duelos: %s vencidos, %s perdidos",
+})
+L.add("ptBR", "m.Schaetze", {
+  tr_ahHead = "Casa de Leilões",
+  tr_mailHead = "Correio",
+  tr_tradeHead = "Troca",
+  tr_ahIncome = "Receitas",
+  tr_ahSold = "Vendas",
+  tr_ahSpent = "Gasto",
+  tr_ahBought = "Compras",
+  tr_ahFee = "Taxa",
+  tr_ahDeposit = "Depósitos pagos",
+  tr_ahTip = "Das faturas na sua caixa de correio; o livro-caixa fica intacto.",
+  tr_ahIncomeTip = "Preços de venda por fatura, antes da taxa da Casa de Leilões.",
+  tr_ahFeeTip = "A taxa que a Casa de Leilões desconta das vendas.",
+  tr_ahDepositTip = "Depósito pago ao anunciar, por %s anúncios. O que expirou ou voltou não aparece em nenhuma fatura.",
+  tr_ahCount = "%s faturas",
+  tr_mailGold = "Ouro de %s",
+  tr_mailItem = "Pacote de %s",
+  tr_cod = "Cobrança na entrega paga",
+  tr_mailGoldTip = "A maior quantia de ouro que você retirou de uma carta.",
+  tr_mailItemTip = "A maior pilha que você retirou de uma carta.",
+  tr_codTip = "Apenas como referência; não é uma despesa adicional no livro-caixa.",
+  tr_tradeGold = "Ouro de %s",
+  tr_tradeItem = "Presente de %s",
+  tr_tradeGoldTip = "A maior quantia de ouro que você recebeu numa troca.",
+  tr_tradeItemTip = "A maior pilha que você recebeu numa troca.",
+  tr_stack = "%s× %s",
+  tr_from = "De: %s",
+})
+
+-- journal/model/Rezepte.lua and Handwerk.lua (1.0.12 data books)
+L.add("ptBR", "m.Rezepte", {
+  spellFallback = "Receita %s",
+  profFallback = "Profissão %s",
+  rankJ = "Oficial", rankE = "Perito", rankA = "Artesão",
+  srcT = "Instrutor", srcV = "Vendedor", srcQ = "Missão", srcD = "Saque", srcC = "Fabricação", srcO = "Achado",
+  favor = "%s Favor do Mercador",
+  repText = "Reputação: %s",
+  repFallback = "Reputação com uma facção",
+  NO_RECIPES = "Lista de receitas ausente no add-on de dados (reinstale-o)",
+  NO_API = "As profissões não podem ser lidas agora",
+})
+L.add("ptBR", "m.Handwerk", {
+  rank_75 = "Aprendiz", rank_150 = "Oficial", rank_225 = "Perito", rank_300 = "Artesão",
+})
+
+-- change "runde3" (packages A, R)
+L.add("ptBR", "m.Auktionshaus", {
+  kind_sold = "Venda", kind_bought = "Compra",
+  itemFallback = "Item desconhecido", itemNo = "Item nº %s",
+  dateTime = "{d}/{m} {H}:{M}", dateOnly = "{d}/{m}", dateUnknown = "–",
+  sumAll = "Balanço", sumSold = "Total de vendas", sumBought = "Total de compras",
+})
+L.add("ptBR", "m.Rezeptbuch", {
+  profFallback = "Profissão %s",
+  recipeFallback = "Receita %s",
+  diff_orange = "ideal", diff_yellow = "média", diff_green = "fácil", diff_grey = "sem ganho",
+})
