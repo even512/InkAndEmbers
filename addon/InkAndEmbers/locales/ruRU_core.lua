@@ -117,6 +117,19 @@ L.add("ruRU", "Core", {
   rqError = "Интерфейсы заданий: ошибка при чтении (%s).",
   rqDetails = "Подробности в EveNChronicleDB.diag.retailQuests[%d] (в файле – после /reload).",
   unknownCommand = "Неизвестная команда «%s». Все команды перечислены в /chronik help.",
+  mod_quests = "Задания",
+  mod_tracker = "Отслеживание заданий",
+  mod_crafting = "Ремёсла",
+  mod_plans = "Планы",
+  mod_campfire = "Костёр",
+  moduleOff = "Модуль «%s» выключен (/chronik options › Модули).",
+  moduleMissing = "Модуль «%s» не установлен.",
+  modOn = "вкл.",
+  modOff = "выкл.",
+  modPending = "после /reload",
+  modMissing = "не установлен",
+  diagModules = "Модули: %s",
+  diagModuleVersion = "%s (версия %s вместо %s)",
   actionLine = "Заблокированные действия: %s (наблюдение: %s)",
   actionNone = "нет",
   actionSome = "%d (последнее: %s, %s)",
@@ -468,4 +481,15 @@ L.add("ruRU", "col.Einkauf", {
   errFull = "Список дел заполнен.",
   moreLines = "… ещё %s",
   errNotReadyChar = "Персонаж ещё не готов.",
+})
+
+-- collectors/Werkauftrag.lua (Werkauftrag, 1.1.0)
+L.add("ruRU", "col.Werkauftrag", {
+  titleOne = "Заказ: %s× %s",
+  titleRoute = "Заказ: %s до %s",
+  ready = "готово",
+  unknownMat = "Материалы игра покажет после изучения",
+  errSteps = "Заказ слишком длинный (не больше 60 шагов).",
+  errEmpty = "В заказе нет ни одного шага.",
+  errNoOrder = "Этого заказа больше нет.",
 })

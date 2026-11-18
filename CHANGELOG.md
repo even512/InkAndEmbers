@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.1.0
+
+**At a glance:** Ink & Embers is now modular, so you can switch off the parts of the book you do not use, a quest can be pinned to the tracker, and work orders take you from the workbench to a skill goal. Quest tracker pills now also mark Elite, Dungeon and Raid quests. **After updating, quit the game completely once and start it again; a /reload is not enough.**
+
+### New
+
+**Modular book:** the core journal always records everything. Quests, Quest Tracker, Crafting, Plans and Campfire can be switched off; you choose on the new "Choose modules" page of the introduction or under Options > AddOns > Ink & Embers > Modules, and the choice applies to all characters.
+
+**Work orders (WoW Forever only):** plan a route to your target skill at the workbench, trainers included, buy the materials at the Auction House with automatic prices in two clicks and craft step by step. Work orders replace the shopping list and the skill point suggestion.
+
+**Quest tracker pills:** besides "Group", quests now show an Elite, Dungeon or Raid pill, one per quest, with a level marker of +, D or R.
+
+**Pinned quest:** pin a quest from its menu in the tracker, or let it pin itself when an objective counts up; it then stays visible as a small panel at the handle and an automatically pinned quest releases itself after a set time without progress (5 minutes by default, adjustable in the options). A finished quest shows "Done!" and lets go right away.
+
+### Changes
+
+**Quest data updated to QuestieDB 1.1.3 and What's Training data refreshed:** quest, creature and item data as well as the trainer and recipe data are now at the latest state.
+
+**Training plan tooltips:** abilities under Plans > Training now show their original game tooltip, with level, cost and requirements below it.
+
+### Fixes
+
+**Treasures page:** Gear over time now also shows neck, rings and trinkets (rings and trinkets share a row with two lanes). The Gear Journey view lists them too, while the character model skips these invisible slots.
+
 ## 1.0.12
 
 **At a glance:** Ink & Embers now speaks French, Spanish, Russian and Italian, and the book gains a Heatmap, Auction House, Recipe book, Legacy page and a crafting shopping list. The quest tracker also got tidier.

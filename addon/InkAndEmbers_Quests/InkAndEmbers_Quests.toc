@@ -1,0 +1,24 @@
+## Interface: 120105, 16001
+## Title: Ink & Embers - Quests
+## Title-deDE: Ink & Embers - Quests
+## Notes: Open quests, dungeon quests and zone overview for Ink & Embers (the quest history stays in the journal).
+## Notes-deDE: Offene Quests, Dungeon-Quests und Zonen-Übersicht für Ink & Embers (die Quest-Historie bleibt im Tagebuch).
+## Notes-ptBR: Missões abertas, missões de masmorra e visão geral das zonas para Ink & Embers (o histórico de missões fica no diário).
+## Author: EveN
+## Version: @project-version@
+## X-License: MIT (see LICENSE; the graphics and media of the main addon: all rights reserved)
+# Module of Ink & Embers (1.1.0): shares the namespace of the core add-on (Module.lua). Can be switched off in the add-on list
+# or in /chronik optionen > Module; the journal keeps recording without it.
+## Dependencies: InkAndEmbers
+## IconTexture: Interface\AddOns\InkAndEmbers\Media\MinimapIcon
+
+Module.lua
+locales\enUS.lua
+locales\ptBR.lua
+locales\frFR.lua
+locales\esES.lua
+locales\ruRU.lua
+locales\itIT.lua
+journal\pages\QuestsOffen.lua
+journal\pages\QuestsDungeons.lua
+journal\pages\QuestsZonen.lua

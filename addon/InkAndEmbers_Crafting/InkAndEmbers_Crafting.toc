@@ -1,0 +1,52 @@
+## Interface: 120105, 16001
+## Title: Ink & Embers - Crafting
+## Title-deDE: Ink & Embers - Crafting
+## Notes: Crafting for Ink & Embers: recipe book and work orders, with bars at the profession window and at the auction house.
+## Notes-deDE: Handwerk für Ink & Embers: Rezeptbuch und Werkaufträge, mit Leisten am Berufsfenster und am Auktionshaus.
+## Notes-ptBR: Profissões para Ink & Embers: livro de receitas e ordens de trabalho, com barras na janela de profissão e na casa de leilões.
+## Author: EveN
+## Version: @project-version@
+## X-License: MIT (see LICENSE; the graphics and media of the main addon: all rights reserved)
+# Module of Ink & Embers (1.1.0): shares the namespace of the core add-on (Module.lua). Can be switched off in the add-on list
+# or in /chronik optionen > Module; the journal keeps recording without it.
+## Dependencies: InkAndEmbers
+## IconTexture: Interface\AddOns\InkAndEmbers\Media\MinimapIcon
+
+Module.lua
+locales\enUS.lua
+locales\enUS_werkbar.lua
+locales\enUS_werkdock.lua
+locales\enUS_werkplan.lua
+locales\ptBR.lua
+locales\ptBR_werkbar.lua
+locales\ptBR_werkdock.lua
+locales\ptBR_werkplan.lua
+locales\frFR.lua
+locales\frFR_werkbar.lua
+locales\frFR_werkdock.lua
+locales\frFR_werkplan.lua
+locales\esES.lua
+locales\esES_werkbar.lua
+locales\esES_werkdock.lua
+locales\esES_werkplan.lua
+locales\ruRU.lua
+locales\ruRU_werkbar.lua
+locales\ruRU_werkdock.lua
+locales\ruRU_werkplan.lua
+locales\itIT.lua
+locales\itIT_werkbar.lua
+locales\itIT_werkdock.lua
+locales\itIT_werkplan.lua
+journal\model\Rezepte.lua
+journal\model\Handwerk.lua
+journal\model\Rezeptbuch.lua
+journal\model\Route.lua
+journal\model\Preise.lua
+journal\pages\PlaeneHandwerk.lua
+journal\pages\HandwerkRezeptbuch.lua
+journal\pages\Handwerk.lua
+journal\Werkauftrag.lua
+journal\WerkBarKit.lua
+journal\Preisabfrage.lua
+journal\ProfessionBar.lua
+journal\AuctionDock.lua

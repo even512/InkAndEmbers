@@ -52,6 +52,8 @@ local TEXT = Loc.ns("m.Schaetze", {
   out_training = "Training", out_repair = "Reparatur", out_vendor_buy = "Händlerkäufe", out_taxi = "Flüge", out_ah = "Auktionshaus",
   out_mail = "Post", out_trade = "Handel", out_guildbank = "Gildenbank", out_other = "Sonstiges",
   slot_1 = "Kopf", slot_3 = "Schultern", slot_5 = "Brust", slot_7 = "Beine", slot_8 = "Füße", slot_16 = "Haupthand", slot_17 = "Nebenhand",
+  slot_2 = "Hals", slot_11 = "Ring 1", slot_12 = "Ring 2", slot_13 = "Schmuck 1", slot_14 = "Schmuck 2",
+  slot_rings = "Ringe", slot_trinkets = "Schmuck",
   slot_4 = "Hemd", slot_6 = "Taille", slot_9 = "Handgelenke", slot_10 = "Hände", slot_15 = "Umhang", slot_18 = "Distanz", slot_19 = "Wappenrock",
   level = "Stufe %s",
   levels = "Stufen %s–%s",
@@ -154,17 +156,27 @@ for _, e in pairs(Schaetze.QUALITY) do
 end
 local QUALITY_UNKNOWN = { 0.42, 0.31, 0.20 } -- sepia: item known, quality not
 
--- selectable equipment slots (INVSLOT, 7 slots)
+-- equipment slots of "Ausrüstung im Wandel" (INVSLOT, 12 slots, in row order: armor, neck, rings, trinkets, weapons).
+-- group/lane: rings and trinkets share one line of the page with two lanes (the page has no room for twelve full lines).
 Schaetze.GEAR_SLOTS = {
-  { slot = 1 }, { slot = 3 }, { slot = 5 }, { slot = 7 }, { slot = 8 }, { slot = 16 }, { slot = 17 },
+  { slot = 1 }, { slot = 2 }, { slot = 3 }, { slot = 5 }, { slot = 7 }, { slot = 8 },
+  { slot = 11, group = "rings", lane = 1 }, { slot = 12, group = "rings", lane = 2 },
+  { slot = 13, group = "trinkets", lane = 1 }, { slot = 14, group = "trinkets", lane = 2 },
+  { slot = 16 }, { slot = 17 },
 }
+-- label of a shared line ("Ringe", "Schmuck")
+Schaetze.GEAR_GROUPS = { rings = { id = "rings" }, trinkets = { id = "trinkets" } }
+lazyLabel(Schaetze.GEAR_GROUPS, "slot_", "id")
 lazyLabel(Schaetze.GEAR_SLOTS, "slot_", "slot")
 
--- slots that show on the character model (INVSLOT) in the order of the list; neck, rings and trinkets are invisible and left out.
--- hand = handSlotName for DressUpModel:TryOn (main hand / off hand), ranged = slot 18 (bow, wand ...)
+-- slots of the "Ausrüstungsreise" (INVSLOT) in the order of the list: head, neck, shoulders, ..., armor, rings, trinkets, weapons.
+-- model = false: neck, rings and trinkets are invisible on the character model (DressUpModel:TryOn) - they only appear in the list
+-- and the data, the model never touches them. hand = handSlotName for DressUpModel:TryOn (main hand / off hand), ranged = slot 18.
 Schaetze.WARDROBE_SLOTS = {
-  { slot = 1 }, { slot = 3 }, { slot = 15 }, { slot = 5 }, { slot = 4 }, { slot = 19 }, { slot = 9 }, { slot = 10 }, { slot = 6 },
-  { slot = 7 }, { slot = 8 }, { slot = 16, hand = "MAINHANDSLOT" }, { slot = 17, hand = "SECONDARYHANDSLOT" }, { slot = 18 },
+  { slot = 1 }, { slot = 2, model = false }, { slot = 3 }, { slot = 15 }, { slot = 5 }, { slot = 4 }, { slot = 19 }, { slot = 9 },
+  { slot = 10 }, { slot = 6 }, { slot = 7 }, { slot = 8 },
+  { slot = 11, model = false }, { slot = 12, model = false }, { slot = 13, model = false }, { slot = 14, model = false },
+  { slot = 16, hand = "MAINHANDSLOT" }, { slot = 17, hand = "SECONDARYHANDSLOT" }, { slot = 18 },
 }
 lazyLabel(Schaetze.WARDROBE_SLOTS, "slot_", "slot")
 
@@ -512,7 +524,7 @@ local function gearHistory(index, char, level)
     local changes = #(bySlot[def.slot] or {})
     local lastInfo
     if last then lastInfo = { name = last.name, level = last.to, quality = last.quality } end
-    rows[#rows + 1] = { slot = def.slot, label = def.label, changes = changes, runs = runs, last = lastInfo }
+    rows[#rows + 1] = { slot = def.slot, label = def.label, group = def.group, lane = def.lane, changes = changes, runs = runs, last = lastInfo }
   end
   -- empty: not a single proof (neither snapshot nor change)
   local empty = #snaps == 0 and total == 0
@@ -538,7 +550,7 @@ local function healHoles(obs)
   return healed
 end
 
--- Equipment of the visible slots at the end of every recorded level, for the "Ausrüstungsreise" (journey of the equipment).
+-- Equipment of all listed slots at the end of every recorded level, for the "Ausrüstungsreise" (journey of the equipment).
 -- Schaetze.wardrobe(index, char, level) -> {
 --   first = first recorded level (first snapshot, else first change), last = current level (level, else the highest known),
 --   levels = { [L] = { [slot] = itemKey | false (empty) } } for first..last (a slot without any proof is missing),

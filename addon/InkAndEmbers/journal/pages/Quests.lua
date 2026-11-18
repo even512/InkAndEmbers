@@ -1540,9 +1540,12 @@ if Pages.onGuestChange then
   end)
 end
 
--- Retail: the zone overview exists only in WoW Forever like the zone share of the chapter card (journal/model/ZoneProgress.lua)
+-- Retail: the zone overview exists only in WoW Forever like the zone share of the chapter card (journal/model/ZoneProgress.lua).
+-- "Offen" and "Zonen" come with the module Quests (1.1.0): without their view the bookmark is gone (only the history stays).
 Pages.hideSub("quests", "zonen", function()
+  if Journal.ZonesView == nil then return true end
   local OQ = Journal.OpenQuests
   if not (OQ and OQ.retailClient()) then return false end
   return not (OQ.test() ~= nil or OQ.ALLOW_RETAIL)
 end)
+Pages.hideSub("quests", "offen", function() return Journal.OpenQuestsView == nil or Journal.OpenQuests == nil end)

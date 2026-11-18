@@ -1186,6 +1186,8 @@ export function tocText(version, iface) {
     "## Author: EveN",
     "## Version: @project-version@",
     "## LoadOnDemand: 1",
+    "# Loaded by the core (zone progress, map overlays, open quests) and by the module InkAndEmbers_Quests (1.1.0): it depends on",
+    "# the core only, so the zone medal and \"reveal map\" keep working with the Quests module switched off.",
     "## Dependencies: InkAndEmbers",
     `## X-QuestieDB-Version: ${version}`,
     `## X-Attribution: ${ATTRIBUTION(version)}`,

@@ -70,10 +70,10 @@ local function clean(s, n)
   return str(s)
 end
 
+-- Rests without the module Crafting (1.1.0: no Journal.Handwerk) like in Retail; the recipe cache (RecipeScan) is written anyway
 function Einkauf.active()
   local H = ns.Journal and ns.Journal.Handwerk
-  if H and type(H.active) == "function" then return H.active() == true end
-  return true
+  return H ~= nil and type(H.active) == "function" and H.active() == true
 end
 
 -- Recipe cache --------------------------------------------------------------------------------------------------------------------
@@ -288,16 +288,26 @@ function Einkauf.titleText(shop)
   return T("title", tostring(posInt(shop.count) or 1), clean(shop.name, 60) or "?")
 end
 
--- an open list of this recipe -> plan id
+-- an open list of this recipe -> plan id (old lists p.shop and single-recipe work orders p.werk, collectors/Werkauftrag.lua)
 function Einkauf.find(recipeID)
   local P = ns.Plans
   local list = P and P.rawList and P.rawList()
   recipeID = posInt(recipeID)
   if not (list and recipeID) then return nil end
   for _, p in ipairs(list) do
-    if type(p) == "table" and not p.done and type(p.shop) == "table" and posInt(p.shop.recipe) == recipeID then return p.id end
+    if type(p) == "table" and not p.done then
+      if type(p.shop) == "table" and posInt(p.shop.recipe) == recipeID then return p.id end
+      local w = p.werk
+      if type(w) == "table" and w.goal == nil and posInt(w.recipe) == recipeID then return p.id end
+    end
   end
   return nil
+end
+
+-- a migrated list (p.werk next to p.shop) follows a change made through the old window
+local function syncWerk(p)
+  local W_ = ns.Werk
+  if type(p.werk) == "table" and W_ and type(W_.syncFromShop) == "function" then pcall(W_.syncFromShop, p) end
 end
 
 -- Make (or update, when an open list of this recipe exists) a shopping list -> id, "new" | "update" | nil, reason
@@ -311,6 +321,7 @@ function Einkauf.add(profID, recipeID, count, resolve)
   if old then
     local p = P.raw(old)
     p.shop = shop
+    syncWerk(p)
     local clean2 = P.cleanText(text)
     if clean2 then p.text = clean2 end
     P.changed()
@@ -334,6 +345,7 @@ function Einkauf.rebuild(id, opts)
   if not shop then return nil, err end
   shop.made, shop.last = num(s.made) or 0, num(s.last) or shop.last
   p.shop = shop
+  syncWerk(p)
   local text = P.cleanText(Einkauf.titleText(shop))
   if text then p.text = text end
   P.changed()
@@ -382,6 +394,7 @@ end
 function Einkauf.tipLines(id)
   local P = ns.Plans
   local p = P and P.raw and P.raw(id)
+  if p and type(p.werk) == "table" and ns.Werk then return ns.Werk.tipLines(id) end
   if not (p and type(p.shop) == "table") then return {} end
   local st = Einkauf.status(p.shop)
   local out = {}
@@ -399,6 +412,7 @@ Einkauf.SUB_MAX = 5
 function Einkauf.objectiveLines(id, max)
   local P = ns.Plans
   local p = P and P.raw and P.raw(id)
+  if p and type(p.werk) == "table" and ns.Werk then return ns.Werk.objectiveLines(id, max) end
   if not (p and type(p.shop) == "table") then return { lines = {}, more = 0 } end
   local st = Einkauf.status(p.shop)
   if not st then return { lines = {}, more = 0 } end
@@ -498,7 +512,8 @@ function Einkauf.check()
   if not list then return 0 end
   local n, finished = 0, {}
   for _, p in ipairs(list) do
-    if type(p) == "table" and not p.done and type(p.shop) == "table" then
+    -- a migrated list (p.werk) is counted and completed by collectors/Werkauftrag.lua
+    if type(p) == "table" and not p.done and type(p.shop) == "table" and type(p.werk) ~= "table" then
       n = n + 1
       local s = p.shop
       local out = posInt(s.out)

@@ -108,7 +108,8 @@ local function readRecipe(ui, rid)
   local info = tbl(call(ui.GetRecipeInfo, rid))
   local n = info and str(field(info, "name"))
   if not n then return nil end
-  local rec = { n = n, l = field(info, "learned") == true, d = num(field(info, "relativeDifficulty")), u = num(field(info, "numSkillUps")), i = num(field(info, "icon")), r = {} }
+  local rec = { n = n, l = field(info, "learned") == true, d = num(field(info, "relativeDifficulty")), u = num(field(info, "numSkillUps")), i = num(field(info, "icon")),
+    t = num(field(info, "maxTrivialLevel")), r = {} }
   local sc = tbl(call(ui.GetRecipeSchematic, rid, false))
   if sc then
     rec.o, rec.q = num(field(sc, "outputItemID")), num(field(sc, "quantityMin"))

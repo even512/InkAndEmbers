@@ -1,0 +1,29 @@
+## Interface: 120105, 16001
+## Title: Ink & Embers - Plans
+## Title-deDE: Ink & Embers - Plans
+## Notes: Plans for Ink & Embers: to-dos with the on-screen note, trainer plan and pet training.
+## Notes-deDE: Pläne für Ink & Embers: To Dos mit Notizzettel, Lehrplan und Tierausbildung.
+## Notes-ptBR: Planos para Ink & Embers: tarefas com a nota na tela, plano de treinamento e treinamento de mascote.
+## Author: EveN
+## Version: @project-version@
+## X-License: MIT (see LICENSE; the graphics and media of the main addon: all rights reserved)
+# Module of Ink & Embers (1.1.0): shares the namespace of the core add-on (Module.lua). Can be switched off in the add-on list
+# or in /chronik optionen > Module; the journal keeps recording without it.
+## Dependencies: InkAndEmbers
+## OptionalDeps: InkAndEmbers_Crafting
+## IconTexture: Interface\AddOns\InkAndEmbers\Media\MinimapIcon
+
+Module.lua
+locales\enUS.lua
+locales\ptBR.lua
+locales\frFR.lua
+locales\esES.lua
+locales\ruRU.lua
+locales\itIT.lua
+journal\model\Lehrplan.lua
+journal\pages\QuestsLehrplan.lua
+journal\pages\Plaene.lua
+journal\Vorhaben.lua
+journal\TodoTracker.lua
+journal\TodoDock.lua
+journal\TodoMarks.lua

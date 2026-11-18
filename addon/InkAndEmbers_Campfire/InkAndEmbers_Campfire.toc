@@ -1,0 +1,27 @@
+## Interface: 120105, 16001
+## Title: Ink & Embers - Campfire
+## Title-deDE: Ink & Embers - Campfire
+## Notes: Campfire for Ink & Embers: campfire notes, smoke signals and the "At the fire" view of the companions.
+## Notes-deDE: Lagerfeuer für Ink & Embers: Lagerfeuer-Zettel, Rauchzeichen und die Ansicht „Am Feuer“ der Weggefährten.
+## Notes-ptBR: Fogueira para Ink & Embers: notas da fogueira, sinais de fumaça e a vista "Na fogueira" dos companheiros.
+## Author: EveN
+## Version: @project-version@
+## X-License: MIT (see LICENSE; the graphics and media of the main addon: all rights reserved)
+# Module of Ink & Embers (1.1.0): shares the namespace of the core add-on (Module.lua). Can be switched off in the add-on list
+# or in /chronik optionen > Module; the journal keeps recording without it.
+## Dependencies: InkAndEmbers
+## IconTexture: Interface\AddOns\InkAndEmbers\Media\MinimapIcon
+
+Module.lua
+locales\enUS.lua
+locales\ptBR.lua
+locales\frFR.lua
+locales\esES.lua
+locales\ruRU.lua
+locales\itIT.lua
+journal\model\CampfireTexts.lua
+journal\model\CampfireTalk.lua
+journal\pages\ChronikFeuer.lua
+journal\FireNoteAreas.lua
+journal\FireNotes.lua
+journal\Smoke.lua

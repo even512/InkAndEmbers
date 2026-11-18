@@ -158,9 +158,9 @@ local CHECK = {
   openCategory = function(v) return type(v) == "boolean" end,
   -- Lehrplan (WoW Forever): automatic to-do "Zum Lehrer" after a level-up, notice about free talent points, list filter
   trainerTodo = function(v) return type(v) == "boolean" end,
-  -- bar at the Blizzard profession window (journal/ProfessionBar.lua); missing = on
+  -- work order bar at the Blizzard profession window (journal/ProfessionBar.lua); missing = on
   professionBar = function(v) return type(v) == "boolean" end,
-  -- shopping list window at the Blizzard auction house (journal/AuctionDock.lua); missing = on
+  -- work order bar (shopping list) at the Blizzard auction house (journal/AuctionDock.lua); missing = on
   auctionDock = function(v) return type(v) == "boolean" end,
   talentHint = function(v) return type(v) == "boolean" end,
   -- toast when the addon creates a to-do by itself (collectors/Trainer.lua "Zum Lehrer"); missing = on
@@ -235,6 +235,12 @@ function Pages.tabHidden(id)
   return ok and hide == true
 end
 
+-- A tab whose page never registered (1.1.0: its module is switched off or not installed, e.g. Pläne or Handwerk) is gone as
+-- well, not dimmed. The home tab (journey map, journal/Frame.lua) is no registered page and always stays.
+function Pages.missing(id)
+  return type(id) == "string" and KNOWN[id] ~= nil and id ~= Pages.HOME and pages[id] == nil
+end
+
 function Pages.isAvailable(id)
   return type(id) == "string" and pages[id] ~= nil and not Pages.tabHidden(id)
 end
@@ -248,17 +254,18 @@ function Pages.guestAllows(id, sub)
   return true
 end
 
--- row.hidden = true: the tab is left out in the guest book (not dimmed, gone)
+-- row.hidden = true: the tab is left out (guest book, client without it, page of a missing module): not dimmed, gone
 function Pages.tabs()
   local out = {}
   for i, id in ipairs(Pages.ORDER) do
     local gone = Pages.tabHidden(id)
     out[i] = { id = id, label = Pages.LABELS[id], available = pages[id] ~= nil and not gone, active = id == currentId,
-      hidden = gone or not Pages.guestAllows(id) }
+      hidden = gone or Pages.missing(id) or not Pages.guestAllows(id) }
   end
   return out
 end
 
+-- first page on open: always the journey map (a remembered page of a missing module can never come first)
 function Pages.initial()
   return Pages.HOME
 end

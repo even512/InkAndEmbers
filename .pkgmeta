@@ -1,8 +1,14 @@
 # BigWigs packager configuration (https://github.com/BigWigsMods/packager/wiki/Preparing-the-PackageMeta-File)
-# The repository keeps the three addons below addon/; the release zip contains them as three top-level folders:
-#   InkAndEmbers/               main addon (MIT, graphics: all rights reserved)
+# The repository keeps the eight addons below addon/; the release zip contains them as eight top-level folders:
+#   InkAndEmbers/               main addon: all collectors and the journal (MIT, graphics: all rights reserved)
+#   InkAndEmbers_Quests/        module Quests (open quests, dungeon quests, zones; MIT, 1.1.0)
+#   InkAndEmbers_QuestTracker/  module Quest tracker (MIT, 1.1.0)
+#   InkAndEmbers_Crafting/      module Crafting (MIT, 1.1.0)
+#   InkAndEmbers_Plans/         module Plans (to-dos, trainer plan; MIT, 1.1.0)
+#   InkAndEmbers_Campfire/      module Campfire (MIT, 1.1.0)
 #   InkAndEmbers_QuestData/     quest data (GPL-3.0, LoadOnDemand)
 #   InkAndEmbers_Data/          enemy and item lists (GPL-3.0, LoadOnDemand)
+# The modules depend on InkAndEmbers (TOC ## Dependencies) and are on after an update (new folders start enabled).
 package-as: InkAndEmbers
 
 manual-changelog:
@@ -18,6 +24,11 @@ optional-dependencies:
 
 move-folders:
   InkAndEmbers/addon/InkAndEmbers: InkAndEmbers
+  InkAndEmbers/addon/InkAndEmbers_Quests: InkAndEmbers_Quests
+  InkAndEmbers/addon/InkAndEmbers_QuestTracker: InkAndEmbers_QuestTracker
+  InkAndEmbers/addon/InkAndEmbers_Crafting: InkAndEmbers_Crafting
+  InkAndEmbers/addon/InkAndEmbers_Plans: InkAndEmbers_Plans
+  InkAndEmbers/addon/InkAndEmbers_Campfire: InkAndEmbers_Campfire
   InkAndEmbers/addon/InkAndEmbers_QuestData: InkAndEmbers_QuestData
   InkAndEmbers/addon/InkAndEmbers_Data: InkAndEmbers_Data
 
@@ -30,6 +41,7 @@ ignore:
   - addon/InkAndEmbers/journal/QuestTrackerProbe.lua
   - addon/InkAndEmbers/journal/LegacyProbe.lua
   - addon/InkAndEmbers/journal/ProfessionProbe.lua
+  - addon/InkAndEmbers/journal/WerkProbe.lua
   - .github
   - .gitignore
   - .gitattributes

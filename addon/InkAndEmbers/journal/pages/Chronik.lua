@@ -816,10 +816,11 @@ Page.subs = {
   subTab("meilensteine", "toMilestones", "toMilestonesTip", "toMilestonesTip2"),
 }
 
--- Retail: the milestones belong to WoW Forever (as the level-up note), so their bookmark stays out there
+-- Retail: the milestones belong to WoW Forever (as the level-up note), so their bookmark stays out there. Core check
+-- (Core.foreverParts), not the Lehrplan: the milestones stay without the module Plans (1.1.0).
 Pages.hideSub("chronik", "meilensteine", function()
-  local L = Journal.Lehrplan
-  return L ~= nil and type(L.active) == "function" and L.active() == false
+  local C = ns.Core
+  return C ~= nil and type(C.foreverParts) == "function" and not C.foreverParts()
 end)
 
 function Page:GetSub()

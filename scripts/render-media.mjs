@@ -868,7 +868,7 @@ export function fireNoteArea(rgba, w, h, A = FIRE_AREA) {
   return { x, y, w: Number((floor4((r.x + r.w) / w) - x).toFixed(4)), h: Number((floor4((r.y + r.h) / h) - y).toFixed(4)) };
 }
 
-export const FIRE_AREAS_LUA = path.join(ROOT, "addon", "InkAndEmbers", "journal", "FireNoteAreas.lua");
+export const FIRE_AREAS_LUA = path.join(ROOT, "addon", "InkAndEmbers_Campfire", "journal", "FireNoteAreas.lua"); // Modul Lagerfeuer (1.1.0)
 
 export function fireAreasLua(areas) {
   const f = (v) => Number(v.toFixed(4)).toString();

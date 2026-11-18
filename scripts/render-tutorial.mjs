@@ -47,9 +47,11 @@ export const PAGE_TILES = [
   ["treasures", [["finds", "S"], ["gold", "S"]]],
   ["notes", [["read", "S"], ["edit", "S"]]],
   ["todo", [["list", "S"], ["goals", "S"]]],
+  ["modules", []], // 1.1.0: "Module wählen", links die Modul-Schalter statt Bildern (journal/Tutorial.lua buildModules), keine Kachel
   ["farewell", []], // Abschlussseite: links das Erzaehler-Portraet der Willkommen-Karte (Media/Narrator_<volk>.tga), keine Kachel
 ];
 const PORTRAIT_PAGES = new Set(["farewell"]);
+const MODULE_PAGES = new Set(["modules"]);
 export const PAGES = PAGE_TILES.map(([id]) => id);
 export const TILES = PAGE_TILES.flatMap(([page, tiles]) => tiles.map(([name, size]) => ({ id: `${page}.${name}`, page, name, size })));
 
@@ -98,7 +100,7 @@ export function luaPages() {
       const r = rects[`${page}.${name}`];
       return `{ a = ${r.atlas}, x = ${r.x}, y = ${r.y}, w = ${r.w}, h = ${r.h} }`;
     });
-    lines.push(`  { id = "${page}", ${PORTRAIT_PAGES.has(page) ? "portrait = true, " : ""}tiles = { ${parts.join(", ")} } },`);
+    lines.push(`  { id = "${page}", ${MODULE_PAGES.has(page) ? "modules = true, " : ""}${PORTRAIT_PAGES.has(page) ? "portrait = true, " : ""}tiles = { ${parts.join(", ")} } },`);
   }
   lines.push("}");
   return lines.join("\n");
@@ -382,6 +384,18 @@ function renderPreview(browser, tmp, lang) {
     screenshot(browser, tmp, bookHtml(items, w, h), w, h, file);
     files.push(file);
     console.log(`  ${path.relative(ROOT, file)}  (${items.length} Elemente)`);
+  }
+  // 1.1.0: die Seite "Module wählen" allein (Ansicht fuer Bestandsnutzer nach dem Update) mit gemischten Zustaenden:
+  // Handwerk "aus nach /reload", Plaene "nicht installiert" (Zustand der Kern-API nur fuer das Bild umgebogen)
+  vm.exec(`local A, Tu = NS.Core.API, NS.Journal.Tutorial
+    local real = A.moduleState
+    A.moduleState = function(id) if id == "plans" then return "missing" elseif id == "crafting" then return "pending" end return real(id) end
+    Tu.close() Tu.openModules()`);
+  {
+    const items = vm.lua("return KO_PREVIEW(NS.Journal.Tutorial.state.frame, 0, 0, 1e12)");
+    const file = path.join(SCREENS, `tutorial-${lang}-module-zustaende.png`);
+    screenshot(browser, tmp, bookHtml(Array.isArray(items) ? items : [], w, h), w, h, file);
+    console.log(`  ${path.relative(ROOT, file)}  (Module wählen: Update-Ansicht, gemischte Zustaende)`);
   }
   const errs = vm.errors();
   if (errs.length) console.log(`  Lua-Fehler in der Attrappe (${lang}):\n    ${errs.join("\n    ")}`);

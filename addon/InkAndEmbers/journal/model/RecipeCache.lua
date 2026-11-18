@@ -7,6 +7,7 @@
 --     u      numSkillUps (nil = unknown)            o   outputItemID (nil = no item, e.g. enchantments)   q   quantityMin of the output
 --     i      icon file id of the recipe (GetRecipeInfo.icon; nil = unknown, the book asks the client for the item/spell icon)
 --     r      reagents in the order of the recipe: { itemID, quantity } (the first reagent of every basic slot)
+--     t      maxTrivialLevel (GetRecipeInfo; the grey threshold of the recipe, Werkauftrag route; nil = unknown, additive since 1.1.0)
 -- Written by collectors/RecipeScan.lua (RecipeCache.put), read by journal/model/Rezeptbuch.lua and the shopping list (file in journal/model/:
 -- loaded in every client mode, also in tests without collectors).
 -- Read API (nothing here writes or throws; the returned tables are the saved data: do not change them):
@@ -171,6 +172,7 @@ function RecipeCache.put(profID, info, recipes)
       out.o = whole(r.o, 1)
       out.q = out.o and whole(r.q, 1, 1000) or nil
       out.i = whole(r.i, 1)
+      out.t = whole(r.t, 1, 100000)
       local reagents = {}
       if type(r.r) == "table" and not isSecret(r.r) then
         for _, rg in ipairs(r.r) do

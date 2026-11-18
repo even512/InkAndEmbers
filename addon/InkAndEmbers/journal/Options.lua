@@ -101,6 +101,11 @@ local TX = ns.Locale.ns("Options", {
   qtItemBarTip = "Eine eigene, verschiebbare Leiste (Bearbeitungsmodus) mit den Quest-Gegenständen der aktuellen Zone.",
   qtItemBarNearLabel = "Quest-Gegenstände nur im Zielgebiet",
   qtItemBarNearTip = "Ein Quest-Gegenstand erscheint in der Leiste erst, wenn du im Zielgebiet der Quest bist (etwa 140 Yards um den nächsten Zielpunkt), und verschwindet wieder, wenn du dich entfernst. Fertige Quests zeigen ihn nur am Abgabeort. Ohne Zieldaten bleibt er sichtbar. Im Kampf ändert sich die Leiste nicht.",
+  qtAutoPinLabel = "Bei Fortschritt automatisch anpinnen",
+  qtAutoPinTip = "Zählt ein Ziel einer Quest hoch, wird sie automatisch an den Griff gepinnt. Aus: nur per Hand.",
+  qtAutoPinIdleLabel = "Automatisch lösen nach",
+  qtAutoPinIdleTip = "So viele Minuten ohne Fortschritt, bis eine automatisch angepinnte Quest sich wieder löst (1 bis 30). Eine fertige Quest zeigt „Fertig!“ und löst sich gleich.",
+  qtAutoPinIdleUnit = "Min.",
   qtUnhideLabel = "Ausgeblendete Quests",
   qtUnhideButton = "Wieder zeigen",
   qtUnhideTip = "Holt alle Quests zurück, die du im Tracker ausgeblendet hast (dieser Charakter).",
@@ -261,6 +266,19 @@ local TX = ns.Locale.ns("Options", {
   diagTip = "Schreibt den Zustand des Addons in den Chat (wie /chronik diag).",
   soundTip = "Klang für „%s“. Beim Auswählen erklingt er zur Probe; „Aus“ macht das Ereignis still.",
   previewTip = "Spielt den gewählten Klang für „%s“ einmal ab.",
+  -- section "Module" (1.1.0)
+  gModules = "Module",
+  modTipAll = "Eure Wahl gilt für alle Charaktere und wirkt nach /reload. Mitgeschrieben wird immer, das erledigt der Kern.",
+  modTipRestart = "Nach dem Update auf 1.1 einmal das Spiel komplett neu starten, sonst kennt WoW die neuen Modul-Ordner nicht.",
+  modPlansHidden = "Ohne Pläne fehlen auch diese Lehrer-Optionen:%s",
+  modReloadLabel = "Modulwahl übernehmen",
+  modReloadButton = "Jetzt neu laden",
+  modReloadTip = "Öffnet das Fenster „Reise sichern“: Sein Knopf lädt die Oberfläche neu (wie /reload), erst dann wirkt Eure Modulwahl. Das Spiel lässt das Neuladen nur über so einen Knopf zu.",
+  modPageLabel = "Was die Module bringen",
+  modPageButton = "Erklärung",
+  modPageTip = "Zeigt die Seite „Module wählen“ der Einführung: alle Module mit Erklärung und Schalter.",
+  modTrainerLabel = "Lehrer-Optionen ausgeblendet",
+  modTrainerTip = "Das Modul Pläne ist nicht geladen. Damit fehlen diese Lehrer-Optionen:%s\nSchaltet Pläne oben ein und ladet neu, dann sind sie wieder da. Eure Einstellungen bleiben erhalten.",
 })
 Options.TEXT = TX
 
@@ -351,10 +369,16 @@ local function reload()
 end
 
 -- Parts that only make sense in WoW Forever are hidden in Retail (items and groups with hidden = function; read on registering).
--- foreverOnly: trainer plan (Lehrplan) items; fireHidden: the campfire talk never starts in Retail (MapSpace.fireTalkHidden).
+-- foreverOnly: core parts of WoW Forever (client check Core.foreverParts); planOnly: trainer plan (Lehrplan) items, also gone
+-- without the module Plans (1.1.0); fireHidden: the campfire talk never starts in Retail (MapSpace.fireTalkHidden).
 local function foreverOnly()
+  local C = ns.Core
+  return C ~= nil and type(C.foreverParts) == "function" and not C.foreverParts()
+end
+
+local function planOnly()
   local L = Journal.Lehrplan
-  return L ~= nil and type(L.active) == "function" and L.active() == false
+  return L == nil or (type(L.active) == "function" and L.active() == false)
 end
 
 local function fireHidden()
@@ -430,7 +454,107 @@ end
 
 local function smokeHidden()
   local S = Journal.Smoke
-  return S ~= nil and S.active() == false
+  return S == nil or S.active() == false
+end
+
+-- ---------- modules (1.1.0) ----------
+-- Rows of a module add-on appear only when it is loaded (the settings are registered at PLAYER_LOGIN, after all add-ons).
+-- The section "Module" switches the five module add-ons through the core (Core.API, allowlist) via the helpers of the
+-- introduction page "Module wählen" (Tutorial.switchModule / moduleState / moduleTip): one wording for both places.
+local function coreApi()
+  local C = ns.Core
+  return C ~= nil and type(C.API) == "table" and C.API or nil
+end
+
+local function modLoaded(id)
+  local A = coreApi()
+  if not (A and type(A.moduleLoaded) == "function") then return true end
+  local ok, v = pcall(A.moduleLoaded, id)
+  return not ok or v == true
+end
+
+local function noPlans() return TT() == nil end
+local function noMarks() return Journal.TodoMarks == nil end
+local function noFireNotes() return Journal.FireNotes == nil end
+local function noFireTalk() return Journal.CampfireTalk == nil end
+
+local function Tu() return Journal.Tutorial end
+
+-- "Quests" while the state is plain on/off, otherwise with the state: "Quests – an nach /reload", "Quests – nicht installiert"
+function Options.moduleLabel(id)
+  local T = Tu()
+  local name = T and call(T.moduleLabel, id) or id
+  local st = T and call(T.moduleState, id)
+  if st == "pending" or st == "missing" then return name .. " – " .. (call(T.moduleStateText, id) or "") end
+  return name
+end
+
+function Options.moduleTip(id)
+  local T = Tu()
+  local lines = T and call(T.moduleTip, id)
+  local parts = {}
+  if type(lines) == "table" then
+    for i = 2, #lines do parts[#parts + 1] = lines[i] end
+  end
+  parts[#parts + 1] = TX.modTipAll
+  parts[#parts + 1] = TX.modTipRestart
+  if id == "plans" and not foreverOnly() then parts[#parts + 1] = TX("modPlansHidden", Options.trainerList()) end
+  return table.concat(parts, "\n")
+end
+
+-- the trainer options that need the module Plans (planOnly), one per line
+Options.TRAINER_OPTIONS = { "trainerTodoLabel", "talentHintLabel", "todoToastLabel", "levelSlipLabel" }
+function Options.trainerList()
+  local out = {}
+  for _, key in ipairs(Options.TRAINER_OPTIONS) do out[#out + 1] = "\n– " .. TX[key] end
+  return table.concat(out)
+end
+
+local moduleInits = {}
+
+-- after a click: the row label and tooltip show the new state (the list reads them when a row is drawn) and the box
+-- snaps back if the core refused
+function Options.moduleChanged(id)
+  local m = moduleInits[id]
+  local data = m and type(m.init) == "table" and type(m.init.GetData) == "function" and call(m.init.GetData, m.init)
+  if type(data) == "table" then
+    data.name = Options.moduleLabel(id)
+    data.tooltip = Options.moduleTip(id)
+  end
+  local s = Options.settings["module_" .. id]
+  local function notify() if type(s) == "table" and type(s.NotifyUpdate) == "function" then pcall(s.NotifyUpdate, s) end end
+  if type(C_Timer) == "table" and type(C_Timer.After) == "function" then C_Timer.After(0, notify) else notify() end
+end
+
+local function moduleItem(id)
+  return { kind = "check", key = "module_" .. id, module = id, default = true,
+    label = function() return Options.moduleLabel(id) end,
+    tip = function() return Options.moduleTip(id) end,
+    locked = function() local T = Tu() return T ~= nil and call(T.moduleState, id) == "missing" end,
+    hidden = function() local T = Tu() return T ~= nil and call(T.moduleShown, id) == false end,
+    get = function() local T = Tu() return T == nil or call(T.moduleWanted, id) == true end,
+    set = function(v)
+      local T = Tu()
+      if T then call(T.switchModule, id, bool(v), true) end
+      Options.moduleChanged(id)
+    end }
+end
+
+local function moduleItems()
+  local list = {}
+  local A = coreApi()
+  for _, m in ipairs((A and type(A.MODULES) == "table") and A.MODULES or {}) do
+    if type(m) == "table" and type(m.id) == "string" then list[#list + 1] = moduleItem(m.id) end
+  end
+  list[#list + 1] = { kind = "button", key = "moduleReload", label = tx("modReloadLabel"), button = tx("modReloadButton"),
+    tip = tx("modReloadTip"), click = reload }
+  list[#list + 1] = { kind = "button", key = "modulePage", label = tx("modPageLabel"), button = tx("modPageButton"),
+    tip = tx("modPageTip"), click = function() local T = Tu() if T then call(T.openModules) end end }
+  -- WoW Forever without Plans: say where the trainer options went
+  list[#list + 1] = { kind = "button", key = "moduleTrainer", label = tx("modTrainerLabel"), button = tx("modPageButton"),
+    tip = function() return TX("modTrainerTip", Options.trainerList()) end, hidden = function() return foreverOnly() or modLoaded("plans") end,
+    click = function() local T = Tu() if T then call(T.openModules) end end }
+  return list
 end
 
 function Options.isHidden(entry)
@@ -465,6 +589,7 @@ Options.GROUPS = {
         click = reload },
     },
   },
+  { title = tx("gModules"), hidden = function() return coreApi() == nil end, items = moduleItems() },
   {
     title = tx("gBook"),
     items = {
@@ -532,15 +657,15 @@ Options.GROUPS = {
   {
     title = tx("gTodo"),
     items = {
-      { kind = "check", key = "todoShown", label = function() return ttText("optShown", TX.fbShown) end, default = false,
+      { kind = "check", key = "todoShown", hidden = noPlans, label = function() return ttText("optShown", TX.fbShown) end, default = false,
         tip = txp("todoShownTip"),
         get = function() return ttSetting("shown") == true end,
         set = function(v) local T = TT() if T then call(T.setShown, v) end end },
-      { kind = "check", key = "todoDock", label = function() return ttText("optDock", TX.fbDock) end, default = false,
+      { kind = "check", key = "todoDock", hidden = noPlans, label = function() return ttText("optDock", TX.fbDock) end, default = false,
         tip = txp("todoDockTip"),
         get = function() return ttSetting("dock") == true end,
         set = function(v) local T = TT() if T and T.setDock then call(T.setDock, v) end end },
-      { kind = "dropdown", key = "todoDockSide", label = function() return ttText("dockSideLabel", TX.fbDockSide) end, default = "below",
+      { kind = "dropdown", key = "todoDockSide", hidden = noPlans, label = function() return ttText("dockSideLabel", TX.fbDockSide) end, default = "below",
         varType = "string", tip = txp("todoDockSideTip"),
         options = function()
           local T = TT()
@@ -549,7 +674,7 @@ Options.GROUPS = {
         end,
         get = function() return ttSetting("dockSide") == "above" and "above" or "below" end,
         set = function(v) local T = TT() if T and T.setDockSide then call(T.setDockSide, v) end end },
-      { kind = "dropdown", key = "todoStyle", label = function() return ttText("styleLabel", TX.fbStyle) end, default = "pad", varType = "string",
+      { kind = "dropdown", key = "todoStyle", hidden = noPlans, label = function() return ttText("styleLabel", TX.fbStyle) end, default = "pad", varType = "string",
         tip = txp("todoStyleTip"),
         options = function()
           local T = TT()
@@ -558,7 +683,7 @@ Options.GROUPS = {
         end,
         get = function() return ttSetting("style") == "plain" and "plain" or "pad" end,
         set = function(v) local T = TT() if T then call(T.setStyle, v) end end },
-      { kind = "dropdown", key = "todoOpen", label = function() return ttText("openLabel", TX.fbOpen) end, default = "always", varType = "string",
+      { kind = "dropdown", key = "todoOpen", hidden = noPlans, label = function() return ttText("openLabel", TX.fbOpen) end, default = "always", varType = "string",
         tip = txp("todoOpenTip"),
         options = function()
           local T = TT()
@@ -569,7 +694,7 @@ Options.GROUPS = {
         end,
         get = function() local v = ttSetting("open") return type(v) == "string" and v or "always" end,
         set = function(v) local T = TT() if T and T.setOpen then call(T.setOpen, v) end end },
-      { kind = "dropdown", key = "todoGrow", label = function() return ttText("growLabel", TX.fbGrow) end, default = "down", varType = "string",
+      { kind = "dropdown", key = "todoGrow", hidden = noPlans, label = function() return ttText("growLabel", TX.fbGrow) end, default = "down", varType = "string",
         tip = txp("todoGrowTip"),
         options = function()
           local T = TT()
@@ -578,23 +703,23 @@ Options.GROUPS = {
         end,
         get = function() local v = ttSetting("grow") return v == "up" and "up" or "down" end,
         set = function(v) local T = TT() if T and T.setGrow then call(T.setGrow, v) end end },
-      { kind = "check", key = "todoLocked", label = function() return ttText("optLocked", TX.fbLocked) end, default = false,
+      { kind = "check", key = "todoLocked", hidden = noPlans, label = function() return ttText("optLocked", TX.fbLocked) end, default = false,
         tip = txp("todoLockedTip"),
         get = function() return ttSetting("locked") == true end,
         set = function(v) local T = TT() if T then call(T.setLocked, v) end end },
-      { kind = "check", key = "todoCombat", label = function() return ttText("optCombat", TX.fbCombat) end, default = false,
+      { kind = "check", key = "todoCombat", hidden = noPlans, label = function() return ttText("optCombat", TX.fbCombat) end, default = false,
         tip = txp("todoCombatTip"),
         get = function() return ttSetting("combatHide") == true end,
         set = function(v) local T = TT() if T then call(T.setCombatHide, v) end end },
-      { kind = "check", key = "todoEmpty", label = function() return ttText("optEmpty", TX.fbEmpty) end, default = true,
+      { kind = "check", key = "todoEmpty", hidden = noPlans, label = function() return ttText("optEmpty", TX.fbEmpty) end, default = true,
         tip = txp("todoEmptyTip"),
         get = function() return ttSetting("hideEmpty") == true end,
         set = function(v) local T = TT() if T then call(T.setHideEmpty, v) end end },
-      { kind = "check", key = "todoAuto", label = function() return ttText("optAuto", TX.fbAuto) end, default = true,
+      { kind = "check", key = "todoAuto", hidden = noPlans, label = function() return ttText("optAuto", TX.fbAuto) end, default = true,
         tip = txp("todoAutoTip"),
         get = function() return ttSetting("autoShow") == true end,
         set = function(v) local T = TT() if T and T.setAutoShow then call(T.setAutoShow, v) end end },
-      { kind = "check", key = "trainerTodo", hidden = foreverOnly, label = tx("trainerTodoLabel"), default = true,
+      { kind = "check", key = "trainerTodo", hidden = planOnly, label = tx("trainerTodoLabel"), default = true,
         tip = tx("trainerTodoTip"),
         get = function() local P = Journal.Pages return not P or P.setting("trainerTodo") ~= false end,
         set = function(v) local P = Journal.Pages if P then P.setSetting("trainerTodo", bool(v)) end end },
@@ -608,7 +733,7 @@ Options.GROUPS = {
         tip = function() local B = Journal.AuctionDock return B and B.TEXT.optTip or "" end,
         get = function() local B = Journal.AuctionDock return not B or B.setting() end,
         set = function(v) local B = Journal.AuctionDock if B then call(B.setEnabled, bool(v)) end end },
-      { kind = "button", key = "todoReset", label = tx("todoResetLabel"), button = tx("resetButton"),
+      { kind = "button", key = "todoReset", hidden = noPlans, label = tx("todoResetLabel"), button = tx("resetButton"),
         tip = tx("todoResetTip"),
         click = function() local T = TT() if T then call(T.reset) end end },
     },
@@ -640,6 +765,11 @@ Options.GROUPS = {
       qtCheck("qtFocusGiver", "focus.giver", true),
       qtCheck("qtFocusRew", "focus.rewards", true),
       qtCheck("qtNotify", "panel.notify", true),
+      qtCheck("qtAutoPin", "panel.autoPin", true),
+      { kind = "slider", key = "qtAutoPinIdle", hidden = questTrackerHidden, enabledBy = "questTracker", label = tx("qtAutoPinIdleLabel"), tip = tx("qtAutoPinIdleTip"),
+        min = 1, max = 30, step = 1, default = 5, format = function(v) return string.format("%d %s", math.floor((tonumber(v) or 0) + 0.5), TX.qtAutoPinIdleUnit) end,
+        get = function() return qtGet("panel.autoPinIdle") or 5 end,
+        set = function(v) qtSet("panel.autoPinIdle", tonumber(v)) end },
       qtCheck("qtHideInfo", "panel.hideInfo", true),
       qtCheck("qtHover", "panel.hover", true),
       { kind = "slider", key = "qtDelay", hidden = questTrackerHidden, enabledBy = "questTracker", label = tx("qtDelayLabel"), tip = tx("qtDelayTip"),
@@ -721,11 +851,11 @@ Options.GROUPS = {
         tip = tx("toastSoundTip"),
         get = function() local T = Toast() return not T or T.soundOn() end,
         set = function(v) local T = Toast() if T then call(T.setSound, v) end end },
-      { kind = "check", key = "talentHint", hidden = foreverOnly, label = tx("talentHintLabel"), default = true,
+      { kind = "check", key = "talentHint", hidden = planOnly, label = tx("talentHintLabel"), default = true,
         tip = tx("talentHintTip"),
         get = function() local P = Journal.Pages return not P or P.setting("talentHint") ~= false end,
         set = function(v) local P = Journal.Pages if P then P.setSetting("talentHint", bool(v)) end end },
-      { kind = "check", key = "todoToast", hidden = foreverOnly, label = tx("todoToastLabel"), default = true,
+      { kind = "check", key = "todoToast", hidden = planOnly, label = tx("todoToastLabel"), default = true,
         tip = tx("todoToastTip"),
         get = function() local P = Journal.Pages return not P or P.setting("todoToast") ~= false end,
         set = function(v) local P = Journal.Pages if P then P.setSetting("todoToast", bool(v)) end end },
@@ -745,7 +875,7 @@ Options.GROUPS = {
         end,
         get = function() local B = Journal.Begleiter return B and B.narratorChoice() or "own" end,
         set = function(v) local B = Journal.Begleiter if B then call(B.setNarrator, v) end end },
-      { kind = "check", key = "levelSlip", hidden = foreverOnly, label = tx("levelSlipLabel"), default = true,
+      { kind = "check", key = "levelSlip", hidden = planOnly, label = tx("levelSlipLabel"), default = true,
         tip = tx("levelSlipTip"),
         get = function() local P = Journal.Pages return not P or P.setting("levelSlip") ~= false end,
         set = function(v) local P = Journal.Pages if P then P.setSetting("levelSlip", bool(v)) end end },
@@ -797,11 +927,11 @@ Options.GROUPS = {
   {
     title = tx("gMarks"),
     items = {
-      { kind = "check", key = "todoMarks", label = tx("marksLabel"), default = true,
+      { kind = "check", key = "todoMarks", hidden = noMarks, label = tx("marksLabel"), default = true,
         tip = txp("marksTip"),
         get = function() return ttSetting("marks") ~= false end,
         set = function(v) local TM = Journal.TodoMarks if TM then call(TM.setEnabled, v) end end },
-      { kind = "dropdown", key = "todoMarkSide", label = tx("markSideLabel"), default = "left", varType = "string",
+      { kind = "dropdown", key = "todoMarkSide", hidden = noMarks, label = tx("markSideLabel"), default = "left", varType = "string",
         tip = txp("markSideTip"),
         options = function()
           return { { value = "left", label = TX.markSideLeft }, { value = "right", label = TX.markSideRight },
@@ -818,11 +948,11 @@ Options.GROUPS = {
   {
     title = tx("gFire"), hidden = fireHidden,
     items = {
-      { kind = "check", key = "fireNotes", label = tx("fireNotesLabel"), default = true,
+      { kind = "check", key = "fireNotes", hidden = noFireNotes, label = tx("fireNotesLabel"), default = true,
         tip = tx("fireNotesTip"),
         get = function() local F = Journal.FireNotes return not F or F.settings().notes end,
         set = function(v) local F = Journal.FireNotes if F then call(F.setEnabled, v) end end },
-      { kind = "dropdown", key = "fireShow", label = tx("fireShowLabel"), default = "cardFirst", varType = "string",
+      { kind = "dropdown", key = "fireShow", hidden = noFireNotes, label = tx("fireShowLabel"), default = "cardFirst", varType = "string",
         tip = tx("fireShowTip"),
         options = function()
           return { { value = "cardFirst", label = TX.fireShowCard }, { value = "both", label = TX.fireShowBoth },
@@ -830,7 +960,7 @@ Options.GROUPS = {
         end,
         get = function() local F = Journal.FireNotes return F and F.settings().show or "cardFirst" end,
         set = function(v) local F = Journal.FireNotes if F then call(F.setShow, v) end end },
-      { kind = "dropdown", key = "fireAddress", label = tx("fireAddressLabel"), default = "du", varType = "string",
+      { kind = "dropdown", key = "fireAddress", hidden = noFireTalk, label = tx("fireAddressLabel"), default = "du", varType = "string",
         tip = tx("fireAddressTip"),
         options = function()
           return { { value = "du", label = TX.fireDu }, { value = "ihr", label = TX.fireIhr }, { value = "mix", label = TX.fireMix } }
@@ -988,6 +1118,13 @@ local function refreshButtonLabels()
     local data = type(init) == "table" and type(init.GetData) == "function" and call(init.GetData, init)
     if type(data) == "table" then data.name = txt(b.item.label) end
   end
+  for _, m in pairs(moduleInits) do
+    local data = type(m.init) == "table" and type(m.init.GetData) == "function" and call(m.init.GetData, m.init)
+    if type(data) == "table" then
+      data.name = txt(m.item.label)
+      data.tooltip = txt(m.item.tip)
+    end
+  end
 end
 
 local function register(category, layout, item)
@@ -1019,6 +1156,16 @@ local function register(category, layout, item)
     local init = Settings.CreateCheckbox(category, setting, tip)
     inits[item.key] = { init = init, item = item }
     bindParent(init, item)
+    if item.module then
+      moduleInits[item.module] = { init = init, item = item }
+      -- a module that is not installed cannot be switched: greyed out (the setter refuses it anyway, with a chat line)
+      if type(item.locked) == "function" and type(init) == "table" and type(init.AddModifyPredicate) == "function" then
+        pcall(init.AddModifyPredicate, init, function()
+          local ok, v = pcall(item.locked)
+          return not (ok and v == true)
+        end)
+      end
+    end
   elseif item.kind == "slider" then
     local opts = Settings.CreateSliderOptions(item.min, item.max, item.step)
     local M = rawget(_G, "MinimalSliderWithSteppersMixin")
@@ -1048,6 +1195,16 @@ local function register(category, layout, item)
   end
 end
 
+-- a group whose rows are all hidden (e.g. every row belongs to a module that is not loaded) gets no header either;
+-- groups without rows by design (the version line, the sounds before their rows are added) stay
+function Options.groupEmpty(g)
+  if type(g.items) ~= "table" or #g.items == 0 then return false end
+  for _, item in ipairs(g.items) do
+    if not Options.isHidden(item) then return false end
+  end
+  return true
+end
+
 function Options.register()
   if Options.category then return true end
   if type(Settings) ~= "table" or type(Settings.RegisterVerticalLayoutCategory) ~= "function"
@@ -1066,7 +1223,7 @@ function Options.register()
   end
   Options.category = category
   for _, g in ipairs(Options.GROUPS) do
-    if not Options.isHidden(g) then
+    if not Options.isHidden(g) and not Options.groupEmpty(g) then
       if type(CreateSettingsListSectionHeaderInitializer) == "function" then
         local okH, err = pcall(function() layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(txt(g.title))) end)
         if not okH then fail(err) end
@@ -1114,7 +1271,11 @@ function Options.refresh()
   end
 end
 
-do
+-- outside changes refresh the open menu; hooked once all add-ons are loaded (the to-do note lives in the module Plans)
+local hookedListeners = false
+function Options.hookListeners()
+  if hookedListeners then return end
+  hookedListeners = true
   local T, Q = TT(), QN()
   if T and type(T.listeners) == "table" then T.listeners[#T.listeners + 1] = function() Options.refresh() end end
   if Q and type(Q.listeners) == "table" then Q.listeners[#Q.listeners + 1] = function() Options.refresh() end end
@@ -1127,10 +1288,14 @@ do
   end
 end
 
--- Register on ADDON_LOADED, after Locale.apply: the chosen language is only known once the SavedVariables are loaded.
+-- Register at PLAYER_LOGIN (1.1.0): after Locale.apply (the chosen language is only known once the SavedVariables are loaded)
+-- and after the module add-ons, which load after the core's ADDON_LOADED; the rows of a module ask for its code when registered.
 do
   local Core = ns.Core
-  local hooked = Core and type(Core.on) == "function"
-    and Core.on("ADDON_LOADED", function(_, name) if name == ADDON_NAME then Options.register() end end)
-  if not hooked then Options.register() end
+  local function start()
+    Options.hookListeners()
+    Options.register()
+  end
+  local hooked = Core and type(Core.on) == "function" and Core.on("PLAYER_LOGIN", start)
+  if not hooked then start() end
 end

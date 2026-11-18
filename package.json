@@ -11,7 +11,7 @@
     "test": "vitest run",
     "check": "node scripts/check-lua.mjs",
     "install-addon": "node scripts/install-addon.mjs",
-    "data": "node scripts/fetch-questiedb-release.mjs --soft && node scripts/build-todo-data.mjs && node scripts/build-quest-data.mjs",
+    "data": "node scripts/fetch-questiedb-release.mjs --soft && node scripts/build-todo-data.mjs && node scripts/build-quest-data.mjs && node scripts/build-prof-trainers.mjs",
     "types-doc": "node scripts/types-doc.mjs",
     "fetch-questiedb": "node scripts/fetch-questiedb-release.mjs"
   },

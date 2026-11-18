@@ -117,6 +117,19 @@ L.add("itIT", "Core", {
   rqError = "Interfacce delle missioni: errore durante la lettura (%s).",
   rqDetails = "Dettagli in EveNChronicleDB.diag.retailQuests[%d] (nel file dopo /reload).",
   unknownCommand = "Comando sconosciuto \"%s\". /chronik help elenca tutti i comandi.",
+  mod_quests = "Missioni",
+  mod_tracker = "Tracciamento missioni",
+  mod_crafting = "Mestieri",
+  mod_plans = "Piani",
+  mod_campfire = "Falò",
+  moduleOff = "Il modulo «%s» è disattivato (/chronik options › Moduli).",
+  moduleMissing = "Il modulo «%s» non è installato.",
+  modOn = "attivo",
+  modOff = "disattivo",
+  modPending = "dopo /reload",
+  modMissing = "non installato",
+  diagModules = "Moduli: %s",
+  diagModuleVersion = "%s (versione %s invece di %s)",
   actionLine = "Azioni bloccate: %s (monitoraggio: %s)",
   actionNone = "nessuna",
   actionSome = "%d (ultima: %s, %s)",
@@ -468,4 +481,15 @@ L.add("itIT", "col.Einkauf", {
   errFull = "La lista delle cose da fare è piena.",
   moreLines = "… %s altri",
   errNotReadyChar = "Il personaggio non è ancora pronto.",
+})
+
+-- collectors/Werkauftrag.lua (Werkauftrag, 1.1.0)
+L.add("itIT", "col.Werkauftrag", {
+  titleOne = "Ordine di lavoro: %s× %s",
+  titleRoute = "Ordine di lavoro: %s fino a %s",
+  ready = "pronto",
+  unknownMat = "Il gioco mostra i materiali dopo l'apprendimento",
+  errSteps = "L'ordine è troppo lungo (al massimo 60 passaggi).",
+  errEmpty = "L'ordine non ha nessun passaggio.",
+  errNoOrder = "Questo ordine non esiste più.",
 })

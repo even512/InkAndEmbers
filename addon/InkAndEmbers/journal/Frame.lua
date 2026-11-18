@@ -781,8 +781,9 @@ function Frame.updateTabs()
     local current = J.page == b.tabId
     local available = tabAvailable(b.tabId)
     local P = Journal.Pages
-    -- guest book / client without this tab: the bookmark is gone, not dimmed
-    local gone = P ~= nil and ((P.guestAllows ~= nil and not P.guestAllows(b.tabId)) or (P.tabHidden ~= nil and P.tabHidden(b.tabId)))
+    -- guest book / client without this tab / page of a missing module (1.1.0): the bookmark is gone, not dimmed
+    local gone = P ~= nil and ((P.guestAllows ~= nil and not P.guestAllows(b.tabId)) or (P.tabHidden ~= nil and P.tabHidden(b.tabId))
+      or (P.missing ~= nil and P.missing(b.tabId)))
     b:SetShown(not gone)
     if not gone then
       b.baseY = -(Frame.TAB.y0 + slot * Frame.TAB.pitch + b.wobble.dy)
@@ -810,11 +811,20 @@ Frame.TAB_TIP_IDS = { reise = true, chronik = true, dungeons = true, kampf = tru
   handwerk = true, momente = true, notizen = true }
 Frame.TAB_TIP = setmetatable({}, { __index = function(_, id)
   if Frame.TAB_TIP_IDS[id] then
-    -- Retail: no campfire guests (switch "Am Feuer" hidden) and none of the WoW Forever parts (Lehrplan, Zonen, Dungeon-Quests)
+    -- Retail: no campfire guests (switch "Am Feuer" hidden) and none of the WoW Forever parts (Lehrplan, Zonen, Dungeon-Quests);
+    -- the same without the module that brings them (1.1.0: Campfire, Plans, Quests)
     local ms, lp = Journal.MapSpace, Journal.Lehrplan
-    local noFire = id == "chronik" and ms ~= nil and type(ms.fireTalkHidden) == "function" and ms.fireTalkHidden() == true
-    local noPlan = (id == "quests" or id == "plaene" or id == "dungeons") and lp ~= nil and type(lp.active) == "function"
-      and lp.active() == false
+    local noFire = id == "chronik" and ((ms ~= nil and type(ms.fireTalkHidden) == "function" and ms.fireTalkHidden() == true)
+      or Journal.FireMatesView == nil)
+    local planOff = lp ~= nil and type(lp.active) == "function" and lp.active() == false
+    local noPlan = false
+    if id == "plaene" then
+      noPlan = lp == nil or planOff
+    elseif id == "quests" or id == "dungeons" then
+      local C = ns.Core
+      noPlan = planOff or (C ~= nil and type(C.foreverParts) == "function" and not C.foreverParts())
+        or Journal[id == "quests" and "ZonesView" or "DungeonQuestsView"] == nil
+    end
     return Frame.TEXT["tabTip_" .. id .. ((noFire or noPlan) and "Retail" or "")]
   end
   return nil
@@ -3051,9 +3061,20 @@ function Frame.tick(dt)
   end
 end
 
--- quest state changed or a sweep finished (journal/model/ZoneProgress.lua): redraw the zone row of the open book (no ticker)
-if Journal.ZoneProgress and type(Journal.ZoneProgress.onChange) == "function" then
-  Journal.ZoneProgress.onChange(function()
-    if J.frame and J.frame:IsShown() and J.card and J.card:IsShown() then Frame.updateZoneRow() end
-  end)
+-- quest state changed or a sweep finished (journal/model/ZoneProgress.lua): redraw the zone row of the open book (no ticker).
+-- Frame.onZoneProgress is the hook; it is hung on ZoneProgress.onChange once, at file load or (1.1.0: ZoneProgress may come with a
+-- later add-on) at PLAYER_LOGIN.
+function Frame.onZoneProgress()
+  if J.frame and J.frame:IsShown() and J.card and J.card:IsShown() then Frame.updateZoneRow() end
+end
+local zoneHooked = false
+local function hookZoneProgress()
+  local ZP = Journal.ZoneProgress
+  if zoneHooked or not (ZP and type(ZP.onChange) == "function") then return zoneHooked end
+  zoneHooked = true
+  ZP.onChange(function() Frame.onZoneProgress() end)
+  return true
+end
+if not hookZoneProgress() and ns.Core and type(ns.Core.on) == "function" then
+  ns.Core.on("PLAYER_LOGIN", function() hookZoneProgress() end)
 end

@@ -41,7 +41,8 @@ local LX, LW = Journal.Theme.gridX("L")
 local RX, RW = Journal.Theme.gridX("R")
 local TITLE_X, TITLE_W = Journal.Theme.gridX("L", 2, 11)
 local TITLE_Y = G.slots.title.y
-local ROWS_Y, ROW_H = G.slots.body.y, G.line.row
+-- 19 rows (neck, rings, trinkets included): 18 px rows (G.line.text) from y 122 end at y 464, clear of the keep-out zone from y 478
+local ROWS_Y, ROW_H = 122, G.line.text
 local SLOT_W, TAG_W = 96, 34
 local MODEL_W, MODEL_H = 300, 404
 local MODEL_Y = 124
@@ -465,15 +466,19 @@ function View:Dress()
     self.tries[def.slot] = nil
     self.worn[def.slot] = key
   end
+  local slots = {} -- only slots the model shows (neck, rings, trinkets: model = false)
+  for _, def in ipairs(wd.slots) do
+    if def.model ~= false then slots[#slots + 1] = def end
+  end
   local full = false
   local handsChanged = todo(16) or todo(17)
   if type(model.UndressSlot) ~= "function" then
     -- no UndressSlot: whenever a slot has to be emptied (or the hands change) one Undress and everything again
-    for _, def in ipairs(wd.slots) do
+    for _, def in ipairs(slots) do
       if todo(def.slot) and (target(def.slot) == false or def.slot == 16 or def.slot == 17) then full = true end
     end
   end
-  for _, def in ipairs(wd.slots) do
+  for _, def in ipairs(slots) do
     if not full and def.slot ~= 16 and def.slot ~= 17 and todo(def.slot) then
       if target(def.slot) == false then
         local st = method(model, "UndressSlot", def.slot)
@@ -497,12 +502,12 @@ function View:Dress()
     -- no UndressSlot (or it failed): one Undress and everything of this level again
     method(model, "Undress")
     self.worn = {}
-    for _, def in ipairs(wd.slots) do
+    for _, def in ipairs(slots) do
       if not wd.levels[self.level][def.slot] then self.worn[def.slot] = false end
     end
   end
   if handsChanged or full then
-    for _, def in ipairs(wd.slots) do
+    for _, def in ipairs(slots) do
       if (def.slot == 16 or def.slot == 17 or full) and target(def.slot) then wear(def) end
     end
   end

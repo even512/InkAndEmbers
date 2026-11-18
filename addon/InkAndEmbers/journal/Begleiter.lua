@@ -589,7 +589,7 @@ end
 local function slipFrame()
   if slip.frame then return slip.frame end
   local S = Begleiter.SLIP
-  local TT = Journal.TodoTracker
+  local TT = Journal.Widgets and Journal.Widgets.Slip
   local Theme = Journal.Theme
   local tex = Theme and Theme.TEX and Theme.TEX.welcomeBack
   local f = CreateFrame("Frame", nil, UIParent)

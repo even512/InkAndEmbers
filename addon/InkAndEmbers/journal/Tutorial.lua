@@ -2,6 +2,8 @@
 -- images (tiles of the atlases Media/Tutorial_<lang>_<n>.tga), right a handwritten heading and the text; back / skip / next, page dots.
 -- One welcome page, then one page per feature of the book (texts by the author), at the end a farewell page
 -- with the narrator portrait of the welcome card (same choice: Begleiter.narrator(), setting "Erzähler im Willkommen-Gruß").
+-- Before it (1.1.0) the page "Module wählen": the five module add-ons with a switch each (Core.API, after /reload, all characters)
+-- and a reload button. Players who saw the introduction before 1.1 get this page alone, once (EveNChronicleDB.ui.modulesSeen).
 local _, ns = ...
 
 local Journal = ns.Journal or {}
@@ -30,6 +32,7 @@ Tutorial.PAGES = {
   { id = "treasures", tiles = { { a = 3, x = 0, y = 256, w = 512, h = 256 }, { a = 3, x = 512, y = 256, w = 512, h = 256 } } },
   { id = "notes", tiles = { { a = 3, x = 0, y = 512, w = 512, h = 256 }, { a = 3, x = 512, y = 512, w = 512, h = 256 } } },
   { id = "todo", tiles = { { a = 3, x = 0, y = 768, w = 512, h = 256 }, { a = 3, x = 512, y = 768, w = 512, h = 256 } } },
+  { id = "modules", modules = true, tiles = {} },
   { id = "farewell", portrait = true, tiles = {} },
 }
 -- Pages left out in Retail (the feature never runs there): "fire" = campfire talk (MapSpace.fireTalkHidden). Counting, dots and
@@ -40,7 +43,23 @@ local function retailClient()
   local ms = Journal.MapSpace
   return ms ~= nil and type(ms.retailClient) == "function" and ms.retailClient() == true
 end
+-- module API of the core (Core.lua, also the global InkAndEmbers); nil without it
+local function api()
+  local C = ns.Core
+  return C ~= nil and type(C.API) == "table" and C.API or nil
+end
+-- feature pages that belong to a module add-on (1.1.0): left out when that module is not loaded in this session
+Tutorial.PAGE_MODULE = { openquests = "quests", fire = "campfire", todo = "plans" }
+local function moduleLoaded(id)
+  local A = api()
+  if not (A and type(A.moduleLoaded) == "function") then return true end
+  local ok, v = pcall(A.moduleLoaded, id)
+  return not ok or v == true
+end
 local function pageHidden(p)
+  if p.modules then return api() == nil end
+  local mod = Tutorial.PAGE_MODULE[p.id]
+  if mod and not moduleLoaded(mod) then return true end
   if p.id ~= "fire" then return false end
   local ms = Journal.MapSpace
   return ms ~= nil and type(ms.fireTalkHidden) == "function" and ms.fireTalkHidden() == true
@@ -50,9 +69,22 @@ local function trainingShown()
   local L = Journal.Lehrplan
   return L ~= nil and type(L.active) == "function" and L.active() == true
 end
-local activePages = nil
--- the pages of this client, fixed on first use (the client does not change during a session; the dots are built once)
+local state = { frame = nil, page = 1, after = {}, narrator = nil, only = false }
+Tutorial.state = state
+
+local activePages, onlyPages = nil, nil
+-- the pages of this client, fixed on first use (client and loaded modules do not change during a session). state.only: just
+-- the page "Module wählen" (players who knew the book before 1.1, Tutorial.firstRun)
 function Tutorial.pages()
+  if state.only then
+    if not onlyPages then
+      onlyPages = {}
+      for _, p in ipairs(Tutorial.PAGES) do
+        if p.modules and not pageHidden(p) then onlyPages[1] = p end
+      end
+    end
+    return onlyPages
+  end
   if not activePages then
     activePages = {}
     for _, p in ipairs(Tutorial.PAGES) do
@@ -119,18 +151,50 @@ local T = ns.Locale.ns("Tutorial", {
   title_farewell = "Gute Reise!",
   text_farewell = "Das ist alles, was Ihr vorab wissen müsst. Den Rest erzählt Euch die Reise selbst.\nIch schreibe mit: die großen Momente genauso wie die kleinen Umwege. Schaut ab und zu ins Buch, Ihr werdet staunen, wie viel zusammenkommt.\nBis bald am Lagerfeuer!",
   text_farewell_retail = "Das ist alles, was Ihr vorab wissen müsst. Den Rest erzählt Euch die Reise selbst.\nIch schreibe mit: die großen Momente genauso wie die kleinen Umwege. Schaut ab und zu ins Buch, Ihr werdet staunen, wie viel zusammenkommt.\nBis bald unterwegs!",
+  -- page "Module wählen" (1.1.0)
+  title_modules = "Module wählen",
+  text_modules = "Das Buch besteht aus einem Kern und mehreren Modulen. Was Ihr nicht braucht, schaltet Ihr links einfach ab. Mitgeschrieben wird trotzdem alles, denn das erledigt immer der Kern. Schaltet Ihr ein Modul später wieder ein, ist alles noch da.\nEure Wahl gilt für alle Charaktere. Eine Änderung wirkt nach dem nächsten /reload.",
+  text_modules_update = "Neu in Version 1.1: Ihr könnt Teile des Buchs abwählen.",
+  text_modules_restart = "Steht ein Modul auf „nicht installiert“? Neue Addon-Ordner erkennt WoW erst, wenn Ihr das Spiel nach dem Update einmal ganz beendet und neu startet. Ein /reload reicht dafür nicht.",
+  reload = "Jetzt neu laden",
+  reloadTip = "Lädt die Oberfläche neu (wie /reload). Erst dann wirkt Eure Modulwahl.",
+  mod_quests = "Offene Quests je Gebiet, Dungeon-Quests und die Zonen-Übersicht. Erledigte Quests bleiben im Buch.",
+  mod_tracker = "Ein eigener Quest-Tracker am Bildschirmrand, mit Leiste für Quest-Gegenstände (nur WoW Forever).",
+  mod_crafting = "Rezeptbuch und Werkaufträge: Ziel wählen, Route planen, am Auktionshaus einkaufen und Schritt für Schritt herstellen.",
+  mod_plans = "To-do-Zettel, eigene To Dos, Lehrplan und Tierausbildung samt Erinnerung „Zum Lehrer“.",
+  mod_plans_retail = "To-do-Zettel und eigene To Dos. Eure Notizen bleiben im Buch.",
+  mod_campfire = "Gesprächszettel am Lagerfeuer, Rauchzeichen und die Ansicht „Am Feuer“.",
+  modMissing = "Nicht gefunden. Nach dem Update einmal das Spiel komplett neu starten.",
+  stateOn = "an",
+  stateOff = "aus",
+  statePendingOn = "an nach /reload",
+  statePendingOff = "aus nach /reload",
+  stateMissing = "nicht installiert",
+  tipOn = "Eingeschaltet. Klick schaltet das Modul ab (wirkt nach /reload, für alle Charaktere).",
+  tipOff = "Ausgeschaltet. Klick schaltet das Modul ein (wirkt nach /reload, für alle Charaktere).",
+  tipPending = "Geändert. Die Änderung wirkt nach dem nächsten /reload.",
+  tipMissing = "Der Ordner dieses Moduls fehlt oder das Spiel kennt ihn noch nicht. Nach dem Update auf 1.1 einmal das Spiel komplett beenden und neu starten.",
+  tipCombat = "Im Kampf gesperrt.",
+  failCombat = "Im Kampf lassen sich Module nicht umschalten. Bitte nach dem Kampf noch einmal.",
+  failNoapi = "Dieser Client kann Addons nicht selbst umschalten. Bitte im Addon-Menü des Spiels (Charakterauswahl › AddOns) an- oder abhaken.",
+  failMissing = "Das Modul „%s“ ist nicht installiert.",
+  failFailed = "„%s“ ließ sich nicht umschalten. Bitte im Addon-Menü des Spiels (Charakterauswahl › AddOns) prüfen.",
+  switchedOn = "„%s“ wird nach dem nächsten /reload eingeschaltet.",
+  switchedOff = "„%s“ wird nach dem nächsten /reload abgeschaltet.",
 })
 Tutorial.TEXT = T
 
 -- body text of a page: its text plus, on the Quests page in WoW Forever only, the paragraph about the training plan (Lehrplan)
+-- page "Module wählen": in the update view (state.only) a lead sentence first; while a module folder is missing, how to fix it
 function Tutorial.bodyText(p)
   local text = T[Tutorial.textKey(p)]
   if p.id == "quests" and trainingShown() then text = text .. "\n" .. T.text_quests_train end
+  if p.modules then
+    if state.only then text = T.text_modules_update .. " " .. text end
+    if Tutorial.anyModuleMissing() then text = text .. "\n" .. T.text_modules_restart end
+  end
   return text
 end
-
-local state = { frame = nil, page = 1, after = {}, narrator = nil }
-Tutorial.state = state
 
 local function isSecret(v)
   return type(issecretvalue) == "function" and issecretvalue(v) == true
@@ -175,6 +239,125 @@ function Tutorial.setSeen(on)
   local ui = uiTable(true)
   if not ui then return false end
   ui.tutorialSeen = on and Tutorial.VERSION or nil
+  return true
+end
+
+-- ---------- page "Module wählen" (1.1.0) ----------
+-- The switches only go through Core.API (allowlist of the five module add-ons, never a name from text); the core says the
+-- state: on | off | pending (differs after /reload) | missing (folder not there or not known to the client yet).
+Tutorial.MODULES_VERSION = 1
+-- Left page: one row per module (check with the module name, state on the right, a short description below)
+Tutorial.MODULE_ROW = { x = 40, top = 70, h = 66, w = 328, indent = 26, size = 14, desc = 12 }
+-- Right page of that page: the text leaves room for the reload button below it
+Tutorial.MODULES_BODY_MAX = 236
+Tutorial.RELOAD_W, Tutorial.RELOAD_H = 160, 24
+
+function Tutorial.modulesSeen()
+  local ui = uiTable(false)
+  local v = ui and ui.modulesSeen
+  return type(v) == "number" and not isSecret(v) and v >= Tutorial.MODULES_VERSION
+end
+
+function Tutorial.setModulesSeen(on)
+  local ui = uiTable(true)
+  if not ui then return false end
+  ui.modulesSeen = on and Tutorial.MODULES_VERSION or nil
+  return true
+end
+
+-- modules whose parts never run in this client are not offered: in Retail the own quest tracker, the crafting tab and the
+-- campfire talk (MapSpace.retailClient / fireTalkHidden, same switches as their pages and settings rows)
+function Tutorial.moduleShown(id)
+  local ms = Journal.MapSpace
+  if id == "tracker" or id == "crafting" then return not retailClient() end
+  if id == "campfire" then
+    return not (ms ~= nil and type(ms.fireTalkHidden) == "function" and ms.fireTalkHidden() == true)
+  end
+  return true
+end
+
+-- module ids in the order of the core's list (Core.API.MODULES), only those offered in this client
+function Tutorial.moduleIds()
+  local A, out = api(), {}
+  if A and type(A.MODULES) == "table" then
+    for _, m in ipairs(A.MODULES) do
+      if type(m) == "table" and type(m.id) == "string" and Tutorial.moduleShown(m.id) then out[#out + 1] = m.id end
+    end
+  end
+  return out
+end
+
+function Tutorial.moduleLabel(id)
+  local A = api()
+  local ok, v = false, nil
+  if A and type(A.moduleLabel) == "function" then ok, v = pcall(A.moduleLabel, id) end
+  return ok and type(v) == "string" and v or tostring(id)
+end
+
+local STATES = { on = true, off = true, pending = true, missing = true }
+function Tutorial.moduleState(id)
+  local A = api()
+  if not (A and type(A.moduleState) == "function") then return "missing" end
+  local ok, v = pcall(A.moduleState, id)
+  return ok and STATES[v] and v or "missing"
+end
+
+-- on after the next /reload? (pending flips the state of this session)
+function Tutorial.moduleWanted(id)
+  local st = Tutorial.moduleState(id)
+  if st == "pending" then return not moduleLoaded(id) end
+  return st == "on"
+end
+
+function Tutorial.anyModuleMissing()
+  for _, id in ipairs(Tutorial.moduleIds()) do
+    if Tutorial.moduleState(id) == "missing" then return true end
+  end
+  return false
+end
+
+-- description of a module in this client (mod_<id>_retail where Retail has less: no training plan there)
+function Tutorial.moduleDesc(id)
+  if retailClient() and T["mod_" .. id .. "_retail"] then return T["mod_" .. id .. "_retail"] end
+  return T["mod_" .. id] or ""
+end
+
+-- short state word: "an" | "aus" | "an nach /reload" | "aus nach /reload" | "nicht installiert"
+function Tutorial.moduleStateText(id)
+  local st = Tutorial.moduleState(id)
+  if st == "pending" then return Tutorial.moduleWanted(id) and T.statePendingOn or T.statePendingOff end
+  return T[st == "on" and "stateOn" or st == "off" and "stateOff" or "stateMissing"]
+end
+
+-- tooltip lines of a module switch (also used by Options: module name, description, state)
+function Tutorial.moduleTip(id)
+  local st = Tutorial.moduleState(id)
+  local lines = { Tutorial.moduleLabel(id), st == "missing" and T.modMissing or Tutorial.moduleDesc(id) }
+  if inCombat() then lines[#lines + 1] = T.tipCombat
+  elseif st == "missing" then lines[#lines + 1] = T.tipMissing
+  elseif st == "pending" then lines[#lines + 1] = T.tipPending
+  else lines[#lines + 1] = st == "on" and T.tipOn or T.tipOff end
+  return lines
+end
+
+-- switch a module for all characters (after /reload). A refusal is said in the chat; loud: also confirm the switch there
+-- (the settings menu cannot redraw its row labels). -> ok, reason
+function Tutorial.switchModule(id, on, loud)
+  local A = api()
+  local label = Tutorial.moduleLabel(id)
+  local ok, done, why = false, false, "noapi"
+  if A and type(A.setModuleEnabled) == "function" then
+    ok, done, why = pcall(A.setModuleEnabled, id, on and true or false)
+    if not ok then done, why = false, "failed" end
+  end
+  if done ~= true then
+    if why == "combat" then print_(T.failCombat)
+    elseif why == "noapi" then print_(T.failNoapi)
+    elseif why == "missing" then print_(T("failMissing", label))
+    else print_(T("failFailed", label)) end
+    return false, why
+  end
+  if loud then print_(T(on and "switchedOn" or "switchedOff", label)) end
   return true
 end
 
@@ -230,6 +413,144 @@ local function textButton(parent, size, onClick)
   end
   paint(b)
   return b
+end
+
+-- a plain check without the diary widgets (same calls as Diary.NewCheck: SetChecked(on, silent), SetEnabled, SetLabel)
+local function plainCheck(parent, size, onChange, tip)
+  local b = textButton(parent, size, function(self) self:SetChecked(not self.checked) end)
+  b.checked = false
+  b.diaryOpts = { tip = tip }
+  b.text:ClearAllPoints()
+  b.text:SetPoint("LEFT", b, "LEFT", 0, 0)
+  local setLabel = b.SetLabel
+  function b:SetLabel(t)
+    self.labelText = t
+    setLabel(self, (self.checked and "[x] " or "[  ] ") .. (t or ""))
+  end
+  function b:SetChecked(on, silent)
+    self.checked = on and true or false
+    self:SetLabel(self.labelText)
+    if not silent and type(onChange) == "function" then onChange(self.checked, self) end
+  end
+  function b:SetEnabled(on)
+    self.disabled = not on
+    self:SetAlpha(on and 1 or 0.4)
+  end
+  b:SetScript("OnClick", function(self) if not self.disabled then self:SetChecked(not self.checked) end end)
+  return b
+end
+
+-- Rows of the page "Module wählen" on the left page and the reload button on the right page. The reload button is a secure
+-- macro button (Save.newReloadButton: the client blocks ReloadUI from addon code); it is anchored to the window itself and
+-- only shown or moved out of combat (the window closes at PLAYER_REGEN_DISABLED, Tutorial.open refuses in combat).
+function Tutorial.buildModules(f)
+  local left, d, MR = f.left, D(), Tutorial.MODULE_ROW
+  f.modRows = {}
+  for i, id in ipairs(Tutorial.moduleIds()) do
+    local y = MR.top + (i - 1) * MR.h
+    local row = { id = id }
+    local function changed(on) Tutorial.onModuleClick(id, on) end
+    local function tip() return Tutorial.moduleTip(id) end
+    if d and d.NewCheck then
+      row.check = d.NewCheck(left, Tutorial.moduleLabel(id), { size = MR.size, tip = tip, onChange = changed })
+    else
+      row.check = plainCheck(left, MR.size, changed, tip)
+      row.check:SetLabel(Tutorial.moduleLabel(id))
+    end
+    row.check:SetPoint("TOPLEFT", left, "TOPLEFT", MR.x, -y)
+    row.state = font(left, "label", MR.desc, "sepia")
+    row.state:SetPoint("TOPRIGHT", left, "TOPLEFT", MR.x + MR.w, -(y + 6))
+    row.state:SetJustifyH("RIGHT")
+    row.state:SetWordWrap(false)
+    row.desc = font(left, "text", MR.desc, "ink")
+    row.desc:SetPoint("TOPLEFT", left, "TOPLEFT", MR.x + MR.indent, -(y + 26))
+    row.desc:SetWidth(MR.w - MR.indent)
+    row.desc:SetJustifyH("LEFT")
+    row.desc:SetJustifyV("TOP")
+    if row.desc.SetWordWrap then row.desc:SetWordWrap(true) end
+    f.modRows[i] = row
+  end
+  local Save = ns.Save
+  if Save and type(Save.newReloadButton) == "function" then
+    local ok, b = pcall(Save.newReloadButton, f, T.reload, function() Tutorial.setModulesSeen(true) return true end)
+    if ok and type(b) == "table" then
+      b:SetSize(Tutorial.RELOAD_W, Tutorial.RELOAD_H)
+      if b.HookScript then
+        b:HookScript("OnEnter", function(self) local w = W() if w and w.tip then w.tip(self, { T.reload, T.reloadTip }) end end)
+        b:HookScript("OnLeave", function(self) local w = W() if w and w.hideTip then w.hideTip(self) end end)
+      end
+      b:Hide()
+      f.reload = b
+    end
+  end
+  Tutorial.showModules(false)
+end
+
+-- click on a module switch: ask the core, then show what it says (a refused switch snaps back)
+function Tutorial.onModuleClick(id, on)
+  Tutorial.switchModule(id, on, false)
+  Tutorial.paintModules()
+  if Tutorial.isShown() then Tutorial.render() end
+end
+
+function Tutorial.showModules(on)
+  local f = state.frame
+  if not (f and f.modRows) then return end
+  for _, row in ipairs(f.modRows) do
+    row.check:SetShown(on)
+    row.state:SetShown(on)
+    row.desc:SetShown(on)
+  end
+end
+
+-- state of every row: check = on after the next /reload, state word (red while it differs from this session), description;
+-- missing modules and combat: switch locked
+function Tutorial.paintModules()
+  local f = state.frame
+  if not (f and f.modRows) then return end
+  local fight = inCombat()
+  for _, row in ipairs(f.modRows) do
+    local st = Tutorial.moduleState(row.id)
+    row.check:SetChecked(Tutorial.moduleWanted(row.id), true)
+    if row.check.SetEnabled then row.check:SetEnabled(st ~= "missing" and not fight) end
+    setText(row.state, Tutorial.moduleStateText(row.id))
+    row.state:SetTextColor(color(st == "pending" and "red" or "sepia"))
+    setText(row.desc, st == "missing" and T.modMissing or Tutorial.moduleDesc(row.id))
+    row.desc:SetTextColor(color(st == "missing" and "sepia" or "ink"))
+  end
+end
+
+-- the reload button sits below the text of the right page (absolute offset from the window, see Tutorial.buildModules)
+function Tutorial.placeReload(show)
+  local f = state.frame
+  local b = f and f.reload
+  if not b or inCombat() then return end
+  if show then
+    local h = f.body.GetStringHeight and f.body:GetStringHeight()
+    if type(h) ~= "number" or isSecret(h) or h ~= h or h <= 0 then h = Tutorial.MODULES_BODY_MAX end
+    h = min(h, Tutorial.MODULES_BODY_MAX)
+    local R = Tutorial.RIM
+    b:ClearAllPoints()
+    b:SetPoint("TOPLEFT", f, "TOPLEFT", R + f.half + 40, -(R + Tutorial.BODY_Y + floor(h + 0.5) + 18))
+  end
+  b:SetShown(show and true or false)
+end
+
+-- dots of the current view, centred under the left page; a single page has none
+function Tutorial.layoutDots()
+  local f = state.frame
+  if not f then return end
+  local n = #Tutorial.pages()
+  local gap = 21
+  local x0 = f.half / 2 - (n - 1) * gap / 2
+  for i, b in ipairs(f.dots) do
+    local on = n > 1 and i <= n
+    if on then
+      b:ClearAllPoints()
+      b:SetPoint("CENTER", f.left, "TOPLEFT", x0 + (i - 1) * gap, -(Tutorial.IMAGE.bottom + 26))
+    end
+    b:SetShown(on)
+  end
 end
 
 local function build()
@@ -328,14 +649,16 @@ local function build()
   f.portrait:SetPoint("CENTER", left, "TOPLEFT", Tutorial.IMAGE.x + Tutorial.IMAGE.w / 2, -(Tutorial.IMAGE.top + Tutorial.IMAGE.bottom) / 2)
   f.portrait:Hide()
 
+  -- one dot per page of the full introduction; Tutorial.layoutDots places and shows those of the current view (none when alone)
   f.dots = {}
-  local n = #Tutorial.pages()
-  local gap = 21
-  local x0 = half / 2 - (n - 1) * gap / 2
-  for i = 1, n do
+  f.half = half
+  local only = state.only
+  state.only = false
+  local nFull = #Tutorial.pages()
+  state.only = only
+  for i = 1, nFull do
     local b = CreateFrame("Button", nil, left)
     b:SetSize(18, 18)
-    b:SetPoint("CENTER", left, "TOPLEFT", x0 + (i - 1) * gap, -(Tutorial.IMAGE.bottom + 26))
     local t = b:CreateTexture(nil, "ARTWORK")
     t:SetPoint("CENTER", b, "CENTER", 0, 0)
     t:SetTexture(Th.TEX.disc)
@@ -356,6 +679,7 @@ local function build()
     end)
     f.dots[i] = b
   end
+  Tutorial.buildModules(f)
 
   f.title = font(right, "hand", 30, "red")
   f.title:SetPoint("TOPLEFT", right, "TOPLEFT", 40, -Tutorial.TITLE_Y)
@@ -467,7 +791,7 @@ function Tutorial.layoutImages(p)
 end
 
 -- Right page text: the largest font size whose wrapped height fits the page (the texts differ a lot in length)
-function Tutorial.fitBody(text)
+function Tutorial.fitBody(text, maxH)
   local f = state.frame
   if not f then return end
   local Th = Theme()
@@ -478,7 +802,7 @@ function Tutorial.fitBody(text)
     pcall(f.body.SetFont, f.body, file, s, "")
     setText(f.body, text)
     local h = f.body.GetStringHeight and f.body:GetStringHeight()
-    if type(h) ~= "number" or isSecret(h) or h <= Tutorial.BODY_MAX then break end
+    if type(h) ~= "number" or isSecret(h) or h <= (maxH or Tutorial.BODY_MAX) then break end
   end
   return size
 end
@@ -492,8 +816,12 @@ local function render()
   setText(f.headL, f.upper(T.header))
   setText(f.headR, f.upper(T("pageOf", i, n)))
   setText(f.title, T["title_" .. p.id])
-  Tutorial.fitBody(Tutorial.bodyText(p))
+  Tutorial.fitBody(Tutorial.bodyText(p), p.modules and Tutorial.MODULES_BODY_MAX or nil)
   Tutorial.layoutImages(p)
+  Tutorial.showModules(p.modules == true)
+  if p.modules then Tutorial.paintModules() end
+  Tutorial.placeReload(p.modules == true)
+  Tutorial.layoutDots()
   local last = i == n
   if f.next.SetLabel then f.next:SetLabel(last and T.done or T.next) end
   if f.back.SetLabel then f.back:SetLabel(T.back) end
@@ -510,14 +838,20 @@ end
 
 function Tutorial.page() return state.page end
 
-function Tutorial.open(i)
+-- open(i): the full introduction at page i; open(1, "modules"): only the page "Module wählen" (update view, options button)
+function Tutorial.open(i, view)
   if inCombat() then
     print_(T.combat)
     return false
   end
   local f = build()
-  local n = #Tutorial.pages()
   if not f:IsShown() then state.narrator = nil end
+  state.only = view == "modules"
+  local n = #Tutorial.pages()
+  if n == 0 then
+    state.only = false
+    return false
+  end
   i = tonumber(i) or 1
   state.page = max(1, min(n, floor(i)))
   render()
@@ -572,14 +906,24 @@ function Tutorial.onHidden()
   end
 end
 
+-- First login of the account: the whole introduction (it holds the page "Module wählen"). Who saw the introduction before 1.1
+-- gets that page alone, once (ui.modulesSeen); both marks are set as soon as it opens.
 function Tutorial.firstRun(after)
-  if not Tutorial.AUTO or Tutorial.seen() then return false end
-  if not Tutorial.open(1) then return false end
+  if not Tutorial.AUTO then return false end
+  local full = not Tutorial.seen()
+  if not full and (Tutorial.modulesSeen() or #Tutorial.moduleIds() == 0) then return false end
+  if not Tutorial.open(1, (not full) and "modules" or nil) then return false end
   Tutorial.setSeen(true)
+  Tutorial.setModulesSeen(true)
   if type(after) == "function" then state.after[#state.after + 1] = after end
   return true
 end
 
 function Tutorial.slash()
   return Tutorial.open(1)
+end
+
+-- the page "Module wählen" alone (settings: Options › Module)
+function Tutorial.openModules()
+  return Tutorial.open(1, "modules")
 end

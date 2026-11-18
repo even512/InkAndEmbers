@@ -14,6 +14,8 @@ local EditMode = {}
 Journal.EditMode = EditMode
 
 EditMode.IDS = { "toast", "slip", "card", "todo", "quick", "fire", "smoke" }
+-- every element in its fixed order (layout ids; EditMode.IDS = the registered ones of this session)
+EditMode.ORDER = { "toast", "slip", "card", "todo", "quick", "fire", "smoke", "quests", "questbar" }
 EditMode.SCALE = { min = 50, max = 150, step = 5, default = 100 }
 -- Toasts and cards start smaller (80 %) than the other HUD elements; saved sizes stay as they are. The welcome note keeps its
 -- real size by default (125 % x BASE_SCALE 0.8 = 1.0). The smoke signal starts at 100 % (80 % of its real size), as set by hand.
@@ -376,7 +378,7 @@ local function buildSlipPreview(h)
   p.paper = p:CreateTexture(nil, "ARTWORK")
   p.paper:SetAllPoints(p)
   if Theme.TEX.welcomeBack then p.paper:SetTexture(Theme.TEX.welcomeBack) end
-  local TT = Journal.TodoTracker
+  local TT = Journal.Widgets and Journal.Widgets.Slip
   local function text(size, r, g, b)
     local fs
     if TT and TT.fontString and TT.setFont then
@@ -594,16 +596,21 @@ EditMode.refreshDialog = refreshDialog
 
 local GEAR = { style = "setStyle", locked = "setLocked", combatHide = "setCombatHide", open = "setOpen", grow = "setGrow" }
 
+-- without the module Plans there is no to-do note: only the quick note style counts then
 local function gearNow()
   local Tr = TT()
-  if not (Tr and holder("todo") and Tr.settings) then return nil end
-  local s = Tr.settings()
   local out = {}
-  for key in pairs(GEAR) do out[key] = s[key] end
+  if Tr and holder("todo") and Tr.settings then
+    local s = Tr.settings()
+    for key in pairs(GEAR) do out[key] = s[key] end
+  end
   local Q = QN()
   if Q and Q.settings then out.quickStyle = Q.settings().style end
+  if next(out) == nil then return nil end
   return out
 end
+
+EditMode.gearNow = gearNow
 
 local function gearChanged()
   local g, now = st.gear, gearNow()
@@ -1077,14 +1084,26 @@ local function pctSetting(lib, id, key, R, name, desc)
   }
 end
 
+-- style names: those of the to-do note (module Plans), else the core fallback of the options (the quick note is core, 1.1.0)
+local function styleNames()
+  local Tr = TT()
+  if Tr and type(Tr.TEXT) == "table" and type(Tr.TEXT.style) == "table" then return Tr.TEXT.style end
+  local X = Journal.Options and Journal.Options.TEXT
+  return { pad = X and X.fbPad or "pad", plain = X and X.fbPlain or "plain" }
+end
+
 local function styleSetting(lib, desc, owner)
   local Tr = TT()
+  local own = owner or Tr
+  local Slip = Journal.Widgets and Journal.Widgets.Slip
+  local names = styleNames()
   return {
-    kind = lib.SettingType.Dropdown, name = T.style, desc = desc, default = Tr.DEFAULTS.style,
-    values = { { text = Tr.TEXT.style.pad, value = "pad" }, { text = Tr.TEXT.style.plain, value = "plain" } },
-    get = function() return (owner or Tr).settings().style end,
+    kind = lib.SettingType.Dropdown, name = T.style, desc = desc,
+    default = Tr and Tr.DEFAULTS.style or (Slip and Slip.DEFAULT_STYLE) or "pad",
+    values = { { text = names.pad, value = "pad" }, { text = names.plain, value = "plain" } },
+    get = function() return own.settings().style end,
     set = function(_, value)
-      safe((owner or Tr).setStyle, value)
+      safe(own.setStyle, value)
       updatePanel()
     end,
   }
@@ -1276,26 +1295,97 @@ function EditMode.snapRight(h, point, x, y)
   return "RIGHT", 0, floor((cy - sh / k / 2) * 10 + 0.5) / 10
 end
 
-function EditMode.init()
-  if EditMode.active then return true end
-  local lib = EditMode.findLib()
-  if not lib then return false end
-  local To, Tr, Q, F, S = Toast(), TT(), QN(), FN(), SM()
-  st.lib = lib
+-- Which HUD elements exist right now, in the fixed order (1.1.0: the modules Plans, Campfire and Quest tracker bring todo, fire,
+-- smoke, quests and questbar; a module add-on may load after the core, so EditMode.late registers what came later).
+function EditMode.wanted()
+  local To, Q = Toast(), QN()
   local ids = {}
   if To then ids[#ids + 1] = "toast" end
   if BG() then ids[#ids + 1] = "slip" end
   if To then ids[#ids + 1] = "card" end
-  if Tr then ids[#ids + 1] = "todo" end
+  if TT() then ids[#ids + 1] = "todo" end
   if Q then ids[#ids + 1] = "quick" end
-  if F then ids[#ids + 1] = "fire" end
+  if FN() then ids[#ids + 1] = "fire" end
   -- WoW Forever only; the Retail test preview (/chronik feuer rauch) falls back to the default position
+  local S = SM()
   if S and S.active() then ids[#ids + 1] = "smoke" end
   -- own quest tracker: WoW Forever only (QuestTrack.available); the entries show while it is switched on
   local Qk = QTk()
   local forever = Qk ~= nil and type(Qk.available) == "function" and Qk.available() == true
   if forever and QTR() then ids[#ids + 1] = "quests" end
   if forever and QIBar() then ids[#ids + 1] = "questbar" end
+  return ids
+end
+
+local function onHolder(id)
+  return function(f)
+    local h = holder(id)
+    if not h then return false end
+    if f:GetParent() ~= h then f:SetParent(h) end
+    f:SetFrameStrata("MEDIUM")
+    f:ClearAllPoints()
+    if id == "quests" then f:SetPoint("RIGHT", h, "RIGHT", 0, 0) else f:SetPoint("TOPLEFT", h, "TOPLEFT", 0, 0) end
+    return true
+  end
+end
+
+local function centred(id)
+  return function(f)
+    local h = holder(id)
+    if not h then return false end
+    if f:GetParent() ~= h then f:SetParent(h) end
+    f:SetFrameStrata("MEDIUM")
+    f:ClearAllPoints()
+    f:SetPoint("CENTER", h, "CENTER", 0, 0)
+    return true
+  end
+end
+
+-- the HUD hook of one registered element (the element asks it where to sit)
+local function wire(id)
+  if id == "toast" then
+    local To = Toast()
+    if To then To.hud = { place = hud.toastPlace, duration = hud.toastDuration } end
+  elseif id == "todo" then
+    local Tr = TT()
+    if Tr then
+      Tr.hud = {
+        place = function(f) return framePlace("todo", f) end,
+        moved = function(f) return frameMoved("todo", f) end,
+        reset = function() EditMode.set("todo", "pos", nil) EditMode.apply("todo") end,
+        sync = function() EditMode.syncPreview() refreshDialog("todo") refreshDialog("quick") end,
+      }
+    end
+  elseif id == "quick" then
+    local Q = QN()
+    if Q then
+      Q.hud = {
+        place = function(f) return framePlace("quick", f) end,
+        moved = function(f) return frameMoved("quick", f) end,
+        sync = function() EditMode.syncPreview() refreshDialog("quick") end,
+      }
+    end
+  elseif id == "fire" then
+    local F = FN()
+    if F then F.hud = { place = centred("fire") } end
+  elseif id == "smoke" then
+    local S = SM()
+    if S then S.hud = { place = centred("smoke") } end
+  elseif id == "quests" then
+    local Tr = QTR()
+    if Tr then Tr.hud = { place = onHolder("quests") } end
+  elseif id == "questbar" then
+    local B = QIBar()
+    if B then B.hud = { place = onHolder("questbar") } end
+  end
+end
+
+function EditMode.init()
+  if EditMode.active then return EditMode.late() end
+  local lib = EditMode.findLib()
+  if not lib then return false end
+  st.lib = lib
+  local ids = EditMode.wanted()
   local ok, err = pcall(function()
     for _, id in ipairs(ids) do register(lib, id) end
   end)
@@ -1309,61 +1399,7 @@ function EditMode.init()
     local okName, name = pcall(lib.GetActiveLayoutName, lib)
     st.layout = layoutKey(okName and name or nil)
   end
-  if To then To.hud = { place = hud.toastPlace, duration = hud.toastDuration } end
-  if Tr then
-    Tr.hud = {
-      place = function(f) return framePlace("todo", f) end,
-      moved = function(f) return frameMoved("todo", f) end,
-      reset = function() EditMode.set("todo", "pos", nil) EditMode.apply("todo") end,
-      sync = function() EditMode.syncPreview() refreshDialog("todo") refreshDialog("quick") end,
-    }
-  end
-  if Q then
-    Q.hud = {
-      place = function(f) return framePlace("quick", f) end,
-      moved = function(f) return frameMoved("quick", f) end,
-      sync = function() EditMode.syncPreview() refreshDialog("quick") end,
-    }
-  end
-  if F then
-    F.hud = {
-      place = function(f)
-        local h = holder("fire")
-        if not h then return false end
-        if f:GetParent() ~= h then f:SetParent(h) end
-        f:SetFrameStrata("MEDIUM")
-        f:ClearAllPoints()
-        f:SetPoint("CENTER", h, "CENTER", 0, 0)
-        return true
-      end,
-    }
-  end
-  if S and S.active() then
-    S.hud = {
-      place = function(f)
-        local h = holder("smoke")
-        if not h then return false end
-        if f:GetParent() ~= h then f:SetParent(h) end
-        f:SetFrameStrata("MEDIUM")
-        f:ClearAllPoints()
-        f:SetPoint("CENTER", h, "CENTER", 0, 0)
-        return true
-      end,
-    }
-  end
-  local function onHolder(id)
-    return function(f)
-      local h = holder(id)
-      if not h then return false end
-      if f:GetParent() ~= h then f:SetParent(h) end
-      f:SetFrameStrata("MEDIUM")
-      f:ClearAllPoints()
-      if id == "quests" then f:SetPoint("RIGHT", h, "RIGHT", 0, 0) else f:SetPoint("TOPLEFT", h, "TOPLEFT", 0, 0) end
-      return true
-    end
-  end
-  if holder("quests") then QTR().hud = { place = onHolder("quests") } end
-  if holder("questbar") then QIBar().hud = { place = onHolder("questbar") } end
+  for _, id in ipairs(ids) do wire(id) end
   hookBlizzard()
   lib:RegisterCallback("enter", function() safe(EditMode.enter) end)
   lib:RegisterCallback("exit", function() safe(EditMode.exit) end)
@@ -1373,6 +1409,48 @@ function EditMode.init()
   lib:RegisterCallback("delete", function(name) safe(EditMode.onDelete, name) end)
   EditMode.applyAll()
   if type(lib.IsInEditMode) == "function" and lib:IsInEditMode() then safe(EditMode.enter) end
+  return true
+end
+
+-- Late registration (1.1.0): elements whose module add-on loaded after the core's ADDON_LOADED (todo, fire, smoke, quests,
+-- questbar) join at PLAYER_LOGIN / PLAYER_ENTERING_WORLD. Layout ids stay the same; EditMode.IDS keeps the fixed order (an
+-- element registered once keeps its holder, nothing is unregistered); the panel is rebuilt with the next edit mode.
+-- Returns true when edit mode runs.
+function EditMode.late()
+  if not EditMode.active then return EditMode.init() end
+  local lib = st.lib
+  local known = {}
+  for _, id in ipairs(EditMode.IDS) do known[id] = true end
+  local wanted, added = EditMode.wanted(), {}
+  for _, id in ipairs(wanted) do
+    if not known[id] then added[#added + 1] = id end
+  end
+  if #added == 0 then return true end
+  local ok, err = pcall(function()
+    for _, id in ipairs(added) do
+      if not holder(id) then register(lib, id) end
+    end
+  end)
+  if not ok and ns.Core and ns.Core.coreError then ns.Core.coreError(err) end
+  for _, id in ipairs(added) do
+    if holder(id) then known[id] = true end
+  end
+  local ids, seen = {}, {}
+  for _, id in ipairs(EditMode.ORDER) do
+    if known[id] and holder(id) then
+      ids[#ids + 1] = id
+      seen[id] = true
+    end
+  end
+  EditMode.IDS = ids
+  for _, id in ipairs(added) do
+    if seen[id] then wire(id) end
+  end
+  if st.panel and not st.editing then
+    st.panel:Hide()
+    st.panel = nil
+  end
+  EditMode.applyAll()
   return true
 end
 
@@ -1393,7 +1471,13 @@ do
   if not hooked then safe(EditMode.init) end
 end
 if ns.Core and ns.Core.on then
+  -- 1.1.0: module add-ons load after the core's ADDON_LOADED; their HUD elements join here (EditMode.late, also a first init
+  -- if the library was not ready yet)
+  ns.Core.on("PLAYER_LOGIN", function() safe(EditMode.late) end)
   ns.Core.on("PLAYER_ENTERING_WORLD", function()
-    if EditMode.active then safe(EditMode.applyAll) end
+    if EditMode.active then
+      safe(EditMode.late)
+      safe(EditMode.applyAll)
+    end
   end)
 end

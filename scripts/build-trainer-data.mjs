@@ -30,8 +30,8 @@ import luaparse from "luaparse";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const DEFAULT_OUT = path.join(ROOT, "addon", "InkAndEmbers", "data");
-export const PINNED_COMMIT = "e402ec39d1e934e0b21271468a2b83dd9fb53dab";
-export const PINNED_DATE = "2026-11-13";
+export const PINNED_COMMIT = "6e289b0c2acd1c933f5a6317d960ff67a01da118";
+export const PINNED_DATE = "2026-11-14";
 export const SOURCE_URL = "https://github.com/fusionpit/WhatsTraining/tree/master/Classes/Camelot";
 export const CLASSES = ["DRUID", "HUNTER", "MAGE", "PALADIN", "PRIEST", "ROGUE", "SHAMAN", "WARLOCK", "WARRIOR"];
 const FILE_OF = { DRUID: "Druid", HUNTER: "Hunter", MAGE: "Mage", PALADIN: "Paladin", PRIEST: "Priest", ROGUE: "Rogue",
@@ -39,7 +39,7 @@ const FILE_OF = { DRUID: "Druid", HUNTER: "Hunter", MAGE: "Mage", PALADIN: "Pala
 // SHA-256 der Quelldateien im gepinnten Commit (Pruefung, dass genau dieser Stand eingelesen wird)
 export const SOURCE_SHA256 = {
   LICENSE: "64c4e54df59cc6516ddffd512abb053e7cee2e064d2af53ce5ada164be4a67fa",
-  "Classes/Camelot/Druid.lua": "f7c0d12506755c1d2f5ff49331521b2662f9feed7d5dfeddd5dbbbf98a12bc71",
+  "Classes/Camelot/Druid.lua": "46c283e26d17273569de90f1619d213382aa8681696895d7d48ccee8e76df728",
   "Classes/Camelot/Hunter.lua": "f59906a497e649012f3fc6ab4654d27ed91e0920cfbabc173e791f5014595734",
   "Classes/Camelot/HunterPets.lua": "94166ba1c57cbc008448c1b516233bcf9d3116db97a0d4b085b6a65c4fa9cf0f",
   "Classes/Camelot/Mage.lua": "1a36177de4ed5aafb96a862a284e804f1a3cac818ac2d79136fb64fb6859a794",

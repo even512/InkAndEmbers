@@ -117,6 +117,19 @@ L.add("esES", "Core", {
   rqError = "Interfaces de misiones: error al leer (%s).",
   rqDetails = "Detalles en EveNChronicleDB.diag.retailQuests[%d] (en el archivo tras /reload).",
   unknownCommand = "Comando desconocido \"%s\". /chronik help muestra todos los comandos.",
+  mod_quests = "Misiones",
+  mod_tracker = "Rastreador de misiones",
+  mod_crafting = "Oficios",
+  mod_plans = "Planes",
+  mod_campfire = "Hoguera",
+  moduleOff = "El módulo «%s» está desactivado (/chronik options › Módulos).",
+  moduleMissing = "El módulo «%s» no está instalado.",
+  modOn = "activado",
+  modOff = "desactivado",
+  modPending = "tras /reload",
+  modMissing = "no instalado",
+  diagModules = "Módulos: %s",
+  diagModuleVersion = "%s (versión %s en lugar de %s)",
   actionLine = "Acciones bloqueadas: %s (supervisión: %s)",
   actionNone = "ninguna",
   actionSome = "%d (última: %s, %s)",
@@ -468,4 +481,15 @@ L.add("esES", "col.Einkauf", {
   errFull = "La lista de tareas está llena.",
   moreLines = "… %s más",
   errNotReadyChar = "El personaje aún no está listo.",
+})
+
+-- collectors/Werkauftrag.lua (Werkauftrag, 1.1.0)
+L.add("esES", "col.Werkauftrag", {
+  titleOne = "Encargo: %s× %s",
+  titleRoute = "Encargo: %s hasta %s",
+  ready = "listo",
+  unknownMat = "El juego muestra los materiales después de aprenderla",
+  errSteps = "El encargo es demasiado largo (60 pasos como máximo).",
+  errEmpty = "El encargo no tiene ningún paso.",
+  errNoOrder = "Este encargo ya no existe.",
 })

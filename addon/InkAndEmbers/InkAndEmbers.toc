@@ -80,11 +80,14 @@ collectors\Plans.lua
 collectors\Trainer.lua
 collectors\CraftTodo.lua
 collectors\Einkaufszettel.lua
+collectors\Werkauftrag.lua
+collectors\LehrerBesuch.lua
 collectors\Pet.lua
 collectors\RecipeScan.lua
 journal\Fmt.lua
 journal\Geo.lua
 journal\MapSpace.lua
+journal\Waypoint.lua
 journal\Model.lua
 journal\model\Index.lua
 journal\model\Roster.lua
@@ -105,8 +108,6 @@ journal\model\Dungeons.lua
 journal\model\Rest.lua
 journal\model\Meilensteine.lua
 journal\model\Vermaechtnis.lua
-journal\model\CampfireTexts.lua
-journal\model\CampfireTalk.lua
 journal\model\Reunion.lua
 journal\model\Welcome.lua
 journal\model\Days.lua
@@ -120,14 +121,12 @@ journal\model\OpenQuestsRetail.lua
 journal\model\QuestTally.lua
 journal\model\DungeonQuests.lua
 journal\model\ZoneProgress.lua
-journal\model\Lehrplan.lua
-journal\model\Rezepte.lua
+journal\model\SpellBook.lua
+journal\model\TrainerData.lua
 journal\model\Heatmap.lua
 journal\model\Flugbuch.lua
-journal\model\Handwerk.lua
 journal\model\RecipeCache.lua
-journal\model\Rezeptbuch.lua
-journal\model\Skillpunkt.lua
+journal\model\LehrerOrte.lua
 journal\View.lua
 journal\Theme.lua
 journal\DecorKeepout.lua
@@ -140,6 +139,7 @@ journal\widgets\Chip.lua
 journal\widgets\Print.lua
 journal\widgets\Diary.lua
 journal\widgets\TextView.lua
+journal\widgets\Slip.lua
 journal\Spoken.lua
 journal\Pages.lua
 journal\pages\Chronik.lua
@@ -148,20 +148,11 @@ journal\pages\ChronikDungeons.lua
 journal\pages\ChronikMeilensteine.lua
 journal\pages\ChronikVermaechtnis.lua
 journal\pages\Quests.lua
-journal\pages\QuestsOffen.lua
-journal\pages\QuestsDungeons.lua
-journal\pages\QuestsLehrplan.lua
-journal\pages\PlaeneHandwerk.lua
-journal\pages\QuestsZonen.lua
 journal\pages\Dungeons.lua
-journal\pages\Plaene.lua
 journal\pages\Schaetze.lua
 journal\pages\SchaetzeFunde.lua
 journal\pages\SchaetzeAuktion.lua
 journal\pages\SchaetzeAnprobe.lua
-journal\pages\HandwerkSkillpunkt.lua
-journal\pages\HandwerkRezeptbuch.lua
-journal\pages\Handwerk.lua
 journal\pages\Momente.lua
 journal\pages\Kampf.lua
 journal\pages\Notizen.lua
@@ -173,7 +164,6 @@ journal\Contents.lua
 journal\HeatmapView.lua
 journal\SoundKits.lua
 journal\Sound.lua
-journal\Vorhaben.lua
 journal\Twinks.lua
 journal\Share.lua
 journal\Frame.lua
@@ -182,19 +172,8 @@ journal\Toast.lua
 journal\Begleiter.lua
 journal\Tutorial.lua
 journal\Meilenstein.lua
-journal\model\QuestTrack.lua
-journal\TodoTracker.lua
-journal\TodoDock.lua
-journal\Einkaufszettel.lua
-journal\ProfessionBar.lua
-journal\AuctionDock.lua
-journal\QuestTrackerHide.lua
-journal\TodoMarks.lua
 journal\Reunion.lua
 journal\QuickNote.lua
-journal\FireNoteAreas.lua
-journal\FireNotes.lua
-journal\Smoke.lua
 #@do-not-package@
 # Development only: the campfire simulation window. The packager removes this block (.pkgmeta ignores the file too);
 # the addon works without it (Core.lua: /chronik sim exists only if journal\SimPanel.lua was loaded).
@@ -203,8 +182,4 @@ journal\SimPanel.lua
 journal\EditMode.lua
 journal\WorldLayer.lua
 journal\WorldLayer.xml
-journal\QuestTrackActions.lua
-journal\QuestItemButtons.lua
-journal\QuestItemBar.lua
-journal\QuestTracker.lua
 journal\Options.lua

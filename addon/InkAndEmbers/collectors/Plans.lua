@@ -174,8 +174,13 @@ local function copy(p)
     if p.done then c.have = c.need end
     c.progress = string.format("%d/%d", c.have, c.need)
   end
-  -- shopping list (collectors/Einkaufszettel.lua): own text, progress "3/5" (material lines ticked) and p.shop flag, read live
-  if type(p.shop) == "table" and ns.Einkauf and type(ns.Einkauf.decorate) == "function" then pcall(ns.Einkauf.decorate, p, c) end
+  -- work order (collectors/Werkauftrag.lua, p.werk) before the old shopping list (collectors/Einkaufszettel.lua, p.shop): own text,
+  -- progress "3/5" (material lines ticked) and the flags c.werk / c.shop, read live; a migrated order is never decorated twice
+  if type(p.werk) == "table" and ns.Werk and type(ns.Werk.decorate) == "function" then
+    pcall(ns.Werk.decorate, p, c)
+  elseif type(p.shop) == "table" and ns.Einkauf and type(ns.Einkauf.decorate) == "function" then
+    pcall(ns.Einkauf.decorate, p, c)
+  end
   return c
 end
 
@@ -357,6 +362,13 @@ function Plans.add(a, b)
     if not e.text then return nil, "leer" end
     e.mapID = validMap(spec.mapID)
     if type(spec.shop) == "table" and not isSecret(spec.shop) then e.shop = spec.shop end -- shopping list data (Einkaufszettel)
+    -- work order data (Werkauftrag): only a validated order (collectors/Werkauftrag.lua, Werk.normalize), never the table as given
+    if spec.werk ~= nil then
+      local W_ = ns.Werk
+      local w = type(spec.werk) == "table" and not isSecret(spec.werk) and W_ and type(W_.normalize) == "function" and W_.normalize(spec.werk) or nil
+      if not w then return nil, "art" end
+      e.werk = w
+    end
   elseif kind == "place" then
     e.mapID, e.x, e.y = validMap(spec.mapID), coord01(spec.x), coord01(spec.y)
     if not (e.mapID and e.x and e.y) then return nil, "ort" end

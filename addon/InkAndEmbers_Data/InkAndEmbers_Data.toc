@@ -7,12 +7,12 @@
 ## Version: @project-version@
 ## LoadOnDemand: 1
 ## Dependencies: InkAndEmbers
-## X-QuestieDB-Version: 1.1.0
-## X-Attribution: Data: QuestieDB (Questie team and contributors), version 1.1.0. License: GPL-3.0 (see LICENSE and LICENSE-NOTE.md). Recipes.lua: What's Training? (Sveng/fusionpit), MIT License, see LICENSE-WhatsTraining.txt. Game world content (c) Blizzard Entertainment.
+## X-QuestieDB-Version: 1.1.3
+## X-Attribution: Data: QuestieDB (Questie team and contributors), version 1.1.3. License: GPL-3.0 (see LICENSE and LICENSE-NOTE.md). Recipes.lua: What's Training? (Sveng/fusionpit), MIT License, see LICENSE-WhatsTraining.txt. Game world content (c) Blizzard Entertainment.
 ## X-License: GPL-3.0
 ## X-Source-License: https://github.com/Questie/QuestieDB/blob/master/LICENSE.md
 
-# Loaded on demand. Recipes.lua comes in the same load as the to-do lists; the login check of the to-do "Zum Berufslehrer" (CraftTodo)
+# Loaded on demand. ProfTrainers.lua (profession trainers with map points, QuestieDB, scripts/build-prof-trainers.mjs) and Recipes.lua come in the same load as the to-do lists; the login check of the to-do "Zum Berufslehrer" (CraftTodo)
 # loads this add-on only when the character has a profession with recipes (no profession, or only herbalism/skinning/fishing: no load).
 Zones.lua
 Npcs.lua
@@ -21,3 +21,4 @@ ZonesEn.lua
 NpcsEn.lua
 ItemsEn.lua
 Recipes.lua
+ProfTrainers.lua

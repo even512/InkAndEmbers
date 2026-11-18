@@ -118,7 +118,175 @@ local T = ns.Locale.ns("Core", {
   actionSome = "%d (letzte: %s, %s)",
   actionWatchOn = "aktiv",
   actionWatchOff = "nicht registriert",
+  mod_quests = "Quests",
+  mod_tracker = "Quest-Tracker",
+  mod_crafting = "Handwerk",
+  mod_plans = "Pläne",
+  mod_campfire = "Lagerfeuer",
+  moduleOff = "Das Modul „%s“ ist ausgeschaltet (/chronik optionen › Module).",
+  moduleMissing = "Das Modul „%s“ ist nicht installiert.",
+  modOn = "an",
+  modOff = "aus",
+  modPending = "nach /reload",
+  modMissing = "nicht installiert",
+  diagModules = "Module: %s",
+  diagModuleVersion = "%s (Version %s statt %s)",
 })
+
+-- WoW Forever parts of the core (milestones, their notes and help lines): off in Retail. The client check is
+-- Journal.MapSpace.retailClient (project id AND interface version); the developer switch ns.devForceTrainer (/chronik sim lehrplan)
+-- shows them in Retail too. Independent of the module Plans (before 1.1.0 this was Lehrplan.active).
+function Core.foreverParts()
+  if ns.devForceTrainer == true then return true end
+  local ms = ns.Journal and ns.Journal.MapSpace
+  if not (ms and type(ms.retailClient) == "function") then return true end
+  local ok, retail = pcall(ms.retailClient)
+  return not (ok and retail == true)
+end
+
+-- Module API (1.1.0): the core shares its namespace with its own sub add-ons (Quests, Quest tracker, Crafting, Plans, Campfire)
+-- through the global InkAndEmbers. A module's first file hangs its own `...` table onto API.ns (metatable) and calls
+-- API.registerModule. Only the add-on names of API.MODULES are ever switched (allowlist, never a name from text). Switching acts
+-- after /reload and for all characters (EnableAddOn/DisableAddOn without a character). Every client call runs in pcall.
+--   API.registerModule(id, info) -> ok        info = { addon, apiVersion }; the version comes from the module's TOC
+--   API.moduleLoaded(id) -> bool              loaded in this session (registered, or its code is there: one add-on folder)
+--   API.moduleState(id) -> "on" | "off" | "missing" | "pending"   pending = differs after /reload
+--   API.setModuleEnabled(id, on) -> ok, reason   reason "unknown" | "combat" | "noapi" | "missing" | "failed"
+--   API.moduleLabel(id) -> text               module name in the active language
+--   API.moduleVersion(id) -> version | nil, mismatch (bool: differs from the core version)
+local API = { API_VERSION = 1, version = ns.version, ns = ns }
+Core.API = API
+-- probe = the module's Journal object: present when its code was loaded (also before the split into own add-on folders)
+API.MODULES = {
+  { id = "quests", addon = "InkAndEmbers_Quests", probe = "OpenQuestsView" },
+  { id = "tracker", addon = "InkAndEmbers_QuestTracker", probe = "QuestTracker" },
+  { id = "crafting", addon = "InkAndEmbers_Crafting", probe = "Handwerk" },
+  { id = "plans", addon = "InkAndEmbers_Plans", probe = "Lehrplan" },
+  { id = "campfire", addon = "InkAndEmbers_Campfire", probe = "FireNotes" },
+}
+local MODULE_BY_ID = {}
+for _, m in ipairs(API.MODULES) do MODULE_BY_ID[m.id] = m end
+local moduleReg = {}  -- id -> { addon, apiVersion, version }
+local moduleWant = {} -- id -> true/false: switched in this session (state "pending" until /reload)
+
+local function addOnsApi(name)
+  local A = rawget(_G, "C_AddOns")
+  local fn = type(A) == "table" and A[name] or nil
+  if type(fn) == "function" then return fn end
+  return nil
+end
+
+local function plainVersion(v)
+  if type(v) ~= "string" or (type(issecretvalue) == "function" and issecretvalue(v)) then return nil end
+  v = string.match(v, "^%s*(.-)%s*$")
+  if v == "" or #v > 40 or string.find(v, "@", 1, true) or not string.match(v, "^[%w%._%+%-]+$") then return nil end
+  return v
+end
+
+function API.registerModule(id, info)
+  local m = type(id) == "string" and MODULE_BY_ID[id]
+  if not m then return false end
+  info = type(info) == "table" and info or {}
+  local apiVersion = tonumber(info.apiVersion) or API.API_VERSION
+  if apiVersion > API.API_VERSION then return false end
+  local version
+  local meta = addOnsApi("GetAddOnMetadata") or rawget(_G, "GetAddOnMetadata")
+  if type(meta) == "function" then
+    local ok, v = pcall(meta, m.addon, "Version")
+    version = ok and plainVersion(v) or nil
+  end
+  moduleReg[id] = { addon = m.addon, apiVersion = apiVersion, version = version or "dev" }
+  return true
+end
+
+function API.moduleLoaded(id)
+  local m = type(id) == "string" and MODULE_BY_ID[id]
+  if not m then return false end
+  if moduleReg[id] then return true end
+  local J = ns.Journal
+  return J ~= nil and J[m.probe] ~= nil
+end
+
+-- true / false; nil when the client cannot tell (no API)
+local function addonExists(addon)
+  local fn = addOnsApi("DoesAddOnExist")
+  if fn then
+    local ok, v = pcall(fn, addon)
+    if ok and type(v) == "boolean" then return v end
+  end
+  fn = addOnsApi("GetAddOnInfo")
+  if fn then
+    local ok, name, _, _, _, reason = pcall(fn, addon)
+    if ok then
+      if reason == "MISSING" then return false end
+      if type(name) == "string" then return true end
+    end
+  end
+  return nil
+end
+
+-- enabled for the logged-in character (true/false); nil when the client cannot tell
+local function addonEnabled(addon)
+  local fn = addOnsApi("GetAddOnEnableState")
+  if not fn then return nil end
+  local who = nil
+  if type(UnitName) == "function" then
+    local ok, n = pcall(UnitName, "player")
+    if ok and type(n) == "string" and not (type(issecretvalue) == "function" and issecretvalue(n)) then who = n end
+  end
+  local ok, v = pcall(fn, addon, who)
+  if not (ok and type(v) == "number") then ok, v = pcall(fn, addon) end
+  if not (ok and type(v) == "number") or (type(issecretvalue) == "function" and issecretvalue(v)) then return nil end
+  return v > 0
+end
+
+function API.moduleState(id)
+  local m = type(id) == "string" and MODULE_BY_ID[id]
+  if not m then return "missing" end
+  local loaded = API.moduleLoaded(id)
+  local exists = addonExists(m.addon)
+  -- still one add-on folder (or a client without the add-on list): the code that is there counts
+  if exists ~= true then
+    if loaded then return moduleWant[id] == false and "pending" or "on" end
+    return "missing"
+  end
+  local enabled = addonEnabled(m.addon)
+  if moduleWant[id] ~= nil then enabled = moduleWant[id] end
+  if enabled == nil then enabled = loaded end
+  if loaded == enabled then return loaded and "on" or "off" end
+  return "pending"
+end
+
+function API.setModuleEnabled(id, on)
+  local m = type(id) == "string" and MODULE_BY_ID[id]
+  if not m then return false, "unknown" end
+  if type(InCombatLockdown) == "function" then
+    local ok, fight = pcall(InCombatLockdown)
+    if ok and fight == true then return false, "combat" end
+  end
+  local fn = addOnsApi(on and "EnableAddOn" or "DisableAddOn")
+  if not fn then return false, "noapi" end
+  if addonExists(m.addon) == false then return false, "missing" end
+  local ok = pcall(fn, m.addon) -- without a character: all characters (decision of 15.11.2026)
+  if not ok then return false, "failed" end
+  local save = addOnsApi("SaveAddOns")
+  if save then pcall(save) end
+  moduleWant[id] = on and true or false
+  return true
+end
+
+function API.moduleLabel(id)
+  local m = type(id) == "string" and MODULE_BY_ID[id]
+  return m and T["mod_" .. id] or nil
+end
+
+function API.moduleVersion(id)
+  local r = type(id) == "string" and moduleReg[id]
+  if not r then return nil, false end
+  return r.version, r.version ~= ns.version
+end
+
+_G.InkAndEmbers = API
 
 -- English command names -> the German ones the modules know (the German ones stay valid)
 local COMMAND_ALIASES = {
@@ -187,6 +355,8 @@ Core.BASE_APIS = {
   "GetInventoryItemDurability", "C_QuestLog.IsEliteQuest", "C_QuestLog.GetQuestTagInfo", "C_QuestLog.GetSuggestedGroupSize",
   "C_Container.GetContainerNumFreeSlots", "UnitUsesAmmo", "GetInventoryItemCount", "UnitDefenseSkill",
   "C_DateAndTime.IsDayTime", "UnitIsPVP", "JumpOrAscendStart",
+  -- optional, diagnostics only: module switches (1.1.0, Core.API.setModuleEnabled / moduleState)
+  "C_AddOns.EnableAddOn", "C_AddOns.DisableAddOn", "C_AddOns.GetAddOnEnableState",
 }
 
 -- APIs whose absence is normal on some clients: reported as expected in /chronik diag, not as an error.
@@ -944,11 +1114,35 @@ local function helpHiddenInRetail(key)
   elseif key == "helpQuests" then
     local q = J and J.QuestTrackerHide
     return not (q and type(q.available) == "function" and q.available() == true)
-  elseif key == "helpTrain" or key == "helpLevelSlip" or key == "helpMilestone" then
+  elseif key == "helpTrain" or key == "helpLevelSlip" then
+    -- module Plans: without it the lines go too
     local lp = J and J.Lehrplan
-    return lp ~= nil and type(lp.active) == "function" and lp.active() == false
+    return lp == nil or (type(lp.active) == "function" and lp.active() == false)
+  elseif key == "helpMilestone" then
+    return not Core.foreverParts()
+  elseif key == "helpTodo" then
+    return not API.moduleLoaded("plans")
+  elseif key == "helpNote" then
+    -- the quick note belongs to the journal (core, 1.1.0): its line only goes when the note itself could not be set up
+    return not (J and J.QuickNote)
+  elseif key == "helpOpen" or key == "helpOpenTest" then
+    return not API.moduleLoaded("quests")
   end
   return false
+end
+
+-- Slash words of a module (1.1.0): without the module a hint instead of "unknown command" (Core.slash)
+local function slashModule(cmd, typed, rest)
+  -- (the quick note "notiz" is core: its note pad is journal/widgets/Slip.lua since 1.1.0)
+  if cmd == "todo" or cmd == "lehrplan" or cmd == "stufe" then return "plans" end
+  if typed == "quests" and (Core.onOff(rest) ~= nil or rest == "hinweis" or rest == "hint") then return "tracker" end
+  if cmd == "offene" or cmd == "offen" then return "quests" end
+  return nil
+end
+
+local function moduleHint(id)
+  local key = API.moduleState(id) == "missing" and "moduleMissing" or "moduleOff"
+  Core.print(T(key, API.moduleLabel(id) or id))
 end
 
 function Core.printHelp()
@@ -967,6 +1161,19 @@ local function probeRestrictions()
     if ok and not (issecretvalue and issecretvalue(state)) and type(state) == "number" then out[kind + 1] = state end
   end
   return out
+end
+
+-- /chronik diag: one line with the state of every module, a module of another version marked (mixed installations)
+local MOD_STATE_TEXT = { on = "modOn", off = "modOff", pending = "modPending", missing = "modMissing" }
+function Core.modulesLine()
+  local parts = {}
+  for _, m in ipairs(API.MODULES) do
+    local part = (API.moduleLabel(m.id) or m.id) .. " " .. T[MOD_STATE_TEXT[API.moduleState(m.id)] or "modMissing"]
+    local v, mismatch = API.moduleVersion(m.id)
+    if mismatch then part = T("diagModuleVersion", part, v, ns.version) end
+    parts[#parts + 1] = part
+  end
+  return T("diagModules", concat(parts, " · "))
 end
 
 function Core.runDiag()
@@ -1117,6 +1324,7 @@ function Core.runDiag()
     local ok, line = pcall(editMode.diagLine)
     Core.print(ok and tostring(line) or T("checkFailed", T.labEditMode, tostring(line)))
   end
+  Core.print(Core.modulesLine())
   local gsMissing = {}
   for name in pairs(ns.Patterns and ns.Patterns.missing or {}) do gsMissing[#gsMissing + 1] = name end
   if #gsMissing > 0 then
@@ -1392,7 +1600,10 @@ function Core.slash(msg)
   local rest = string.match(type(msg) == "string" and msg or "", "^%s*%S*%s+(%S*)") or ""
   local access = ns.Journal and ns.Journal.Access
   local toast = ns.Journal and ns.Journal.Toast
-  if cmd == "" and access then
+  local needs = slashModule(cmd, typed, string.lower(rest))
+  if needs and not API.moduleLoaded(needs) then
+    moduleHint(needs) -- a command of a module that is switched off or not installed
+  elseif cmd == "" and access then
     access.toggle()
   elseif cmd == "" or cmd == "status" then
     Core.print(Core.statusLine())
@@ -1452,16 +1663,23 @@ function Core.slash(msg)
     -- development probe for the equipment journey (journal/WardrobeProbe.lua, not in the release package: there this word is unknown)
     ns.WardrobeProbe.slash(string.match(type(msg) == "string" and msg or "", "^%s*%S+%s+(.-)%s*$") or "")
   elseif cmd == "probe" and ((ns.LegacyProbe and type(ns.LegacyProbe.slash) == "function")
-      or (ns.ProfessionProbe and type(ns.ProfessionProbe.slash) == "function")) then
+      or (ns.ProfessionProbe and type(ns.ProfessionProbe.slash) == "function")
+      or (ns.WerkProbe and type(ns.WerkProbe.slash) == "function")) then
     -- development probes (journal/LegacyProbe.lua "probe legacy", journal/ProfessionProbe.lua "probe beruf"; not in the release package:
     -- there this word is unknown). "probe beruf ..." goes to the profession probe, everything else to the Legacy probe.
     local probeArg = string.match(type(msg) == "string" and msg or "", "^%s*%S+%s+(.-)%s*$") or ""
     local probeTopic = string.lower(string.match(probeArg, "^(%S*)") or "")
     local professionProbe = ns.ProfessionProbe and type(ns.ProfessionProbe.slash) == "function" and ns.ProfessionProbe or nil
-    if professionProbe and (probeTopic == "beruf" or probeTopic == "berufe" or probeTopic == "ah" or probeTopic == "auktionshaus" or not ns.LegacyProbe) then
+    local werkProbe = ns.WerkProbe and type(ns.WerkProbe.slash) == "function" and ns.WerkProbe or nil
+    if werkProbe and probeTopic == "werk" then
+      -- journal/WerkProbe.lua "probe werk ...": auction house and profession window test for the Werkauftrag redesign (not in the release package)
+      werkProbe.slash(string.match(probeArg, "^%S+%s*(.-)%s*$") or "")
+    elseif professionProbe and (probeTopic == "beruf" or probeTopic == "berufe" or probeTopic == "ah" or probeTopic == "auktionshaus" or not ns.LegacyProbe) then
       professionProbe.slash(probeArg)
-    else
+    elseif ns.LegacyProbe and type(ns.LegacyProbe.slash) == "function" then
       ns.LegacyProbe.slash(probeArg)
+    else
+      Core.print("/chronik probe werk [ah-auto|ah-buy|beruf|craft|leeren|stop|fenster]")
     end
   elseif cmd == "sim" and Core.hasDevTools() then
     -- whole rest of the line (name and class of the dummy guest need several words)

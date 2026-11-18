@@ -1,5 +1,6 @@
-// Installiert das Addon InkAndEmbers und seine Datenaddons InkAndEmbers_Data (LoadOnDemand, To-Do-Listen) und
-// InkAndEmbers_QuestData (LoadOnDemand, offene Quests) in den WoW-Ordner (alle bei jedem Lauf, je in ihren eigenen Addon-Ordner).
+// Installiert das Addon InkAndEmbers, seine fuenf Module (1.1.0: InkAndEmbers_Quests, _QuestTracker, _Crafting, _Plans, _Campfire)
+// und seine Datenaddons InkAndEmbers_Data (LoadOnDemand, To-Do-Listen) und InkAndEmbers_QuestData (LoadOnDemand, offene Quests) in
+// den WoW-Ordner (alle acht bei jedem Lauf, je in ihren eigenen Addon-Ordner).
 //
 // Aufruf:  node scripts/install-addon.mjs [--retail] [--dry-run] [--help]
 //   (ohne Flag)  Ziel: <WOW_DIR>\_forever_\Interface\AddOns\<addon>, Interface-Zeile der kopierten TOCs wird auf 16001 gesetzt
@@ -17,7 +18,7 @@
 // - Installiert wird inkrementell: unveraenderte Dateien (byte-gleich, echte Datei) werden nicht angefasst, geaenderte/neue geschrieben,
 //   nur Eintraege entfernt, die es in der Quelle nicht (mehr) gibt. So bleibt z. B. eine vom laufenden Client geoeffnete Schrift unberuehrt.
 // - Geschrieben und entfernt wird ausschliesslich in <WOW_DIR>\<_forever_|_retail_>\Interface\AddOns\InkAndEmbers und
-//   ...\Interface\AddOns\InkAndEmbers_Data bzw. _QuestData (Allowlist ADDONS; Pfad wird normalisiert, muss innerhalb von WOW_DIR liegen
+//   ...\Interface\AddOns\InkAndEmbers_<Modul> bzw. _Data/_QuestData (Allowlist ADDONS, feste Namen; Pfad wird normalisiert, muss innerhalb von WOW_DIR liegen
 //   und auf \Interface\AddOns\<addon> enden).
 // - Symlinks/Junctions werden nirgends gefolgt: weder im Zielpfad noch in der Quelle (Symlink im Ziel = Abbruch).
 // - Kopiert werden nur Dateien mit Endung .toc/.lua/.xml/.tga/.ttf/.txt/.ogg/.md (.ttf = Handschrift Caveat, .txt = deren OFL-Lizenz bzw. Klang-Lizenzen, .ogg = CC0-Buchklaenge bis MAX_OGG_BYTES, .md = Lizenz-Notizen) sowie die Datei LICENSE (ohne Endung), jeweils mit harmlosem Namen (Allowlist), Unterordner nur mit harmlosem Namen.
@@ -36,8 +37,11 @@ export const DATA_ADDON_NAME = "InkAndEmbers_Data";
 export const QUEST_DATA_ADDON_NAME = "InkAndEmbers_QuestData";
 /** alte Ordnernamen (vor der Umbenennung); werden im Ziel entfernt, sonst liefen zwei Kopien (nur diese drei Namen, exakt) */
 export const LEGACY_ADDONS = Object.freeze(["EveN_ForeverChronicle", "EveN_ForeverChronicle_Data", "EveN_ForeverChronicle_QuestData"]);
+/** Module (1.1.0): eigene Addon-Ordner, haengen am Hauptaddon (TOC ## Dependencies: InkAndEmbers) */
+export const MODULE_ADDONS = Object.freeze(["InkAndEmbers_Quests", "InkAndEmbers_QuestTracker", "InkAndEmbers_Crafting",
+  "InkAndEmbers_Plans", "InkAndEmbers_Campfire"]);
 /** einzige Addon-Ordner, in die geschrieben werden darf (Hauptaddon zuerst) */
-export const ADDONS = Object.freeze([ADDON_NAME, DATA_ADDON_NAME, QUEST_DATA_ADDON_NAME]);
+export const ADDONS = Object.freeze([ADDON_NAME, ...MODULE_ADDONS, DATA_ADDON_NAME, QUEST_DATA_ADDON_NAME]);
 const SOURCE_DIR = path.join(ROOT, "addon", ADDON_NAME);
 const TOC_NAME = `${ADDON_NAME}.toc`;
 export const RETAIL_INTERFACE = "120105";
@@ -52,7 +56,7 @@ const MAX_TGA_BYTES = 1024 * 1024 * 4 + 1024; // 1024 x 1024 x 32 bit + Kopf
 const MAX_DEPTH = 3;
 const KNOWN_FLAGS = new Set(["--retail", "--dry-run", "--help", "-h"]);
 
-const HELP = `InkAndEmbers: Addon und Datenaddon in den WoW-Ordner installieren
+const HELP = `InkAndEmbers: Addon, Module und Datenaddons in den WoW-Ordner installieren
 
 Aufruf:
   npm run install-addon [-- --retail] [-- --dry-run]
@@ -68,7 +72,8 @@ Ohne --retail wird nach <WOW_DIR>\\_forever_ installiert (Interface ${FOREVER_IN
 In beiden Faellen wird @project-version@ in den TOCs durch <CHANGELOG-Version>-dev+<Git-Commit> ersetzt
 (z. B. 1.0.5-dev+c3b29d6; bei uncommitteten Addon-Aenderungen mit Zusatz -dirty; ohne git: 1.0.5-dev).
 Zielordner: <WOW_DIR>\\<_forever_|_retail_>\\Interface\\AddOns\\${ADDON_NAME}
-       und  <WOW_DIR>\\<_forever_|_retail_>\\Interface\\AddOns\\${DATA_ADDON_NAME} (Datenaddon, LoadOnDemand)
+            <WOW_DIR>\\<_forever_|_retail_>\\Interface\\AddOns\\<Modul> (Module: ${MODULE_ADDONS.join(", ")})
+       und  <WOW_DIR>\\<_forever_|_retail_>\\Interface\\AddOns\\${DATA_ADDON_NAME} bzw. ${QUEST_DATA_ADDON_NAME} (Datenaddons, LoadOnDemand)
 
 Konfiguration: WOW_DIR steht in der Datei .env im Projektordner (Vorlage: .env.example),
 z. B.  WOW_DIR=D:\\World of Warcraft
@@ -457,7 +462,7 @@ export async function main(argv) {
   }
   const legacy = await removeLegacy(t.addons, { dry, log: (line) => console.log(line) });
   if (legacy) console.log(`Alte Ordner ${dry ? "gefunden" : "entfernt"}: ${legacy}.`);
-  if (!dry) console.log("Hinweis: Bei NEUEN Dateien oder einem neuen Addon-Ordner das Spiel komplett neu starten, sonst reicht /reload. Neu: Texturen WelcomeBack.tga (Willkommen-zurück-Zettel) und HeatBlob.tga (Glut der Heatmap): neue Texturdateien werden erst nach einem Spielneustart geladen, /reload reicht dafür nicht.");
+  if (!dry) console.log("Hinweis: Bei NEUEN Dateien oder einem neuen Addon-Ordner das Spiel komplett neu starten, sonst reicht /reload. Neu: Textur QuestTracker/GripPin.tga (Quest-Tracker-Griff und angepinnte Quest): neue Texturdateien werden erst nach einem Spielneustart geladen, /reload reicht dafür nicht.");
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -126,6 +126,7 @@ end
 
 -- Retail: the dungeon quests exist only in WoW Forever (no bookmark, nothing is loaded); the test mode keeps them like the model
 Pages.hideSub("dungeons", "quests", function()
+  if Journal.DungeonQuestsView == nil then return true end -- module Quests not loaded (1.1.0)
   local OQ = Journal.OpenQuests
   if not (OQ and OQ.retailClient()) then return false end
   return not (OQ.test() ~= nil or OQ.ALLOW_RETAIL)

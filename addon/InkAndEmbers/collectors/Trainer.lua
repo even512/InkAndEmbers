@@ -26,6 +26,8 @@
 --    (in combat: chat hint, note stays); the small x only closes. In combat it waits for PLAYER_REGEN_ENABLED, an open
 --    welcome note first. Setting levelSlip (default on); /chronik stufe shows it as a preview.
 -- Only reading APIs, each in pcall with secret-value guards; nothing is bought or clicked.
+-- Module Plans (1.1.0): part 1/1b (recording) runs with the core alone (data and recognition: Journal.TrainerData); parts 2-4
+-- (to-dos, talent toast, level-up note) need the Lehrplan of the module Plans and rest without it.
 local _, ns = ...
 local Core, Store = ns.Core, ns.Store
 
@@ -197,6 +199,8 @@ local function callAll(fn, ...)
 end
 
 local function L() return ns.Journal and ns.Journal.Lehrplan end
+-- core: trainer data and recognition (journal/model/TrainerData.lua)
+local function D() return ns.Journal and ns.Journal.TrainerData end
 
 local function setting(key)
   local P = ns.Journal and ns.Journal.Pages
@@ -204,9 +208,16 @@ local function setting(key)
   return P.setting(key) ~= false
 end
 
+-- recording (visits, pet training): WoW Forever, core only
 function Trainer.active()
+  local TD = D()
+  return TD ~= nil and TD.active() == true
+end
+
+-- to-dos, talent toast and level-up note: additionally the Lehrplan (module Plans)
+function Trainer.planned()
   local LP = L()
-  return LP ~= nil and LP.active()
+  return Trainer.active() and LP ~= nil and LP.active() == true
 end
 
 local function moneyText(copper)
@@ -277,7 +288,7 @@ end
 -- class trainer? at least one service (no profession) whose name is a spell of the own class plan
 -- Pet trainer (hunter Beast Training): its window never counts as class trainer (no trainerVisit, no trainer place)
 local function petNames()
-  local LP = L()
+  local LP = D() -- core: recording works without the module Plans
   local p = LP and LP.player()
   if not (p and type(LP.petIds) == "function") then return nil end
   local set, n = {}, 0
@@ -292,7 +303,7 @@ local function petNames()
 end
 
 local function classNames()
-  local LP = L()
+  local LP = D() -- core: recording works without the module Plans
   local p = LP and LP.player()
   local plan = p and LP.parse(p.class)
   if not plan then return nil end
@@ -403,7 +414,7 @@ function Trainer.readVisit(self)
     return false -- a pet trainer is never a class trainer: no trainerVisit, no trainer place
   end
   if not Trainer.isClassTrainer(services) then return false end
-  local LP = L()
+  local LP = D() -- core: recording works without the module Plans
   local p = LP.player()
   local level = playerLevel()
   self.visits = (self.visits or 0) + 1
@@ -479,7 +490,7 @@ end
 -- Reads the rows of an open pet trainer window (hunter only) and merges them into snapshots.state.petTraining.
 -- Returns true if something was stored.
 function Trainer.readPetVisit(services)
-  local LP = L()
+  local LP = D() -- core: recording works without the module Plans
   local p = LP and LP.player()
   if not (p and p.class == LP.PET_CLASS) then return false end
   local plan = LP.parse(p.class)
@@ -515,7 +526,7 @@ local scheduleCheck -- defined with the to-do code below
 function Trainer.noteLearned(spellID)
   local id = num(spellID)
   if not (id and Trainer.active() and Store.ready()) then return false end
-  local LP = L()
+  local LP = D() -- core: recording works without the module Plans
   local p = LP and LP.player()
   if not (p and p.class == LP.PET_CLASS) then return false end
   local plan = LP.parse(p.class)
@@ -621,7 +632,7 @@ end
 
 -- level-up: create/update the to-do if something is learnable now; returns the to-do id or nil
 local function classLevelUp(level)
-  if not (Trainer.active() and setting("trainerTodo") and ns.Plans) then return nil end
+  if not (Trainer.planned() and setting("trainerTodo") and ns.Plans) then return nil end
   local LP = L()
   local view = LP.evaluate({ level = level, names = true })
   if not view.available or view.todo.n < 1 then return nil end
@@ -632,7 +643,7 @@ local function classLevelUp(level)
 end
 
 local function petLevelUp(level)
-  if not (Trainer.active() and setting("trainerTodo") and ns.Plans) then return nil end
+  if not (Trainer.planned() and setting("trainerTodo") and ns.Plans) then return nil end
   local todo = petTodoState(level)
   if not todo or todo.n < 1 then return nil end
   local id, how = ns.Plans.upsertAuto(Trainer.PET_TAG, Trainer.petTodoText(todo.n, todo.cost))
@@ -653,7 +664,7 @@ end
 -- Returns "new" | "open" | nil (nothing done)
 local function classLoginTodo()
   local P = ns.Plans
-  if not (Trainer.active() and setting("trainerTodo") and P and Store.ready()) then return nil end
+  if not (Trainer.planned() and setting("trainerTodo") and P and Store.ready()) then return nil end
   local level = playerLevel()
   if not level then return nil end
   local view = L().evaluate({ names = true })
@@ -676,7 +687,7 @@ end
 -- login, hunter: the same once-per-level rule for the pet trainer to-do
 local function petLoginTodo()
   local P = ns.Plans
-  if not (Trainer.active() and setting("trainerTodo") and P and Store.ready()) then return nil end
+  if not (Trainer.planned() and setting("trainerTodo") and P and Store.ready()) then return nil end
   local level = playerLevel()
   if not level then return nil end
   local todo = petTodoState(nil)
@@ -706,7 +717,7 @@ end
 -- open to-do: completed when nothing learnable is left, else the text follows the count. Returns "done" | "open" | nil
 local function classCheckTodo()
   local P = ns.Plans
-  if not (Trainer.active() and P and P.findAuto(Trainer.TAG)) then return nil end
+  if not (Trainer.planned() and P and P.findAuto(Trainer.TAG)) then return nil end
   local view = L().evaluate({ names = true })
   if not view.available then return nil end
   if view.todo.n < 1 then
@@ -720,7 +731,7 @@ end
 -- open pet trainer to-do: completed when no pet ability is learnable now, else the text follows the count
 local function petCheckTodo()
   local P = ns.Plans
-  if not (Trainer.active() and P and P.findAuto(Trainer.PET_TAG)) then return nil end
+  if not (Trainer.planned() and P and P.findAuto(Trainer.PET_TAG)) then return nil end
   local todo = petTodoState(nil)
   if not todo then
     P.finishAuto(Trainer.PET_TAG, "trainer") -- no longer a hunter (data): nothing left to show
@@ -821,7 +832,7 @@ end
 -- why: "login" (once per session) | "level" (once per level). Returns true if a toast was queued.
 function Trainer.talentNotice(self, level, why)
   self = self or Collector
-  if not (Trainer.active() and setting("talentHint")) then return false end
+  if not (Trainer.planned() and setting("talentHint")) then return false end
   local LP = L()
   local n = LP.unspentTalents()
   if not n or n < 1 then return false end
@@ -936,7 +947,7 @@ end
 -- greeting, cost and talent sentence stay. The wording is picked at random from 6 variants per case (see pick).
 -- Spell, zone, trainer and player names are foreign text: Sanitize.display; numbers go through format("%d").
 function Trainer.levelSlipContent(level)
-  if not Trainer.active() then return nil end
+  if not Trainer.planned() then return nil end
   local LP = L()
   local view = LP.evaluate({ level = num(level) and floor(level) or nil, names = true })
   if not view.available then return nil end
@@ -1066,7 +1077,7 @@ end
 -- PLAYER_LEVEL_UP: true if the note takes over (then no talent toast for this level)
 function Trainer.levelSlip(self, level)
   self = self or Collector
-  if not (Trainer.active() and setting("levelSlip")) then return false end
+  if not (Trainer.planned() and setting("levelSlip")) then return false end
   local B = ns.Journal and ns.Journal.Begleiter
   if not (B and type(B.showNote) == "function") then return false end
   level = level or playerLevel()
@@ -1078,7 +1089,7 @@ end
 -- /chronik stufe: preview for the current level (also when the option is off)
 function Trainer.slashLevel()
   local print_ = Core.print
-  if not Trainer.active() then
+  if not Trainer.planned() then
     print_(T.retailOnly)
     return false
   end
@@ -1146,7 +1157,17 @@ end
 -- Diagnostics (/chronik diag)
 function Trainer.diagLine()
   local LP = L()
-  if not LP then return T("diag", T.unknown) end
+  if not LP then
+    -- without the module Plans: what the core data knows (no evaluation, no talent points)
+    local TD = D()
+    if not TD then return T("diag", T.unknown) end
+    if not TD.active() then return T("diag", T.diagRetail) end
+    local p = TD.player()
+    local plan = TD.parse(p.class)
+    if not plan then return T("diag", T("diagNoData", p.class or T.unknown)) end
+    return T("diag", T("diagOn", p.class, #plan.list, T.unknown, T.unknown, Collector.visits or 0, T.unknown,
+      Collector.shape and T("diagShape", Collector.shape) or ""))
+  end
   if not LP.active() then return T("diag", T.diagRetail) end
   local p = LP.player()
   local plan = LP.parse(p.class)

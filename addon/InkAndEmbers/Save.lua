@@ -73,10 +73,16 @@ local function journalPart(name)
   return J and J[name] or nil
 end
 
+-- the note slip building blocks live in the core (Journal.Widgets.Slip): the reminder looks the same without the Plans module
+local function slipPart()
+  local J = ns.Journal
+  return J and J.Widgets and J.Widgets.Slip or nil
+end
+
 -- paper = { pad = note pad pieces | nil, body = frame (two levels above the pad) for texts and controls }
 function Save.newPaper(f)
   local paper = { frame = f }
-  local TT, Theme = journalPart("TodoTracker"), journalPart("Theme")
+  local TT, Theme = slipPart(), journalPart("Theme")
   if TT and Theme and Theme.HAS_TODO_PAD and Theme.TEX and Theme.TEX.todoPad and Theme.TODO_PAD_SLICE
      and type(TT.newPad) == "function" and type(TT.sizePad) == "function" and type(TT.padY) == "function" then
     local ok, pad = pcall(TT.newPad, f)
@@ -107,7 +113,7 @@ end
 function Save.layoutPaper(paper, w, h)
   local pad = paper and paper.pad
   if not pad then return 16, 16, 14, 14 end
-  local TT, S = journalPart("TodoTracker"), journalPart("Theme").TODO_PAD_SLICE
+  local TT, S = slipPart(), journalPart("Theme").TODO_PAD_SLICE
   TT.sizePad(pad, w, h)
   local side = floor(w * (S.margin or 0.1) + 0.5)
   local top = floor((TT.padY(pad, (S.tab and S.tab[3]) or S.edge or 0.075) or 0) + 0.5) + 6
@@ -119,7 +125,7 @@ end
 function Save.paperText(paper, kind, size, color, width)
   local fs = paper.body:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   fs.inkPlain = true
-  local TT = journalPart("TodoTracker")
+  local TT = slipPart()
   if TT and type(TT.setFont) == "function" and type(TT.colorOf) == "function" then
     TT.setFont(fs, kind, size)
     fs:SetTextColor(TT.colorOf(color))
@@ -137,7 +143,7 @@ end
 
 -- small "x" in the corner of the paper (the one of the to-do note), onClick closes the window
 function Save.paperClose(paper, onClick, tip)
-  local TT = journalPart("TodoTracker")
+  local TT = slipPart()
   if TT and type(TT.newClose) == "function" and type(TT.paintClose) == "function" then
     local b = TT.newClose(paper.body, onClick, tip)
     TT.paintClose(b, true)

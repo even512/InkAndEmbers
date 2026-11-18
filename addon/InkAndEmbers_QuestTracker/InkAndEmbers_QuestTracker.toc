@@ -1,0 +1,29 @@
+## Interface: 120105, 16001
+## Title: Ink & Embers - Quest tracker
+## Title-deDE: Ink & Embers - Quest tracker
+## Notes: Own quest tracker for Ink & Embers in WoW Forever, with quest item bar.
+## Notes-deDE: Eigener Quest-Tracker für Ink & Embers in WoW Forever, mit Questgegenstand-Leiste.
+## Notes-ptBR: Rastreador de missões próprio para Ink & Embers no WoW Forever, com barra de itens de missão.
+## Author: EveN
+## Version: @project-version@
+## X-License: MIT (see LICENSE; the graphics and media of the main addon: all rights reserved)
+# Module of Ink & Embers (1.1.0): shares the namespace of the core add-on (Module.lua). Can be switched off in the add-on list
+# or in /chronik optionen > Module; the journal keeps recording without it.
+## Dependencies: InkAndEmbers
+## OptionalDeps: InkAndEmbers_Quests, InkAndEmbers_Plans
+## IconTexture: Interface\AddOns\InkAndEmbers\Media\MinimapIcon
+
+Module.lua
+locales\enUS.lua
+locales\ptBR.lua
+locales\frFR.lua
+locales\esES.lua
+locales\ruRU.lua
+locales\itIT.lua
+journal\model\QuestTrack.lua
+journal\QuestTrackerHide.lua
+journal\QuestTrackActions.lua
+journal\QuestItemButtons.lua
+journal\QuestItemBar.lua
+journal\QuestTracker.lua
+journal\QuestPin.lua

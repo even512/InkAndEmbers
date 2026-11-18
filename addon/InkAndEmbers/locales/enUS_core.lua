@@ -117,6 +117,19 @@ L.add("enUS", "Core", {
   rqError = "Quest interfaces: error while reading (%s).",
   rqDetails = "Details in EveNChronicleDB.diag.retailQuests[%d] (in the file after /reload).",
   unknownCommand = "Unknown command \"%s\". /chronik help lists all commands.",
+  mod_quests = "Quests",
+  mod_tracker = "Quest tracker",
+  mod_crafting = "Crafting",
+  mod_plans = "Plans",
+  mod_campfire = "Campfire",
+  moduleOff = "The module “%s” is switched off (/chronik options › Modules).",
+  moduleMissing = "The module “%s” is not installed.",
+  modOn = "on",
+  modOff = "off",
+  modPending = "after /reload",
+  modMissing = "not installed",
+  diagModules = "Modules: %s",
+  diagModuleVersion = "%s (version %s instead of %s)",
   actionLine = "Blocked actions: %s (monitoring: %s)",
   actionNone = "none",
   actionSome = "%d (latest: %s, %s)",
@@ -468,4 +481,15 @@ L.add("enUS", "col.Einkauf", {
   errFull = "The to-do list is full.",
   moreLines = "… %s more",
   errNotReadyChar = "The character is not ready yet.",
+})
+
+-- collectors/Werkauftrag.lua (Werkauftrag, 1.1.0)
+L.add("enUS", "col.Werkauftrag", {
+  titleOne = "Work order: %s× %s",
+  titleRoute = "Work order: %s to %s",
+  ready = "ready",
+  unknownMat = "The game shows the materials after learning",
+  errSteps = "The work order is too long (at most 60 steps).",
+  errEmpty = "The work order has no step.",
+  errNoOrder = "This work order no longer exists.",
 })

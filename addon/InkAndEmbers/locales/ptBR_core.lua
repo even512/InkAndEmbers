@@ -101,6 +101,19 @@ L.add("ptBR", "Core", {
   rqError = "Interfaces de missões: erro durante a leitura (%s).",
   rqDetails = "Detalhes em EveNChronicleDB.diag.retailQuests[%d] (no arquivo após /reload).",
   unknownCommand = "Comando desconhecido \"%s\". /chronik help lista todos os comandos.",
+  mod_quests = "Missões",
+  mod_tracker = "Rastreador de missões",
+  mod_crafting = "Ofícios",
+  mod_plans = "Planos",
+  mod_campfire = "Fogueira",
+  moduleOff = "O módulo “%s” está desligado (/chronik options › Módulos).",
+  moduleMissing = "O módulo “%s” não está instalado.",
+  modOn = "ligado",
+  modOff = "desligado",
+  modPending = "após /reload",
+  modMissing = "não instalado",
+  diagModules = "Módulos: %s",
+  diagModuleVersion = "%s (versão %s em vez de %s)",
 })
 
 L.add("ptBR", "Guard", {
@@ -346,4 +359,15 @@ L.add("ptBR", "col.Einkauf", {
   errFull = "A lista de tarefas está cheia.",
   moreLines = "… %s a mais",
   errNotReadyChar = "O personagem ainda não está pronto.",
+})
+
+-- collectors/Werkauftrag.lua (Werkauftrag, 1.1.0)
+L.add("ptBR", "col.Werkauftrag", {
+  titleOne = "Ordem de trabalho: %s× %s",
+  titleRoute = "Ordem de trabalho: %s até %s",
+  ready = "pronto",
+  unknownMat = "O jogo mostra os materiais depois de aprender",
+  errSteps = "A ordem de trabalho é longa demais (no máximo 60 etapas).",
+  errEmpty = "A ordem de trabalho não tem nenhuma etapa.",
+  errNoOrder = "Esta ordem de trabalho não existe mais.",
 })

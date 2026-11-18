@@ -45,9 +45,15 @@ local function setting(key)
   return P.setting(key) ~= false
 end
 
+-- needs the modules Crafting (Journal.Rezepte) and Plans (the to-do shows under Pläne > To Do); without one it rests (1.1.0)
+local function plansLoaded()
+  local api = ns.Core and ns.Core.API
+  return api ~= nil and api.moduleLoaded("plans") == true
+end
+
 function CraftTodo.active()
   local Rz = R()
-  return Rz ~= nil and Rz.active()
+  return Rz ~= nil and Rz.active() and plansLoaded()
 end
 
 -- price text of the to-do: stored sanitized (no coin icons), so capital unit letters: "5 S 10 K"
@@ -93,8 +99,11 @@ function CraftTodo.state()
   if not view.available then return nil end
   local marks = {}
   local n, cost = 0, 0
+  -- recipes an open work order already sends the player to the trainer for are left out (no duplicate, collectors/Werkauftrag.lua)
+  local W_ = ns.Werk
+  local inOrder = W_ and type(W_.trainerRecipes) == "function" and W_.trainerRecipes() or {}
   for _, r in ipairs(view.rows) do
-    if r.state == "now" and r.trainer then
+    if r.state == "now" and r.trainer and not inOrder[r.id] then
       n = n + 1
       cost = cost + (r.cost or 0)
       if (marks[r.line] or -1) < r.skill then marks[r.line] = r.skill end

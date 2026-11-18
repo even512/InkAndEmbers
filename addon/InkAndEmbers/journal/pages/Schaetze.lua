@@ -47,14 +47,39 @@ local BAR_MAX, BAR_MIN = 30, 2     -- column width
 local LINE_MAX = 120               -- upper limit of the spec (lines in the gold flow)
 local COL_MAX = Schaetze.LEVEL_COLS or 60
 
-local GEAR_HEAD_Y = FLOW_Y + FLOW_H + G.section.before   -- section head "Ausrüstung im Wandel"
-local GEAR_Y, GEAR_ROW = GEAR_HEAD_Y + G.section.h + G.section.after, 18
+-- "Ausrüstung im Wandel": 12 slots in 10 lines (rings and trinkets: one line with two lanes each, see GEAR_LINES). Pitch 14 px
+-- (the font xs 11 box), head 6 px closer to the flow and the first line 4 px closer to the head than the grid default, so that
+-- 10 lines + scale (y 326 .. 480) still end above the block "Funde nach Güte" (BOTTOM_Y 488, as before with 7 lines of 18 px).
+local GEAR_BEFORE, GEAR_AFTER = 12, 4
+local GEAR_HEAD_Y = FLOW_Y + FLOW_H + GEAR_BEFORE   -- section head "Ausrüstung im Wandel"
+local GEAR_Y, GEAR_ROW = GEAR_HEAD_Y + G.section.h + GEAR_AFTER, 14
+local STRIP_H, LANE_H = 10, 6      -- strip of a single line (at y + 2) / of one lane in a shared line (lanes at y + 1 and y + 8)
+-- lines of the chart: one per slot, except slots with the same group (rings, trinkets), which share a line as lanes
+local GEAR_LINES, GEAR_POS = {}, {}  -- GEAR_POS[i] = { line, lane } for Schaetze.GEAR_SLOTS[i]
+for i, def in ipairs(Schaetze.GEAR_SLOTS) do
+  local last = GEAR_LINES[#GEAR_LINES]
+  if def.group and last and last.group == def.group then
+    last.lanes = last.lanes + 1
+    GEAR_POS[i] = { #GEAR_LINES, last.lanes }
+  else
+    GEAR_LINES[#GEAR_LINES + 1] = { group = def.group, lanes = 1, def = def }
+    GEAR_POS[i] = { #GEAR_LINES, 1 }
+  end
+end
+local GEAR_N = #GEAR_LINES
+-- y (from the top of the page) and height of the strip of slot i: whole strip in a single line, one lane in a shared line
+local function gearStrip(i)
+  local n, lane = GEAR_POS[i][1], GEAR_POS[i][2]
+  local y = GEAR_Y + (n - 1) * GEAR_ROW
+  if GEAR_LINES[n].lanes > 1 then return y + 1 + (lane - 1) * (LANE_H + 1), LANE_H end
+  return y + 2, STRIP_H
+end
 local STRIP_X = R0 + 70
 local STRIP_W = RW - 70 - 8       -- ends at x 438: left of the scale/key (keep-out right x 440..527, y 347..426, page pair v2)
-local RUN_POOL, DASH_POOL = 360, 400
+local RUN_POOL, DASH_POOL = 480, 640   -- 12 slots (not 7): up to ~47 dashes per empty strip
 
 -- bottom: first blue left, finds by quality to its right; ends before y 556 (decoration bottom right, x 400..501, y 556..644)
-local BOTTOM_Y = GEAR_Y + 7 * GEAR_ROW + 26
+local BOTTOM_Y = GEAR_Y + GEAR_N * GEAR_ROW + 22   -- 488: below the scale (labels 14 px) with 8 px air
 local NOTE_W = 140                 -- slip "Erstes Seltenes" (narrower so that the Blizzard quality names fit side by side)
 local GEM_X = R0 + NOTE_W + 14     -- finds by quality: four columns up to the text block edge
 local GEM_W = floor((R0 + RW - GEM_X - 4) / 4) -- 4 px air to the decoration bottom right
@@ -415,20 +440,24 @@ local function buildRight(self, right)
   u.gearSub:SetPoint("BOTTOMRIGHT", right, "TOPLEFT", R0 + RW, -(GEAR_HEAD_Y + 22))
   -- without gear no empty timeline but a handwritten sentence (ends left of the scale)
   u.gearEmpty = D.emptyNote(right, STRIP_X + STRIP_W - R0 - 30)
-  u.gearEmpty:SetPoint("TOP", right, "TOPLEFT", R0 + (STRIP_X + STRIP_W - R0) / 2, -(GEAR_Y + 2 * GEAR_ROW))
-  local nSlots = #Schaetze.GEAR_SLOTS
+  u.gearEmpty:SetPoint("TOP", right, "TOPLEFT", R0 + (STRIP_X + STRIP_W - R0) / 2, -(GEAR_Y + 3 * GEAR_ROW))
+  local nSlots = GEAR_N
   u.slotLbl, u.track = {}, {}
-  for i, def in ipairs(Schaetze.GEAR_SLOTS) do
-    local y = GEAR_Y + (i - 1) * GEAR_ROW
+  for n, line in ipairs(GEAR_LINES) do
+    local y = GEAR_Y + (n - 1) * GEAR_ROW
     -- label only (slots not clickable, no explanatory text below); hover sits on the strips
     local b = font(right, "label", G.size.xs, "ink", "LEFT")
-    b:SetPoint("TOPLEFT", right, "TOPLEFT", R0 + 2, -(y + 2))
-    set(b, def.label)
-    u.slotLbl[i] = b
+    b:SetPoint("TOPLEFT", right, "TOPLEFT", R0 + 2, -y)
+    set(b, line.group and Schaetze.GEAR_GROUPS[line.group].label or line.def.label)
+    u.slotLbl[n] = b
+  end
+  -- track behind every strip (one per slot: a full strip, or a lane of a shared line)
+  for i in ipairs(Schaetze.GEAR_SLOTS) do
     local tr = tex(right, "BORDER")
     tr:SetColorTexture(Widgets.color("sepia", 0.07))
-    tr:SetPoint("TOPLEFT", right, "TOPLEFT", STRIP_X, -(y + 3))
-    tr:SetSize(STRIP_W, 12)
+    local y, h = gearStrip(i)
+    tr:SetPoint("TOPLEFT", right, "TOPLEFT", STRIP_X, -y)
+    tr:SetSize(STRIP_W, h)
     u.track[i] = tr
   end
   -- ticks every 10 levels up to the client's highest level (Forever 60: 6 ticks; Retail 80/90: 8/9 ticks, cells >= 3 px)
@@ -441,7 +470,7 @@ local function buildRight(self, right)
     local t = tex(right, "BORDER")
     t:SetColorTexture(Widgets.color("sepia", 0.18))
     t:SetPoint("TOPLEFT", right, "TOPLEFT", x, -(GEAR_Y + 1))
-    t:SetSize(1, nSlots * GEAR_ROW - 4)
+    t:SetSize(1, nSlots * GEAR_ROW - 2)
     local l = font(right, "label", G.size.xs, "sepia", "CENTER")
     l:SetPoint("TOP", right, "TOPLEFT", x, -(GEAR_Y + nSlots * GEAR_ROW))
     set(l, tostring(L))
@@ -1064,7 +1093,10 @@ function Page:DrawGear(view)
     set(u.gearSub, Page.TEXT("gearSub", gear.changesText, Journal.Texts.int(gear.level)))
   end
   for i, row in ipairs(gear.rows) do
-    local y = GEAR_Y + (i - 1) * GEAR_ROW
+    local y, h = gearStrip(i) -- strip of this slot
+    -- hit area: the strip plus 1 px air; in a shared line lane 2 gets exactly its strip (h), so the two lanes do not overlap
+    local hy, hh = y - 1, h + 2
+    if GEAR_POS[i][2] == 2 then hy, hh = y, h end
     for _, run in ipairs(row.runs) do
       local x = STRIP_X + (run.from - 1) * cell
       local w = (run.to - run.from + 1) * cell
@@ -1075,7 +1107,7 @@ function Page:DrawGear(view)
           local d = u.dashes:Acquire()
           if not d then break end
           d:SetColorTexture(Widgets.color("sepia", run.unknown and 0.25 or 0.5))
-          d:SetPoint("TOPLEFT", self.right, "TOPLEFT", x + dx, -(y + 8))
+          d:SetPoint("TOPLEFT", self.right, "TOPLEFT", x + dx, -(y + h / 2 - 1))
           d:SetSize(min(4, w - 1 - dx), 2)
           dx = dx + 7
         end
@@ -1083,14 +1115,14 @@ function Page:DrawGear(view)
         local t = u.runs:Acquire()
         if t then
           t:SetColorTexture(Widgets.color(run.color, 0.92))
-          t:SetPoint("TOPLEFT", self.right, "TOPLEFT", x, -(y + 3))
-          t:SetSize(max(w - 1, 1), 12)
+          t:SetPoint("TOPLEFT", self.right, "TOPLEFT", x, -y)
+          t:SetSize(max(w - 1, 1), h)
         end
       end
       local hit = u.runHits:Acquire()
       if hit then
-        hit:SetPoint("TOPLEFT", self.right, "TOPLEFT", x, -(y + 1))
-        hit:SetSize(max(w, 2), 16)
+        hit:SetPoint("TOPLEFT", self.right, "TOPLEFT", x, -hy)
+        hit:SetSize(max(w, 2), hh)
         hit.tipLines = run.tip
       end
     end

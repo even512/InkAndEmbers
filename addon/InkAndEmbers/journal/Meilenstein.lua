@@ -190,10 +190,11 @@ local function shown(v, n)
   return s
 end
 
--- WoW Forever only (the trainer plan module knows the client; same switch as the level-up note)
+-- WoW Forever only: core client check (Core.foreverParts, honours the developer switch like the Lehrplan); since 1.1.0 no longer
+-- the Lehrplan, so the milestones stay without the module Plans
 function Meilenstein.active()
-  local L = Journal.Lehrplan
-  return L ~= nil and type(L.active) == "function" and L.active() == true
+  local C = ns.Core
+  return C ~= nil and type(C.foreverParts) == "function" and C.foreverParts() == true
 end
 
 function Meilenstein.on() return setting("milestoneSlip") end

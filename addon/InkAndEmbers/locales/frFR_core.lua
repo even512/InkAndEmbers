@@ -117,6 +117,19 @@ L.add("frFR", "Core", {
   rqError = "Interfaces de quêtes : erreur de lecture (%s).",
   rqDetails = "Détails dans EveNChronicleDB.diag.retailQuests[%d] (dans le fichier après /reload).",
   unknownCommand = "Commande inconnue \"%s\". /chronik help liste toutes les commandes.",
+  mod_quests = "Quêtes",
+  mod_tracker = "Suivi de quêtes",
+  mod_crafting = "Artisanat",
+  mod_plans = "Plans",
+  mod_campfire = "Feu de camp",
+  moduleOff = "Le module « %s » est désactivé (/chronik options › Modules).",
+  moduleMissing = "Le module « %s » n’est pas installé.",
+  modOn = "activé",
+  modOff = "désactivé",
+  modPending = "après /reload",
+  modMissing = "non installé",
+  diagModules = "Modules : %s",
+  diagModuleVersion = "%s (version %s au lieu de %s)",
   actionLine = "Actions bloquées : %s (surveillance : %s)",
   actionNone = "aucune",
   actionSome = "%d (dernière : %s, %s)",
@@ -468,4 +481,15 @@ L.add("frFR", "col.Einkauf", {
   errFull = "La liste de tâches est pleine.",
   moreLines = "… %s de plus",
   errNotReadyChar = "Le personnage n'est pas encore prêt.",
+})
+
+-- collectors/Werkauftrag.lua (Werkauftrag, 1.1.0)
+L.add("frFR", "col.Werkauftrag", {
+  titleOne = "Commande : %s× %s",
+  titleRoute = "Commande : %s jusqu'à %s",
+  ready = "prêt",
+  unknownMat = "Le jeu affiche les composants après l'apprentissage",
+  errSteps = "La commande est trop longue (60 étapes au plus).",
+  errEmpty = "La commande n'a aucune étape.",
+  errNoOrder = "Cette commande n'existe plus.",
 })

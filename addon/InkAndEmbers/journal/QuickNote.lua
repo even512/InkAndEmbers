@@ -2,15 +2,17 @@
 -- (first line = title, rest = text). Shift+Enter = new line, Esc clears/leaves the field.
 local _, ns = ...
 
+-- The note pad (paper, fonts, close button) comes from the core building block journal/widgets/Slip.lua (1.1.0; shared with the
+-- to-do note of the module Plans), so the quick note works without that module. Only the style hand-over (a character that
+-- had chosen a style for the to-do note keeps it here) hooks into the to-do note, and only when it is there (QuickNote.publish).
 local Journal = ns.Journal
-local TT = Journal and Journal.TodoTracker
 local D = Journal and Journal.Widgets and Journal.Widgets.Diary
-if not (TT and D and TT.newPad) then return end
+local Slip = Journal and Journal.Widgets and Journal.Widgets.Slip
+if not (D and Slip) then return end
 
 local floor, max = math.floor, math.max
 
 local QuickNote = {}
-Journal.QuickNote = QuickNote
 
 QuickNote.NAME = "EveNChronicleQuickNote"
 QuickNote.W, QuickNote.H = 250, 130
@@ -74,7 +76,7 @@ local function validStyle(v) return v == "pad" or v == "plain" end
 local function styleValue()
   local r = raw(false)
   if r and validStyle(r.style) and not isSecret(r.style) then return r.style end
-  local own = TT.DEFAULTS.style
+  local own = Slip.DEFAULT_STYLE
   if charReady() then
     local c = ns.Store.char()
     local tt = type(c.todoTracker) == "table" and not isSecret(c.todoTracker) and c.todoTracker or nil
@@ -183,7 +185,7 @@ function QuickNote.submit()
 end
 
 local function clampPos(x, y)
-  return TT.clampPos(x, y, QuickNote.W, QuickNote.H)
+  return Slip.clampPos(x, y, QuickNote.W, QuickNote.H)
 end
 
 function QuickNote.place()
@@ -226,8 +228,8 @@ function QuickNote.build()
   if f.SetDontSavePosition then f:SetDontSavePosition(true) end
   f:EnableMouse(true)
   f:Hide()
-  st.pad = TT.newPad(f)
-  st.plain = TT.newPlain(f)
+  st.pad = Slip.newPad(f)
+  st.plain = Slip.newPlain(f)
 
   local body = CreateFrame("Frame", nil, f)
   body:SetAllPoints(f)
@@ -257,7 +259,7 @@ function QuickNote.build()
   end)
   head:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
   st.head = head
-  st.title = TT.fontString(head)
+  st.title = Slip.fontString(head)
   st.title:SetJustifyH("LEFT")
   st.title:SetWordWrap(false)
   local btn = CreateFrame("Button", nil, head)
@@ -300,11 +302,11 @@ function QuickNote.build()
     if GameTooltip then GameTooltip:Hide() end
   end)
   st.button = btn
-  st.close = TT.newClose(head, function()
+  st.close = Slip.newClose(head, function()
     QuickNote.setShown(false)
     say(T.off)
   end, T.close, T.closeHint)
-  st.status = TT.fontString(head)
+  st.status = Slip.fontString(head)
   st.status:SetJustifyH("RIGHT")
   st.status:SetWordWrap(false)
   st.status:Hide()
@@ -346,7 +348,7 @@ function QuickNote.build()
       f:StopMovingOrSizing()
     end
   end)
-  st.placeholder = TT.fontString(body)
+  st.placeholder = Slip.fontString(body)
   st.placeholder:SetJustifyH("LEFT")
   st.placeholder:SetWordWrap(true)
   st.frame = f
@@ -360,7 +362,7 @@ function QuickNote.applyStyle()
   if not f then return end
   local s = style()
   local isPad = s == "pad"
-  local M = TT.METRICS[s]
+  local M = Slip.METRICS[s]
   local w, h = QuickNote.W, QuickNote.H
   st.pad:SetShown(isPad)
   st.plain:SetShown(not isPad)
@@ -368,26 +370,26 @@ function QuickNote.applyStyle()
   local padL = max(M.padLMin, floor(w * M.padL + 0.5)) + (isPad and 8 or 0)
   local padB = M.padB
   if isPad and st.pad.image then
-    TT.sizePad(st.pad, w, h)
+    Slip.sizePad(st.pad, w, h)
     padB = max(M.padB, floor(w * 0.1 + 0.5))
     local S = Journal.Theme.TODO_PAD_SLICE
-    if S and S.tab then top = max(top, floor((TT.padY(st.pad, S.tab[3]) or 0) + 2.5)) end
-    if S and S.edge then top = max(top, floor((TT.padY(st.pad, S.edge) or 0) + 2.5)) end
+    if S and S.tab then top = max(top, floor((Slip.padY(st.pad, S.tab[3]) or 0) + 2.5)) end
+    if S and S.edge then top = max(top, floor((Slip.padY(st.pad, S.edge) or 0) + 2.5)) end
   end
-  local P = isPad and TT.PAD or TT.PLAIN
-  local c = TT.colorOf
-  TT.setFont(st.title, isPad and "hand" or "text", isPad and 19 or 12)
+  local P = isPad and Slip.PAD or Slip.PLAIN
+  local c = Slip.colorOf
+  Slip.setFont(st.title, isPad and "hand" or "text", isPad and 19 or 12)
   st.title:SetTextColor(c(P.title))
   st.title:SetText(T.title)
-  TT.setFont(st.status, isPad and "hand" or "text", isPad and 16 or 11)
-  st.status:SetTextColor(c(isPad and "red" or TT.PLAIN.hover))
+  Slip.setFont(st.status, isPad and "hand" or "text", isPad and 16 or 11)
+  st.status:SetTextColor(c(isPad and "red" or Slip.PLAIN.hover))
   local textKind, size = isPad and "hand" or "text", isPad and 16 or 12
   local Theme = Journal.Theme
   local file = (Theme.FONT and Theme.FONT[textKind]) or (Theme.FONT and Theme.FONT.text)
   local ok, res = pcall(st.edit.SetFont, st.edit, file, size, "")
   if (not ok or res == false) and isPad then pcall(st.edit.SetFont, st.edit, Theme.FONT.text, 12, "") end
   st.edit:SetTextColor(c(P.text))
-  TT.setFont(st.placeholder, isPad and "hand" or "text", size)
+  Slip.setFont(st.placeholder, isPad and "hand" or "text", size)
   st.placeholder:SetTextColor(c(P.extra, 0.8))
   st.placeholder:SetText(T.placeholder)
   for _, fs in ipairs({ st.title, st.status, st.placeholder }) do
@@ -419,7 +421,7 @@ function QuickNote.applyStyle()
   st.placeholder:SetWidth(w - padL - M.padR - 4)
   st.style = s
   QuickNote.paintButton()
-  TT.paintClose(st.close, isPad)
+  Slip.paintClose(st.close, isPad)
   QuickNote.paintPlaceholder()
 end
 
@@ -427,10 +429,10 @@ function QuickNote.paintButton()
   local b = st.button
   if not b then return end
   local isPad = style() == "pad"
-  local ink = isPad and "sepia" or TT.PLAIN.extra
-  local mark = isPad and "red" or TT.PLAIN.title
-  if b.hover then ink = isPad and "red" or TT.PLAIN.hover end
-  for _, t in ipairs(b.parts) do t:SetColorTexture(TT.colorOf(t.role == "mark" and mark or ink)) end
+  local ink = isPad and "sepia" or Slip.PLAIN.extra
+  local mark = isPad and "red" or Slip.PLAIN.title
+  if b.hover then ink = isPad and "red" or Slip.PLAIN.hover end
+  for _, t in ipairs(b.parts) do t:SetColorTexture(Slip.colorOf(t.role == "mark" and mark or ink)) end
 end
 
 function QuickNote.refresh()
@@ -461,7 +463,7 @@ function QuickNote.setShown(on)
   return r.shown
 end
 
-TT.beforeStyle = function()
+local function beforeStyle()
   if charReady() then raw(true).style = styleValue() end
 end
 
@@ -494,6 +496,19 @@ function QuickNote.slash(arg)
   return on
 end
 
+-- hands out Journal.QuickNote and hooks the style hand-over into the to-do note when its module is loaded (at file load and
+-- again at PLAYER_LOGIN, after the module add-ons); true when the quick note is available
+function QuickNote.publish()
+  Journal.QuickNote = QuickNote
+  local tracker = Journal.TodoTracker
+  if type(tracker) == "table" then tracker.beforeStyle = beforeStyle end
+  return true
+end
+
+QuickNote.publish()
 if ns.Core and ns.Core.on then
-  ns.Core.on("PLAYER_ENTERING_WORLD", function() safe(QuickNote.refresh) end)
+  ns.Core.on("PLAYER_LOGIN", function() safe(QuickNote.publish) end)
+  ns.Core.on("PLAYER_ENTERING_WORLD", function()
+    if Journal.QuickNote == QuickNote then safe(QuickNote.refresh) end
+  end)
 end
