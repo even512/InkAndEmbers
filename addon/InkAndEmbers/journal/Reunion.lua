@@ -136,6 +136,7 @@ function Reunion.identify(unit)
       full = realm and (name .. "-" .. realm) or name
       full = ns.Sanitize.cut(ns.Sanitize.field(full), Reunion.NAME_MAX)
       if full == "" then full = nil end
+      if full and ns.Names and ns.Names.mateKey then full = ns.Names.mateKey(full) end -- Forever: no shard part (hidden realm)
     end
   end
   local guid = call(UnitGUID, unit)

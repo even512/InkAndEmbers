@@ -43,18 +43,18 @@ export const PROFESSIONS = {
 // SHA-256 der Quelldateien im gepinnten Commit (Pruefung, dass genau dieser Stand eingelesen wird)
 export const SOURCE_SHA256 = {
   LICENSE: TRAINER_SHA256.LICENSE,
-  "Crafting/Recipes/Camelot/Alchemy.lua": "ad79dcdf73d830d663e31bc4347c9d8d76f3162b9328789ddf9856f8721849c5",
-  "Crafting/Recipes/Camelot/Blacksmithing.lua": "318ea47f0985d0db894626caaa29c2da0a2574714374fb325b74b047607e164c",
-  "Crafting/Recipes/Camelot/Cooking.lua": "c9d62e5a86de2a842ce6b55c293a74c4ca0eac54108e69f82da82e8eac06eb36",
-  "Crafting/Recipes/Camelot/Enchanting.lua": "19d68e40c9b7518a0972547936636170de5121a20182832ff337edc30f6be3ea",
-  "Crafting/Recipes/Camelot/Engineering.lua": "991cd195b6aa59c1ec9cda53c5c6a4ee7b0bc265e9afd2dc588160efff054973",
+  "Crafting/Recipes/Camelot/Alchemy.lua": "2afee618157ee2480e40f7d210bff19a8f94161710d06d1f5181f95d623b566d",
+  "Crafting/Recipes/Camelot/Blacksmithing.lua": "63d3c2d58af581b7a3f22816ef796ca65df5afe8433f5fd7b236ab1480a0f86a",
+  "Crafting/Recipes/Camelot/Cooking.lua": "05daa848232c2f453b8dafb8896603995f9418564966de8557da8c0600de7c3b",
+  "Crafting/Recipes/Camelot/Enchanting.lua": "e1ab60a07e9cd35befc5a1cbe5f0c640416a9856d27f7ce6641d399737b23612",
+  "Crafting/Recipes/Camelot/Engineering.lua": "b21fcd37cf0b1b8b397630d30686d38d1bc410e7d2dfb633b4b480b7543c6f20",
   "Crafting/Recipes/Camelot/FirstAid.lua": "e75433a291aa2b4239344abec9d13a1a8d3934d08dcda115b0c0a6b45b6738ef",
-  "Crafting/Recipes/Camelot/Fishing.lua": "861243d61f0d3f9f0f7ba60fefb5ee74d7808836b527c05ac2bde33f9e60a416",
-  "Crafting/Recipes/Camelot/Herbalism.lua": "e176851f1023cc0f1f91acc29da89eac0f0a814c2f6c37623946be3be1ec884f",
-  "Crafting/Recipes/Camelot/Leatherworking.lua": "db72eb9af1aa86e53562ec78ac7bca127c66e31807e9cb1c0034cf43e35575a7",
+  "Crafting/Recipes/Camelot/Fishing.lua": "3b68666fc22342a277b5918da2d2720a1555cdd13fde672a425b1611fc736825",
+  "Crafting/Recipes/Camelot/Herbalism.lua": "cba8b4d7150611ed6d64b3ac12900d65490b1f39c8b35812474ea9c38e742144",
+  "Crafting/Recipes/Camelot/Leatherworking.lua": "6799229c5ebbede614d04c041c6dcffdbc49ef72b342296957e88c4f6adfc0be",
   "Crafting/Recipes/Camelot/Mining.lua": "3d8865da0331d67f88f69d77340c7f9b372e8d7e6a0b15cf7c5d3c6e0a4841f1",
   "Crafting/Recipes/Camelot/Skinning.lua": "38941f22f14b06efef893bd9882f698a3e5d0627abdbbbdb25a9b3684b02551a",
-  "Crafting/Recipes/Camelot/Tailoring.lua": "9eece3615614b15c5dfbba8811aa22aedd279e680e7b8097091179b098882207",
+  "Crafting/Recipes/Camelot/Tailoring.lua": "3164898ac8e372d72166edb23f2fe9fdfc199b4f6fd0589987b01330751e6d9f",
 };
 export const LIMITS = { id: 2147483647, skill: 600, level: 60, cost: 10000000, favor: 100000, minPerSkill: 3, minTotal: 1000, srcBytes: 256 * 1024, outBytes: 160 * 1024 };
 const SOURCES = { trainer: "T", vendor: "V", quest: "Q", drop: "D", crafted: "C", world_object: "O" };

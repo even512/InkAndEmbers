@@ -149,6 +149,19 @@ function Names.mateName(raw, realm, keepRealm)
   return first
 end
 
+-- key of a person ("Name-Realm" as the collectors write it) for comparisons and lookups. Forever hides the realm (hotfix 20.11.2026):
+-- a stored "Lenu Barrowstone-SHARDEU1Realm1RP" must equal today's "Lenu Barrowstone". On Forever a part after the first "-" that is no
+-- surname (a shard) is cut off; "Mira-Ashveil" (surname) stays as it is. Retail unchanged. Secret/empty -> nil.
+-- Only for reading/comparing: stored lines are never rewritten.
+function Names.mateKey(full)
+  full = str(full)
+  if not full then return nil end
+  if not Names.foreverClient() then return full end
+  local first, rest = match(full, "^([^%-]+)%-(.+)$")
+  if first and not Names.surnameOk(rest) then return first end
+  return full
+end
+
 -- is "who" (a name from a chat message) the logged-in character? Accepts "Vorname", "Vorname Nachname", "Vorname-Nachname" and
 -- "Vorname-<shard/realm>". With a known surname another surname is someone else (Forever names are only unique with the surname);
 -- without one (Retail) any "Name-Realm" counts, as before. Never a name that only starts with ours.

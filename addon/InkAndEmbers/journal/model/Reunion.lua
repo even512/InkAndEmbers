@@ -92,8 +92,15 @@ local function newTable()
 end
 
 -- the entry of a person: guid first, then name-realm; created if absent (up to PEOPLE_MAX). Both keys point to the same entry.
+local function keyOf(full)
+  if type(full) ~= "string" or full == "" or isSecret(full) then return nil end
+  local N = ns.Names
+  if N and type(N.mateKey) == "function" then return N.mateKey(full) end -- Forever: shard part cut off (Names.mateKey)
+  return full
+end
+
 local function entryFor(t, full, guid)
-  if type(full) ~= "string" or full == "" or isSecret(full) then full = nil end
+  full = keyOf(full)
   if type(guid) ~= "string" or guid == "" or isSecret(guid) then guid = nil end
   if not full and not guid then return nil end
   local e = (guid and t.byGuid[guid]) or (full and t.byName[full]) or nil
@@ -322,7 +329,8 @@ function Reunion.lookup(full, guid)
   if not t then return nil end
   local e
   if type(guid) == "string" and not isSecret(guid) then e = t.byGuid[guid] end
-  if not e and type(full) == "string" and not isSecret(full) then e = t.byName[full] end
+  full = keyOf(full)
+  if not e and full then e = t.byName[full] end
   if not e then return nil end
   local lines = linesOf(e)
   if #lines == 0 then return nil end

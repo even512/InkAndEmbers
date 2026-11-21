@@ -103,6 +103,13 @@ end
 
 local cache = setmetatable({}, { __mode = "k" })
 
+-- person key for the name lookup (Forever: shard part cut off, Names.mateKey); the stored p.full stays as written
+local function keyOf(full)
+  local N = ns.Names
+  if type(full) == "string" and N and type(N.mateKey) == "function" then return N.mateKey(full) end
+  return full
+end
+
 local function clone(e)
   return { n = e.n, lastT = e.lastT, lastMapID = e.lastMapID, lastZone = e.lastZone, lastLevel = e.lastLevel }
 end
@@ -142,7 +149,7 @@ local function build(index)
     if Idx.num(r, "LF", "sim") == 1 then round.sim = true end -- trial round (retail simulation)
     local counted = {}
     for _, p in ipairs(people) do
-      local e = (p.guid and byGuid[p.guid]) or (p.full and byName[p.full]) or nil
+      local e = (p.guid and byGuid[p.guid]) or (p.full and byName[keyOf(p.full)]) or nil
       if not counted[e or p] then
         counted[e or p] = true
         if e then p.past = clone(e) end
@@ -161,7 +168,7 @@ local function build(index)
         e.lastSim = round.sim
         e.visits[#e.visits + 1] = { t = r.t, mapID = mapID, zone = zone, level = p.level, sim = round.sim }
         if p.guid then byGuid[p.guid] = e end
-        if p.full then byName[p.full] = e end
+        if p.full then byName[keyOf(p.full)] = e end
         round.people[#round.people + 1] = p
       end
     end
@@ -213,7 +220,7 @@ function FireMates.withLive(res, s)
   local at = {}
   for i, p in ipairs(list) do
     if p.guid and not at[p.guid] then at[p.guid] = i end
-    if p.full and not at["n:" .. p.full] then at["n:" .. p.full] = i end
+    if p.full and not at["n:" .. keyOf(p.full)] then at["n:" .. keyOf(p.full)] = i end
   end
   local startT = finite(s.startT) and s.startT or nil
   local mapID = finite(s.mapID) and floor(s.mapID) or nil
@@ -222,7 +229,7 @@ function FireMates.withLive(res, s)
   for _, q in ipairs(s.people) do
     local guid, full = type(q) == "table" and liveStr(q.guid) or nil, type(q) == "table" and liveStr(q.full) or nil
     if type(q) == "table" and q.sure == true and (guid or full) then
-      local i = (guid and at[guid]) or (full and at["n:" .. full]) or nil
+      local i = (guid and at[guid]) or (full and at["n:" .. keyOf(full)]) or nil
       local e = {}
       if i and not used[i] then
         used[i] = true

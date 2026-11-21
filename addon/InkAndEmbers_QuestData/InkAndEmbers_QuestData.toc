@@ -9,8 +9,8 @@
 # Loaded by the core (zone progress, map overlays, open quests) and by the module InkAndEmbers_Quests (1.1.0): it depends on
 # the core only, so the zone medal and "reveal map" keep working with the Quests module switched off.
 ## Dependencies: InkAndEmbers
-## X-QuestieDB-Version: 1.1.3
-## X-Attribution: Daten: QuestieDB (Questie-Team und Beitragende: Muehe, TheCrux/BreakBB, Drejjmit, Dyaxler, Cheeq, TechnoHunter, Yttrium und alle weiteren), Stand 1.1.3. Lizenz: GPL-3.0 (QuestieDB LICENSE.md: Weitergabe unter GPLv3; siehe LICENSE und LICENSE-NOTE.md); umformatiert und ergaenzt durch scripts/build-quest-data.mjs. Spielwelt-Inhalte (c) Blizzard Entertainment.
+## X-QuestieDB-Version: 1.1.4
+## X-Attribution: Daten: QuestieDB (Questie-Team und Beitragende: Muehe, TheCrux/BreakBB, Drejjmit, Dyaxler, Cheeq, TechnoHunter, Yttrium und alle weiteren), Stand 1.1.4. Lizenz: GPL-3.0 (QuestieDB LICENSE.md: Weitergabe unter GPLv3; siehe LICENSE und LICENSE-NOTE.md); umformatiert und ergaenzt durch scripts/build-quest-data.mjs. Spielwelt-Inhalte (c) Blizzard Entertainment.
 ## X-License: GPL-3.0
 ## X-Source-License: https://github.com/Questie/QuestieDB/blob/master/LICENSE.md
 

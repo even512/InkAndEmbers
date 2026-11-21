@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1
+
+After the WoW Forever hotfix that hid the realm name, companions, campfire guests and "meet again" memories still recognise the same people as before. Quest, trainer and recipe data are updated to QuestieDB 1.1.4 and the latest What's Training, and your journal data is untouched.
+
 ## 1.1.0
 
 **At a glance:** Ink & Embers is now modular, so you can switch off the parts of the book you do not use, a quest can be pinned to the tracker, and work orders take you from the workbench to a skill goal. Quest tracker pills now also mark Elite, Dungeon and Raid quests. **After updating, quit the game completely once and start it again; a /reload is not enough.**

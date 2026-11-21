@@ -98,12 +98,14 @@ local function parseEvents(compEv)
     t = tonumber(t)
     if t and name and name ~= "?" and (code == "WB" or code == "WV") then
       local lv, m = tonumber(field(level)), tonumber(field(map))
-      local p = byName[name]
+      local N = ns.Names
+      local nk = (N and type(N.mateKey) == "function" and N.mateKey(name)) or name -- Forever: same person with and without shard
+      local p = byName[nk]
       if not p then
         n = n + 1
         p = { name = name, class = field(cls), race = field(race), level0 = lv, level1 = lv, map0 = m, x0 = tonumber(field(x)),
           y0 = tonumber(field(y)), map1 = m, t0 = t, t1 = t, idx = n }
-        byName[name] = p
+        byName[nk] = p
         people[n] = p
       else
         p.class, p.race = p.class or field(cls), p.race or field(race)

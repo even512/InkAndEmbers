@@ -474,11 +474,18 @@ function Campfire.rounds(char)
   return keepNewest(out)
 end
 
+-- name key of the history (Forever: shard part cut off, Names.mateKey; stored lines stay as written)
+local function nameKey(full)
+  local N = ns.Names
+  if type(full) == "string" and N and type(N.mateKey) == "function" then return N.mateKey(full) end
+  return full
+end
+
 local function addToHistory(h, round)
   h.rounds = h.rounds + 1
   local counted = {} -- the same person (GUID or name-realm) counts once per round
   for _, p in ipairs(round.people) do
-    local e = (p.guid and h.byGuid[p.guid]) or (p.full and h.byName[p.full])
+    local e = (p.guid and h.byGuid[p.guid]) or (p.full and h.byName[nameKey(p.full)])
     if not e then
       e = { n = 0, firstT = round.t }
     end
@@ -491,7 +498,7 @@ local function addToHistory(h, round)
       e.class, e.race, e.sex = p.class or e.class, p.race or e.race, p.sex or e.sex
     end
     if p.guid then h.byGuid[p.guid] = e end
-    if p.full then h.byName[p.full] = e end
+    if p.full then h.byName[nameKey(p.full)] = e end
   end
 end
 
@@ -583,7 +590,7 @@ end
 
 local function pastOf(guid, full)
   local h = history()
-  local e = h and ((guid and h.byGuid[guid]) or (full and h.byName[full])) or nil
+  local e = h and ((guid and h.byGuid[guid]) or (full and h.byName[nameKey(full)])) or nil
   if not e then return nil end
   return { n = e.n, firstT = e.firstT, lastT = e.lastT, lastMapID = e.lastMapID, lastZone = zoneName(e.lastMapID),
     lastLevel = e.lastLevel }

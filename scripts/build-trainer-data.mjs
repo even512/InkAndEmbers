@@ -30,8 +30,8 @@ import luaparse from "luaparse";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const DEFAULT_OUT = path.join(ROOT, "addon", "InkAndEmbers", "data");
-export const PINNED_COMMIT = "6e289b0c2acd1c933f5a6317d960ff67a01da118";
-export const PINNED_DATE = "2026-11-14";
+export const PINNED_COMMIT = "0de3283e92421a1339c1e890f4369a1b21a00a78";
+export const PINNED_DATE = "2026-11-19";
 export const SOURCE_URL = "https://github.com/fusionpit/WhatsTraining/tree/master/Classes/Camelot";
 export const CLASSES = ["DRUID", "HUNTER", "MAGE", "PALADIN", "PRIEST", "ROGUE", "SHAMAN", "WARLOCK", "WARRIOR"];
 const FILE_OF = { DRUID: "Druid", HUNTER: "Hunter", MAGE: "Mage", PALADIN: "Paladin", PRIEST: "Priest", ROGUE: "Rogue",
@@ -45,7 +45,7 @@ export const SOURCE_SHA256 = {
   "Classes/Camelot/Mage.lua": "1a36177de4ed5aafb96a862a284e804f1a3cac818ac2d79136fb64fb6859a794",
   "Classes/Camelot/Paladin.lua": "0114021808896ef896b77f42106e9ebdd350a8953aed5711a4e51622283df9a1",
   "Classes/Camelot/Priest.lua": "cc67119a0247f9c24d2c18a424935484746865b6da8452390f415eb73993a5a9",
-  "Classes/Camelot/Rogue.lua": "134d482e20a766e844c1bc1da56d91feae67fdefb8e59f8b9d96f869d7592539",
+  "Classes/Camelot/Rogue.lua": "cff7710e2a024de5d4f143833a51c81c533cfe697b6c0fb266a537fab478f1c8",
   "Classes/Camelot/Shaman.lua": "20c180d59af1dde44c2ab648955b221f2771e4ae0424ee130f0840689f4972bc",
   "Classes/Camelot/Warlock.lua": "f1d16dbb32888ebc039b6761e282d9ed60b31915790d4ad05612a01946d0a869",
   "Classes/Camelot/Warrior.lua": "31a56c69bfc43ba5f0e68e11999c3f4e6a47edd7a40df526082b0626416b00cf",
