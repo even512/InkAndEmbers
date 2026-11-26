@@ -16,6 +16,7 @@ L.add("enUS", "p.Chronik", {
   toMates = "Companions", toMatesTip = "View companions", toMatesTip2 = "Who traveled with you",
   toProfile = "Profile", toProfileTip = "Profile, level flow and journal excerpt",
   toMilestones = "Milestones", toMilestonesTip = "View milestones", toMilestonesTip2 = "Every ten levels a tally of the journey, at level 60 the final page",
+  toRecap = "Previously on your journey", toRecapTip = "View the recap", toRecapTip2 = "What happened lately and what comes next",
 })
 
 -- journal/pages/ChronikViews.lua
@@ -341,3 +342,25 @@ L.add("enUS", "p.SchaetzeFunde", {
   noMatch = "No find matches this filter.",
 })
 
+-- journal/pages/ChronikRueckblick.lua
+L.add("enUS", "p.ChronikRueckblick", {
+  page = "RECAP", brand = "INK & EMBERS", title = "Previously on your journey", date = "{m}/{d}/{y}",
+  dateRange = "{from} – {to}", preview = "Preview", sessions_one = "%s session", sessions_other = "%s sessions",
+  standHead = "Where you stand", openHead = "What is still open", noteHead = "In the margin", standNone = "Nothing recorded yet.",
+  openNone = "Nothing is open right now.", pin = "Pinned: %s", progress = "%s (%s of %s)", picCaption = "%s",
+  picCaptionDate = "%s · %s", picTipHead = "The last route", picTipRange = "%s to %s", building = "The chronicle is still sorting. Look again in a moment.",
+  empty = "Too little has happened yet for a recap.", notReady = "The recap is not ready yet.",
+  doneHead = "Recently completed",
+  quoted = "“%s”",
+  bestLine = "Best find: %s",
+  moreTip = "Everything that is open",
+  picTipQuests_one = "%s quest turned in",
+  picTipQuests_other = "%s quests turned in",
+  picTipAccepts_one = "%s quest accepted",
+  picTipAccepts_other = "%s quests accepted",
+  openHere = "Around here",
+  openAway = "Elsewhere",
+  clickTip = "Click: show in the quest log",
+  questCombat = "The quest log does not open in combat. Try again afterwards.",
+  questFailed = "The quest log cannot be opened right now.",
+})

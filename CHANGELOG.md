@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.2.0
+
+**At a glance:** coming back to a character now greets you with a short story of where you left off, and after a break of three days or more the book opens a "Previously on your journey" page.
+
+### New
+
+**"Previously on your journey":** after a break of three days or more the book opens by itself on a recap page with a short story of your last sessions, your last handed-in quests retold in a few lines and your open quests grouped by nearby and elsewhere, where a click opens a quest in the Quest log, and a map of the zone showing turn-in and pick-up spots. You can also open it from a button in the Chronicle, or with `/chronik rueckblick`.
+
+### Changes
+
+**Item links:** Items in the journal now show their quality colour and the game tooltip on hover.
+
+**Welcome back:** the greeting note now tells in one or two sentences where you stopped and what comes next, instead of listing numbers, and only appears when there is something to say.
+
+**Simpler options:** the greeting options are down to Welcome, Recap after a long break and Narrator; the old pause and info switches are gone and your old settings are carried over without errors.
+
+**Campfire:** conversation notes no longer ask about the wilderness or the next town while you sit in a city or an instance.
+
+**Place names:** German and English texts now use the right articles and prepositions for zones, cities and dungeons.
+
+**Game data:** Quest, trainer and recipe data are updated to QuestieDB 1.1.6 and the latest What's Training.
+
 ## 1.1.1
 
 After the WoW Forever hotfix that hid the realm name, companions, campfire guests and "meet again" memories still recognise the same people as before. Quest, trainer and recipe data are updated to QuestieDB 1.1.4 and the latest What's Training, and your journal data is untouched.

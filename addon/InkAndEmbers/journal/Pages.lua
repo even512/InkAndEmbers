@@ -125,12 +125,9 @@ local CHECK = {
   toastMedal = function(v) return type(v) == "boolean" end,
   toastZone = function(v) return type(v) == "boolean" end,
   welcome = function(v) return type(v) == "boolean" end,
-  -- welcome note: minimum absence in seconds (0 = at every login) and which info lines the return note shows
-  welcomeAfter = function(v) return v == 0 or v == 3600 or v == 7200 or v == 14400 or v == 28800 or v == 86400 end,
-  welcomeSeen = function(v) return type(v) == "boolean" end,
-  welcomeQuests = function(v) return type(v) == "boolean" end,
-  welcomeRested = function(v) return type(v) == "boolean" end,
-  welcomePlan = function(v) return type(v) == "boolean" end,
+  -- "Zuvor auf Eurer Reise" (journal/model/Recap.lua): after a pause of 3 days or more the book opens by itself on the recap; off =
+  -- only the short welcome-back note (change "Begruessung neu"); missing = on
+  welcomeRecap = function(v) return type(v) == "boolean" end,
   -- narrator of the welcome card: "own" | "random" | an id of Theme.NARRATORS
   narrator = function(v)
     if v == "own" or v == "random" then return true end
@@ -176,8 +173,8 @@ local CHECK = {
     return v == nil or v == "all" or (type(v) == "number" and v == v and v > 0 and v < 2147483648 and v == math.floor(v))
   end,
 }
-local DEFAULT = { toast = true, toastSound = true, toastMedal = true, toastZone = true, welcome = true, narrator = "own", restReview = false, saveReminder = false, autoShots = true, welcomeAfter = 3600, welcomeSeen = true,
-  welcomeQuests = true, welcomeRested = true, welcomePlan = true, bookSounds = true, worldMap = true, worldPins = true,
+local DEFAULT = { toast = true, toastSound = true, toastMedal = true, toastZone = true, welcome = true, welcomeRecap = true, narrator = "own", restReview = false, saveReminder = false, autoShots = true,
+  bookSounds = true, worldMap = true, worldPins = true,
   albumFilter = "all", showHiddenChars = false, openLocked = false, openGroup = false, openRepeat = false, openClass = true,
   openCategory = false, trainerTodo = true, professionBar = true, auctionDock = true, talentHint = true, todoToast = true, levelSlip = true, milestoneSlip = true, trainFilter = "now", craftFilter = "trainer", heatKind = "stay" }
 
@@ -189,11 +186,25 @@ local function migrateWelcome(ui)
   ui.welcomeSlip = nil
 end
 
+-- Change "Begruessung neu": the pause choice and the four info switches of the welcome-back note are gone (the note says where and
+-- at what you stopped, and the recap opens after 3 days). The old keys are read no more and set to nil on first access; "welcome"
+-- and "narrator" stay.
+local OLD_WELCOME = { "welcomeAfter", "welcomeSeen", "welcomeQuests", "welcomeRested", "welcomePlan" }
+
+local function dropOldWelcome(ui)
+  for _, k in ipairs(OLD_WELCOME) do
+    if ui[k] ~= nil then ui[k] = nil end
+  end
+end
+
 function Pages.setting(key)
   local check = CHECK[key]
   if not check then return nil end
   local ui = uiTable(false)
-  if ui and ui.welcomeSlip ~= nil then migrateWelcome(ui) end
+  if ui then
+    if ui.welcomeSlip ~= nil then migrateWelcome(ui) end
+    dropOldWelcome(ui)
+  end
   local v = ui and ui[key]
   if v ~= nil and not isSecret(v) and check(v) then return v end
   return DEFAULT[key]
@@ -205,6 +216,7 @@ function Pages.setSetting(key, value)
   local ui = uiTable(true)
   if not ui then return false end
   if ui.welcomeSlip ~= nil then migrateWelcome(ui) end
+  dropOldWelcome(ui)
   ui[key] = value
   return true
 end

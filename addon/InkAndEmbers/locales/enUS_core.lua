@@ -59,6 +59,7 @@ L.add("enUS", "Core", {
   helpSound = "/chronik sound - turn the pop-up sound on/off",
   helpWelcome = "/chronik welcome - preview the welcome greeting",
   helpRest = "/chronik rest - preview the \"Since your last rest\" recap",
+  helpRueckblick = "/chronik recap - open the recap \"Previously on your journey\" in the book as a preview",
   helpMeter = "/chronik meter - turn the Damage Meter on automatically: \"meter on\" or \"meter off\" (also in settings)",
   helpTodo = "/chronik todo - show/hide open to-dos at the screen edge (\"todo reset\" restores position and size)",
   helpQuests = "/chronik quests on|off - turn the own quest tracker on/off, hides the Questie and Blizzard trackers (WoW Forever only); \"quests hint [done]\" previews the progress hint at the handle",

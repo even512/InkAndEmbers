@@ -55,7 +55,7 @@ end
 
 local TX = ns.Locale.ns("m.Reunion", {
   dateShort = "{d}.{m}.",
-  dungeonDone = "{dungeon} zusammen geschafft, {date}",
+  dungeonDone = "Zusammen geschafft: {dungeon}, {date}",
   dungeonDoneAny = "Einen Dungeon zusammen geschafft, {date}",
   dungeonFought = "Mit Euch in {dungeon} gekämpft, {date}",
   dungeonFoughtAny = "Mit Euch in einem Dungeon gekämpft, {date}",
@@ -301,22 +301,29 @@ local function withTimes(text, n)
   return text
 end
 
+-- text with place names: "in {zone}" gets preposition + article from the core Grammar (Grammar.lua)
+local function placeText(key, args, places)
+  local G = ns.Grammar
+  if G then return G.fmt(TX[key], args, places) end
+  return TX(key, args)
+end
+
 local function linesOf(e)
   local out = {}
   local d = e.dungeon
   if d then
     local date = dateText(d.d, d.m)
     local key = (d.done and "dungeonDone" or "dungeonFought") .. (d.name and "" or "Any")
-    out[#out + 1] = withTimes(TX(key, { dungeon = d.name, date = date }), d.n)
+    out[#out + 1] = withTimes(placeText(key, { dungeon = d.name, date = date }, { dungeon = "dungeon" }), d.n)
   end
   local f = e.fire
   if f then
     local date = dateText(f.d, f.m)
-    out[#out + 1] = withTimes(TX(f.zone and "fire" or "fireAny", { zone = f.zone, date = date }), f.n)
+    out[#out + 1] = withTimes(placeText(f.zone and "fire" or "fireAny", { zone = f.zone, date = date }, { zone = "zone" }), f.n)
   end
   if #out == 0 and e.together then
     local g = e.together
-    out[1] = TX(g.zone and "togetherZone" or "together", { zone = g.zone, date = dateText(g.d, g.m) })
+    out[1] = placeText(g.zone and "togetherZone" or "together", { zone = g.zone, date = dateText(g.d, g.m) }, { zone = "zone" })
   end
   return out
 end

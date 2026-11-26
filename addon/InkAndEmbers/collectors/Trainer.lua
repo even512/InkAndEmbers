@@ -889,6 +889,13 @@ local function fill(text, args)
   return ns.Locale.fmt(text, args)
 end
 
+-- "bei Eurem Lehrer in {zone}" -> "... im Brachland" (core Grammar.lua)
+local function placeFill(text, args)
+  local G = ns.Grammar
+  if G then return G.fmt(text, args, { zone = "zone" }) end
+  return fill(text, args)
+end
+
 local function cap(s)
   return (s:gsub("^%l", string.upper))
 end
@@ -1001,9 +1008,9 @@ function Trainer.levelSlipContent(level)
   out.trainer = zone or tname
   local whereFull
   if tname and zone then
-    whereFull = fill(T.slipWhereBoth, { trainer = tname, zone = zone })
+    whereFull = placeFill(T.slipWhereBoth, { trainer = tname, zone = zone })
   elseif zone then
-    whereFull = fill(T.slipWhereZone, { zone = zone })
+    whereFull = placeFill(T.slipWhereZone, { zone = zone })
   elseif tname then
     whereFull = fill(T.slipWhereTrainer, { trainer = tname })
   else

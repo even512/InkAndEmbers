@@ -6,6 +6,13 @@
 -- Sanitize.display. No ticker, no OnUpdate; frames are built on first open.
 local _, ns = ...
 
+-- Locale call with place names (core Grammar.lua): "in %s" -> "im Brachland" / "in the Barrens"
+local function placeCall(TT, key, places, ...)
+  local G = ns.Grammar
+  if G then return G.call(TT, key, places, ...) end
+  return TT(key, ...)
+end
+
 local Journal = ns.Journal
 local W, Pages = Journal and Journal.Widgets, Journal and Journal.Pages
 local D = W and W.Diary
@@ -126,6 +133,7 @@ local function buildDay(parent, x, w, bx, bw, bottom)
   local top = DAY_TEXT_Y
   u.tv = W.NewTextView(parent, { width = bw, height = bottom - top, size = Diary.TEXT_SIZE, spacing = 5, font = "text", color = "ink" })
   u.tv.frame:SetPoint("TOPLEFT", parent, "TOPLEFT", bx, -top)
+  W.enableItemLinks(u.tv.frame) -- the find of the day: original item tooltip on hover
   return u
 end
 
@@ -165,6 +173,9 @@ function Diary:Entry(i)
   if e and not (live and self.dirty) then return e end
   local f = Journal.Days.facts(self.index, d.key, { now = self.now })
   e = f and Journal.DiaryTexts.entry(f, { dayNo = i }) or nil
+  -- the best find of the day: shown in the text as a coloured item link with the game tooltip (fillDay)
+  local best = e and type(f.loot) == "table" and f.loot.best or nil
+  if type(best) == "table" and best.name then e.item = { name = best.name, itemID = best.itemID, quality = best.quality } end
   self.cache[d.key] = e
   return e
 end
@@ -173,7 +184,11 @@ local function fillDay(u, e, emptyHead, emptyBody)
   if e then
     u.head:SetText(e.title)
     set(u.sub, e.sub)
-    u.tv:SetText(e.body)
+    local body = e.body
+    if type(e.item) == "table" and type(body) == "string" then
+      body = (W.linkItem(body, e.item.name, e.item.itemID, e.item.quality))
+    end
+    u.tv:SetText(body)
     u.tv.text:SetTextColor(W.color("ink"))
   else
     u.head:SetText(emptyHead)
@@ -356,7 +371,7 @@ function Mates:Lines(p)
     name = name,
     level = levelText(p) or "",
     kind = Mates.kindText(p),
-    first = MT("firstMet", zone, self:DateText(p.firstT)),
+    first = placeCall(MT, "firstMet", { [1] = "zone" }, zone, self:DateText(p.firstT)),
     stats = Mates.statsText(p),
     lastZone = disp(p.lastZone, 40),
   }

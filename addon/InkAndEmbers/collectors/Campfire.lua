@@ -2,6 +2,13 @@
 -- A session starts when the sit aura (Campfire.SIT_SPELLS) appears on the player outside combat (or after the sit key/SIT emote); it ends on movement, standing up, combat, zone change, loading screen, death, taxi, logout or IDLE_MAX.
 -- Read only out of combat; every client value is checked for secret values first. Names of other players are foreign text: log via Sanitize.field, display via Sanitize.display.
 local _, ns = ...
+
+-- Locale call with place names (core Grammar.lua): "in %s" -> "im Brachland" / "in the Barrens"
+local function placeCall(TT, key, places, ...)
+  local G = ns.Grammar
+  if G then return G.call(TT, key, places, ...) end
+  return TT(key, ...)
+end
 local Core, Store = ns.Core, ns.Store
 
 -- chat messages of /chronik feuer and /chronik sim feuer (English: locales/enUS_core.lua, section 'col.Campfire'; pattern: docs/i18n.md).
@@ -1280,7 +1287,7 @@ function Campfire.slash(rest, all)
   Core.print(T("roundsSaved", saved, probe))
   if s then
     local zone = s.zone and ns.Sanitize.display(s.zone) or "?"
-    Core.print(T("roundSummary", session and T.thisRound or T.lastRound,
+    Core.print(placeCall(T, "roundSummary", { [3] = "zone" }, session and T.thisRound or T.lastRound,
       s.sim and T.probe or "", zone, #s.people, s.said or 0, s.written and T.inLog or (session and "" or T.notInLog)))
     local t = session and now() or nil
     for _, p in ipairs(s.people) do Core.print(personLine(p, t)) end

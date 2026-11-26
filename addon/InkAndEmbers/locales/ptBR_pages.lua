@@ -13,6 +13,7 @@ L.add("ptBR", "p.Chronik", {
   toDiary = "Diário", toDiaryTip = "Ler o diário", toDiaryTip2 = "Cada dia de jogo em um registro, dia após dia",
   toMates = "Companheiros", toMatesTip = "Ver companheiros", toMatesTip2 = "Quem viajou com você",
   toProfile = "Perfil", toProfileTip = "Perfil, evolução de níveis e trecho do diário",
+  toRecap = "Antes, na sua jornada", toRecapTip = "Ver o resumo", toRecapTip2 = "O que aconteceu recentemente e o que vem a seguir",
 })
 
 L.add("ptBR", "p.ChronikViews.Diary", {
@@ -274,3 +275,25 @@ L.add("ptBR", "p.SchaetzeAuktion", {
   noPrice = "–",
 })
 
+-- journal/pages/ChronikRueckblick.lua
+L.add("ptBR", "p.ChronikRueckblick", {
+  page = "RESUMO", brand = "INK & EMBERS", title = "Antes, na sua jornada", date = "{d}/{m}/{y}",
+  dateRange = "{from} – {to}", preview = "Prévia", sessions_one = "%s sessão", sessions_other = "%s sessões",
+  standHead = "Onde você está", openHead = "O que está em aberto", noteHead = "À margem", standNone = "Nada anotado ainda.",
+  openNone = "No momento nada está em aberto.", pin = "Fixada: %s", progress = "%s (%s de %s)", picCaption = "%s",
+  picCaptionDate = "%s · %s", picTipHead = "A última rota", picTipRange = "%s a %s", building = "A crônica ainda está organizando. Veja de novo em instantes.",
+  empty = "Ainda aconteceu pouco para um resumo.", notReady = "O resumo ainda não está pronto.",
+  doneHead = "Concluído há pouco",
+  quoted = "“%s”",
+  bestLine = "Melhor achado: %s",
+  moreTip = "Tudo o que está em aberto",
+  picTipQuests_one = "%s missão entregue",
+  picTipQuests_other = "%s missões entregues",
+  picTipAccepts_one = "%s missão aceita",
+  picTipAccepts_other = "%s missões aceitas",
+  openHere = "Por aqui",
+  openAway = "Em outro lugar",
+  clickTip = "Clique: mostrar no registro de missões",
+  questCombat = "O registro de missões não abre em combate. Tente de novo depois.",
+  questFailed = "O registro de missões não pode ser aberto agora.",
+})

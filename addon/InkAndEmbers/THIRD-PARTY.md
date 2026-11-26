@@ -24,7 +24,7 @@ The fonts are not renamed or modified.
 
 `InkAndEmbers_QuestData` and `InkAndEmbers_Data` contain data derived from
 **QuestieDB** (https://github.com/Questie/QuestieDB, Questie team and contributors, version
-1.1.4). They are distributed under the GNU General Public License v3
+1.1.6). They are distributed under the GNU General Public License v3
 (see `LICENSE` and `LICENSE-NOTE.md` in those folders). Further data: German names and zone
 assignment from the Forever database (data.morthen.net); map overlay numbers from the client
 tables of the Forever build via wago.tools. The name and logo "Questie" are not used.

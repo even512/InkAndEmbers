@@ -147,9 +147,27 @@ function CampfireTexts.add(def)
   return true
 end
 
+-- Where a sentence makes sense (CampfireTalk sets c.city = a capital or town, c.rest = resting area / inn, c.instance = in a
+-- dungeon / raid / battleground): "the nearest town" never in a town, "out here in the wild" never in a town or dungeon,
+-- the sun and herbs not underground, an inn not asked for while resting in one.
+local function wild(c) return c.city ~= true and c.instance ~= true end
+local function sky(c) return c.instance ~= true end
+local function noRest(c) return c.rest ~= true and c.city ~= true end
+CampfireTexts.WHERE = {
+  place_city = wild, place_quiet = wild, place_fish = wild, place_calm = wild, gen_herbs = wild, person_class = wild,
+  past_face = wild, level_further = wild,
+  time_evening = sky, time_morning_zone = sky, time_day_zone = sky, time_evening_dark = sky, fire_watch = sky,
+  gen_inn = noRest,
+}
+
 local function add(id, cat, du, ihr, why, extra)
   extra = extra or {}
   extra.id, extra.cat, extra.du, extra.ihr, extra.why = id, cat, du, ihr or du, why
+  local where = CampfireTexts.WHERE[id]
+  if where then
+    local when = extra.when
+    extra.when = when and function(c) return where(c) and when(c) end or where
+  end
   return CampfireTexts.add(extra)
 end
 
@@ -166,10 +184,10 @@ add("arrive_wood", "arrive", "Gut, dass hier jemand Holz gesammelt hat. Danke eu
 -- time of day
 add("time_morning", "time", "Schon so früh unterwegs? Ein warmes Feuer am Morgen ist die halbe Rüstung.", nil,
   "Es ist Morgen.", { when = function(c) return c.part == "morning" end })
-add("time_evening", "time", "Die Sonne geht über {zone} unter. Zeit für Geschichten.", nil,
+add("time_evening", "time", "In {zone} geht die Sonne unter. Zeit für Geschichten.", nil,
   "Es ist Abend in {zone}.", { when = function(c) return c.part == "evening" end })
-add("time_night", "time", "Nachts klingt {zone} ganz anders. Hört ihr das auch?",
-  "Nachts klingt {zone} ganz anders. Hört Ihr das auch?", "Es ist Nacht in {zone}.",
+add("time_night", "time", "Nachts klingt es in {zone} ganz anders. Hört ihr das auch?",
+  "Nachts klingt es in {zone} ganz anders. Hört Ihr das auch?", "Es ist Nacht in {zone}.",
   { when = function(c) return c.part == "night" end })
 add("time_day", "time", "Eine kurze Rast zwischendurch, dann geht's weiter.", nil,
   "Es ist Tag.", { when = function(c) return c.part == "day" end })
@@ -190,15 +208,15 @@ add("rare_met", "rare", "Seid ihr schon mal {rare} begegnet? Ein zäher Brocken.
 
 -- quest
 add("quest_done", "quest", "Endlich „{quest}“ abgeschlossen. Ich hätte nicht gedacht, dass das so lange dauert.", nil,
-  "Ihr habt vor Kurzem „{quest}“ abgegeben.", { fact = "quest" })
-add("quest_asked", "quest", "Hat jemand von euch auch „{quest}“ gemacht? Was für eine Geschichte.",
-  "Hat jemand von Euch auch „{quest}“ gemacht? Was für eine Geschichte.", "Ihr habt vor Kurzem „{quest}“ abgegeben.",
+  "Ihr habt vor Kurzem die Quest „{quest}“ abgegeben.", { fact = "quest" })
+add("quest_asked", "quest", "Hat jemand von euch auch die Quest „{quest}“ gemacht? Was für eine Geschichte.",
+  "Hat jemand von Euch auch die Quest „{quest}“ gemacht? Was für eine Geschichte.", "Ihr habt vor Kurzem die Quest „{quest}“ abgegeben.",
   { fact = "quest" })
 
 -- new zone
 add("zone_first", "zone", "Ich bin zum ersten Mal in {neuzone}. Was sollte ich gesehen haben?", nil,
   "Ihr seid kürzlich zum ersten Mal in {neuzone} angekommen.", { fact = "newzone" })
-add("zone_new", "zone", "{neuzone} ist neu für mich. Gibt es hier etwas, wovor man sich hüten muss?", nil,
+add("zone_new", "zone", "Ich bin neu in {neuzone}. Gibt es hier etwas, wovor man sich hüten muss?", nil,
   "Ihr seid kürzlich zum ersten Mal in {neuzone} angekommen.", { fact = "newzone" })
 
 -- level
@@ -245,11 +263,11 @@ add("past_seen", "past", "{name}! Wir saßen doch schon in {altzone} zusammen am
 add("past_tradition", "past", "Schon das {mal} Feuer mit dir, {name}. Langsam wird das eine Tradition.",
   "Schon das {mal} Feuer mit Euch, {name}. Langsam wird das eine Tradition.", "Ihr kennt {name} von früheren Feuern.",
   { person = true, when = past })
-add("past_levels", "past", "{name}, seit {altzone} hast du ordentlich Stufen gesammelt.",
-  "{name}, seit {altzone} habt Ihr ordentlich Stufen gesammelt.", "{name} ist seit dem letzten gemeinsamen Feuer gestiegen.",
+add("past_levels", "past", "{name}, seit dem Feuer in {altzone} hast du ordentlich Stufen gesammelt.",
+  "{name}, seit dem Feuer in {altzone} habt Ihr ordentlich Stufen gesammelt.", "{name} ist seit dem letzten gemeinsamen Feuer gestiegen.",
   { person = true, when = function(c) return past(c) and c.person.past.level ~= nil and c.person.level ~= nil and c.person.level - c.person.past.level >= 3 end })
-add("past_hello", "past", "Schön, dich wiederzusehen, {name}. Wie ist es dir seit {altzone} ergangen?",
-  "Schön, Euch wiederzusehen, {name}. Wie ist es Euch seit {altzone} ergangen?", "Ihr kennt {name} von einem früheren Feuer.",
+add("past_hello", "past", "Schön, dich wiederzusehen, {name}. Wie ist es dir seit dem Feuer in {altzone} ergangen?",
+  "Schön, Euch wiederzusehen, {name}. Wie ist es Euch seit dem Feuer in {altzone} ergangen?", "Ihr kennt {name} von einem früheren Feuer.",
   { person = true, when = past })
 
 -- place
@@ -304,7 +322,7 @@ add("arrive_smoke", "arrive", "Den Rauch habe ich schon von Weitem gesehen. Gut,
   "Ihr seid gerade erst am Feuer angekommen.", { when = early })
 
 -- time of day, partly with the zone
-add("time_morning_zone", "time", "Morgens ist {zone} am schönsten, bevor alle wach sind.", nil,
+add("time_morning_zone", "time", "Morgens ist es in {zone} am schönsten, bevor alle wach sind.", nil,
   "Es ist Morgen in {zone}.", { when = partIs("morning") })
 add("time_evening_dark", "time", "Bald wird es dunkel. Ich bleibe lieber am Feuer.", nil,
   "Es ist Abend.", { when = partIs("evening") })
@@ -332,22 +350,22 @@ add("rare_chance", "rare", "Kennt jemand {rare}? Ich bin vorhin zufällig darauf
 
 -- quest
 add("quest_happy", "quest", "„{quest}“ ist erledigt. Der Questgeber war zufrieden, ich auch.", nil,
-  "Ihr habt vor Kurzem „{quest}“ abgegeben.", { fact = "quest" })
-add("quest_tip", "quest", "Wer „{quest}“ noch vor sich hat: Ich kann einen Tipp geben.", nil,
-  "Ihr habt vor Kurzem „{quest}“ abgegeben.", { fact = "quest" })
-add("quest_break", "quest", "Nach „{quest}“ brauchte ich dringend eine Pause.", nil,
-  "Ihr habt vor Kurzem „{quest}“ abgegeben.", { fact = "quest" })
-add("quest_walk", "quest", "Für „{quest}“ bin ich ganz schön herumgelaufen. Jetzt sitze ich erst mal.", nil,
-  "Ihr habt vor Kurzem „{quest}“ abgegeben.", { fact = "quest" })
+  "Ihr habt vor Kurzem die Quest „{quest}“ abgegeben.", { fact = "quest" })
+add("quest_tip", "quest", "Wer die Quest „{quest}“ noch vor sich hat: Ich kann einen Tipp geben.", nil,
+  "Ihr habt vor Kurzem die Quest „{quest}“ abgegeben.", { fact = "quest" })
+add("quest_break", "quest", "Nach der Quest „{quest}“ brauchte ich dringend eine Pause.", nil,
+  "Ihr habt vor Kurzem die Quest „{quest}“ abgegeben.", { fact = "quest" })
+add("quest_walk", "quest", "Für die Quest „{quest}“ bin ich ganz schön herumgelaufen. Jetzt sitze ich erst mal.", nil,
+  "Ihr habt vor Kurzem die Quest „{quest}“ abgegeben.", { fact = "quest" })
 
 -- new zone
 add("zone_trader", "zone", "Ich bin noch nicht lange in {neuzone}. Wo findet man hier einen Händler?", nil,
   "Ihr seid kürzlich zum ersten Mal in {neuzone} angekommen.", { fact = "newzone" })
-add("zone_other", "zone", "{neuzone} hatte ich mir anders vorgestellt. Größer irgendwie.", nil,
+add("zone_other", "zone", "Ich hatte mir alles in {neuzone} anders vorgestellt. Größer irgendwie.", nil,
   "Ihr seid kürzlich zum ersten Mal in {neuzone} angekommen.", { fact = "newzone" })
 add("zone_lost", "zone", "Kennt sich jemand in {neuzone} aus? Ich habe mich schon zweimal verlaufen.", nil,
   "Ihr seid kürzlich zum ersten Mal in {neuzone} angekommen.", { fact = "newzone" })
-add("zone_danger", "zone", "Ist {neuzone} gefährlich? Ich bin neu hier.", nil,
+add("zone_danger", "zone", "Ist es in {neuzone} gefährlich? Ich bin neu hier.", nil,
   "Ihr seid kürzlich zum ersten Mal in {neuzone} angekommen.", { fact = "newzone" })
 
 -- level
@@ -427,9 +445,9 @@ add("sub_been", "subzone", "Wart ihr schon in {unterzone}? Ich bin vorhin dort v
   { fact = "subzone" })
 add("sub_odd", "subzone", "In {unterzone} war ich vorhin zum ersten Mal. Seltsamer Ort.", nil,
   "Ihr wart vor Kurzem zum ersten Mal in {unterzone}.", { fact = "subzone" })
-add("sub_again", "subzone", "{unterzone} habe ich vorhin entdeckt. Da muss ich noch mal hin.", nil,
+add("sub_again", "subzone", "Vorhin entdeckt: {unterzone}. Da muss ich noch mal hin.", nil,
   "Ihr wart vor Kurzem zum ersten Mal in {unterzone}.", { fact = "subzone" })
-add("sub_story", "subzone", "Kennt jemand {unterzone}? Ich wüsste gern, was es damit auf sich hat.", nil,
+add("sub_story", "subzone", "Ich wüsste gern, was es mit {unterzone} auf sich hat. Weiß das jemand?", nil,
   "Ihr wart vor Kurzem zum ersten Mal in {unterzone}.", { fact = "subzone" })
 add("sub_quiet", "subzone", "Auf dem Weg hierher kam ich durch {unterzone}. Ruhig dort, fast zu ruhig.", nil,
   "Ihr wart vor Kurzem zum ersten Mal in {unterzone}.", { fact = "subzone" })
@@ -496,8 +514,8 @@ add("past_fate", "past", "{name}, ich glaube langsam, wir treffen uns nicht zuf�
   "Ihr kennt {name} von einem früheren Feuer.", { person = true, when = past })
 add("past_face", "past", "Gut, ein bekanntes Gesicht zu sehen, {name}. Die Wege sind einsam genug.", nil,
   "Ihr kennt {name} von einem früheren Feuer.", { person = true, when = past })
-add("past_news", "past", "{name}, seit {altzone} ist bei mir einiges passiert. Und bei dir?",
-  "{name}, seit {altzone} ist bei mir einiges passiert. Und bei Euch?", "Ihr kennt {name} von einem früheren Feuer in {altzone}.",
+add("past_news", "past", "{name}, seit dem Feuer in {altzone} ist bei mir einiges passiert. Und bei dir?",
+  "{name}, seit dem Feuer in {altzone} ist bei mir einiges passiert. Und bei Euch?", "Ihr kennt {name} von einem früheren Feuer in {altzone}.",
   { person = true, when = past })
 add("past_was_level", "past", "{name}, beim letzten Feuer warst du noch Stufe {altstufe}. Jetzt schon {stufe}.",
   "{name}, beim letzten Feuer wart Ihr noch Stufe {altstufe}. Jetzt schon {stufe}.",
@@ -506,13 +524,21 @@ add("past_was_level", "past", "{name}, beim letzten Feuer warst du noch Stufe {a
 
 -- place
 add("place_city", "place", "Wie kommt man von {zone} am schnellsten in die nächste Stadt?", nil, "Ihr sitzt in {zone}.")
-add("place_quiet", "place", "Ich mag {zone}. Wenig Leute, viel Ruhe.", nil, "Ihr sitzt in {zone}.")
+add("place_quiet", "place", "Ich mag es in {zone}. Wenig Leute, viel Ruhe.", nil, "Ihr sitzt in {zone}.")
 add("place_sight", "place", "Gibt es in {zone} etwas, das man unbedingt gesehen haben muss?", nil, "Ihr sitzt in {zone}.")
 add("place_people", "place", "Wer lebt eigentlich in {zone}, wenn nicht gerade Abenteurer durchziehen?", nil,
   "Ihr sitzt in {zone}.")
 add("place_noise", "place", "In {zone} hört man nachts seltsame Geräusche. Weiß jemand, was das ist?", nil,
   "Ihr sitzt in {zone}.")
 add("place_calm", "place", "Hier in {zone} ist es ruhiger, als ich dachte.", nil, "Ihr sitzt in {zone}.")
+-- in a town: what one asks there
+local function town(c) return c.city == true end
+add("place_town_market", "place", "In {zone} bekommt man alles. Wo kauft ihr eure Vorräte?",
+  "In {zone} bekommt man alles. Wo kauft Ihr Eure Vorräte?", "Ihr sitzt in {zone}.", { when = town })
+add("place_town_bustle", "place", "So viel Trubel in {zone}. Da ist so ein Feuer eine kleine Insel.", nil,
+  "Ihr sitzt in {zone}.", { when = town })
+add("place_town_leave", "place", "Wohin geht's, wenn ihr aus {zone} aufbrecht?", "Wohin geht es, wenn Ihr aus {zone} aufbrecht?",
+  "Ihr sitzt in {zone}.", { when = town })
 
 -- general
 add("gen_bandage", "general", "Hat jemand Verbände übrig? Meine sind aufgebraucht.", nil, "Ein Satz für die Runde am Feuer.")
@@ -556,8 +582,8 @@ local function topic(kind) return function(c) return c.topic == kind end end
 add("follow_rare", "follow", "Falls ihr {rare} sucht: Nehmt lieber Verstärkung mit.",
   "Falls Ihr {rare} sucht: Nehmt lieber Verstärkung mit.", "Ihr habt zuletzt von {rare} erzählt.",
   { fact = "rare", when = topic("rare") })
-add("follow_quest", "follow", "Wer „{quest}“ noch vor sich hat: Lasst euch Zeit, es lohnt sich.",
-  "Wer „{quest}“ noch vor sich hat: Lasst Euch Zeit, es lohnt sich.", "Ihr habt zuletzt von „{quest}“ erzählt.",
+add("follow_quest", "follow", "Wer die Quest „{quest}“ noch vor sich hat: Lasst euch Zeit, es lohnt sich.",
+  "Wer die Quest „{quest}“ noch vor sich hat: Lasst Euch Zeit, es lohnt sich.", "Ihr habt zuletzt von der Quest „{quest}“ erzählt.",
   { fact = "quest", when = topic("quest") })
 add("follow_death", "follow", "In {todort} passe ich jetzt besser auf. Habt ihr einen Rat?",
   "In {todort} passe ich jetzt besser auf. Habt Ihr einen Rat?", "Ihr habt zuletzt von Eurem Tod in {todort} erzählt.",

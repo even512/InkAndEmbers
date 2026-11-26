@@ -30,9 +30,9 @@ DiaryTexts.V = V -- German source (tests); the active language supplies TX[kind]
 V.open = {
   "{zone}, {=when}. Der Tee war kalt, die Laune gut.",
   "{zone}, {=when}. Stiefel geschnürt und los.",
-  "{zone} war {=when} mein Ausgangspunkt.",
+  "Mein Ausgangspunkt {=when}: {zone}.",
   "{=When} ging es los. Startpunkt: {zone}.",
-  "{zone} sah mich {=when} aufbrechen.",
+  "{=When} bin ich in {zone} aufgebrochen.",
   "{zone}, {=when}: Bündel gepackt, auf geht's.",
   "{=When} stand ich da und überlegte, wohin. Ringsum: {zone}.",
 }
@@ -58,10 +58,10 @@ V.stay = {
   "Ich habe mich dort gründlich umgesehen, statt weiterzuziehen.",
 }
 V.instance = {
-  "{inst} stand auch auf dem Plan. Wir haben es überlebt, die meisten jedenfalls.",
-  "{inst} war dunkel und eng, aber wir kamen wieder heraus.",
+  "Auch ein Abstecher nach {inst} stand auf dem Plan. Wir haben es überlebt, die meisten jedenfalls.",
+  "In {inst} war es dunkel und eng, aber wir kamen wieder heraus.",
   "Ein gewagter Abstecher: {inst}. Danach habe ich lange die Sonne genossen.",
-  "{inst} hat uns ordentlich gefordert. Mehr dazu, wenn meine Hände nicht mehr zittern.",
+  "In {inst} wurden wir ordentlich gefordert. Mehr dazu, wenn meine Hände nicht mehr zittern.",
 }
 V.killsTop = {
   "{=n} Gegner haben heute den Kürzeren gezogen. Am häufigsten erwischt hat es: {top} ({=topn}-mal).",
@@ -154,13 +154,13 @@ V.deathsMore = {
 V.questsNamed = {
   "{=n} Quests erledigt, darunter „{quest}“.",
   "Ich habe {=n} Aufgaben abgehakt. Im Kopf geblieben ist mir „{quest}“.",
-  "{=n} Quests abgegeben. „{quest}“ war die letzte davon, und die Belohnung kam gerade recht.",
+  "{=n} Quests abgegeben. Die letzte davon war die Quest „{quest}“, und die Belohnung kam gerade recht.",
   "Für {=n} Leute habe ich heute etwas erledigt, zuletzt „{quest}“.",
   "Die Liste wurde kürzer: {=n} Aufgaben, zuletzt „{quest}“.",
 }
 V.questOneNamed = {
   "Eine Aufgabe erledigt: „{quest}“.",
-  "Nur „{quest}“ abgegeben, aber immerhin.",
+  "Nur die Quest „{quest}“ abgegeben, aber immerhin.",
   "„{quest}“ ist erledigt. Eine weniger.",
   "Heute habe ich „{quest}“ abgeschlossen.",
 }
@@ -303,7 +303,7 @@ V.short = {
   "{zone}, {=when}: nur kurz vorbeigeschaut. Nichts Besonderes passiert, und das ist auch mal schön.",
   "{zone}, {=when}, nur ein paar Schritte. Mehr gibt es nicht zu berichten.",
   "Ein kurzer Besuch, {=when}: {zone}. Dann rief das echte Leben.",
-  "{zone} sah mich {=when} nur kurz. Ich habe mich umgesehen und bin wieder gegangen.",
+  "In {zone} war ich {=when} nur kurz. Ich habe mich umgesehen und bin wieder gegangen.",
 }
 V.shortNoZone = {
   "{=When} nur kurz hereingeschaut. Nichts Besonderes passiert, und das ist auch mal schön.",

@@ -48,6 +48,7 @@ L.add("ptBR", "Core", {
   helpSound = "/chronik sound - ativar/desativar o som das notificações",
   helpWelcome = "/chronik welcome - prévia da mensagem de boas-vindas",
   helpRest = "/chronik rest - prévia do resumo \"Desde seu último descanso\"",
+  helpRueckblick = "/chronik recap - abrir o resumo \"Antes, na sua jornada\" no livro (prévia)",
   helpMeter = "/chronik meter - ativar ou desativar a ativação automática do medidor de dano: \"meter on\" ou \"meter off\" (também nas configurações)",
   helpTodo = "/chronik todo - mostrar/ocultar tarefas pendentes na borda da tela (\"todo reset\" restaura posição e tamanho)",
   helpNote = "/chronik note - mostrar/ocultar o campo de nota rápida (Enter adiciona uma nota)",

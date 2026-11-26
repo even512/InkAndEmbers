@@ -12,6 +12,13 @@
 -- Sanitize.display. No ticker, no OnUpdate; frames are built on first open.
 local _, ns = ...
 
+-- Locale call with place names (core Grammar.lua): "in %s" -> "im Brachland" / "in the Barrens"
+local function placeCall(TT, key, places, ...)
+  local G = ns.Grammar
+  if G then return G.call(TT, key, places, ...) end
+  return TT(key, ...)
+end
+
 local Journal = ns.Journal
 local W, Pages = Journal and Journal.Widgets, Journal and Journal.Pages
 local D = W and W.Diary
@@ -510,7 +517,7 @@ local function subText(index, sec)
     parts[#parts + 1] = from == to and from or T("dateRange", { from = from, to = to })
   end
   local place = sec.state == "done" and disp(sec.placeEnd, View.NAME_MAX) or nil
-  if place then parts[#parts + 1] = T("reachedIn", place) end
+  if place then parts[#parts + 1] = placeCall(T, "reachedIn", { [1] = "zone" }, place) end
   return table.concat(parts, " · ")
 end
 

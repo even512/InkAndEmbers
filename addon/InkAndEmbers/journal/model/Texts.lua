@@ -24,6 +24,8 @@ end
 
 Texts.VAR_MAX = 60 -- bytes per inserted raw value
 Texts.SAFE_MAX = 400 -- bytes per {=name} text (already display-ready; longer is a caller error)
+-- raw placeholders that hold place names: "in {zone}" becomes "im Brachland" / "in the Barrens" (Grammar.fill)
+Texts.PLACES = { zone = "zone", inst = "dungeon" }
 Texts.GROUPS = { margin = true, diary = true, moment = true, curio = true, motto = true, seal = true }
 local NBSP = "\194\160"
 
@@ -340,9 +342,9 @@ function Texts.fill(tpl, vars)
   vars = type(vars) == "table" and vars or {}
   local missing = false
   local display = ns.Sanitize and ns.Sanitize.display
-  local out = gsub(tpl, "{(=?)([%a_][%w_]*)}", function(safe, name)
+  local function value(name, isSafe)
     local v = vars[name]
-    if safe == "=" then
+    if isSafe then
       if isSecret(v) then
         missing = true
         return ""
@@ -363,7 +365,15 @@ function Texts.fill(tpl, vars)
       return ""
     end
     return s
-  end)
+  end
+  local out
+  local Grammar = ns.Grammar
+  if Grammar then
+    -- place names get their preposition/article (Grammar.lua); the name itself is the sanitized value from above
+    out = Grammar.fill(tpl, value, Texts.PLACES)
+  else
+    out = gsub(tpl, "{(=?)([%a_][%w_]*)}", function(safe, name) return value(name, safe == "=") end)
+  end
   if missing then return nil end
   return out
 end

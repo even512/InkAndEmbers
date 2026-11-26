@@ -48,6 +48,9 @@ locales\itIT_pages.lua
 Core.lua
 Sanitize.lua
 Names.lua
+# Place names in sentences (articles/prepositions, deDE + enUS); early so the journal and the modules can use it.
+GrammarLexicon.lua
+Grammar.lua
 Patterns.lua
 Store.lua
 Guard.lua
@@ -110,6 +113,8 @@ journal\model\Meilensteine.lua
 journal\model\Vermaechtnis.lua
 journal\model\Reunion.lua
 journal\model\Welcome.lua
+journal\model\RecapTexts.lua
+journal\model\Recap.lua
 journal\model\Days.lua
 journal\model\DiaryTexts.lua
 journal\model\NoteMarkup.lua
@@ -146,6 +151,7 @@ journal\pages\Chronik.lua
 journal\pages\ChronikViews.lua
 journal\pages\ChronikDungeons.lua
 journal\pages\ChronikMeilensteine.lua
+journal\pages\ChronikRueckblick.lua
 journal\pages\ChronikVermaechtnis.lua
 journal\pages\Quests.lua
 journal\pages\Dungeons.lua

@@ -17,6 +17,13 @@
 --   Model.flightAt(model, t)    -> start, landing of the flight running at t (nil outside a flight)
 local _, ns = ...
 
+-- Locale call with place names (core Grammar.lua): "in %s" -> "im Brachland" / "in the Barrens"
+local function placeCall(TT, key, places, ...)
+  local G = ns.Grammar
+  if G then return G.call(TT, key, places, ...) end
+  return TT(key, ...)
+end
+
 local Journal = ns.Journal or {}
 ns.Journal = Journal
 
@@ -1188,7 +1195,7 @@ local function story(J, c, nextC)
   local d = a.deaths[1]
   if d then
     local where = d.map and mapName(J, d.map)
-    if d.global == 1 then add(100, (where and single(where)) and MT("firstDeathIn", where) or MT.firstDeath)
+    if d.global == 1 then add(100, (where and single(where)) and placeCall(MT, "firstDeathIn", { [1] = "zone" }, where) or MT.firstDeath)
     elseif #a.deaths >= 2 then add(40, MT("deathsN", numword(#a.deaths)))
     end
   end
@@ -1215,7 +1222,7 @@ local function story(J, c, nextC)
   if f then
     local to = plain(f.to)
     to = to and (match(to, "^([^,]+)") or to)
-    add(35, to and (single(to) and MT("flightTo", to) or MT("flightColon", to)) or nil)
+    add(35, to and (single(to) and placeCall(MT, "flightTo", { [1] = "point" }, to) or MT("flightColon", to)) or nil)
   end
   if a.quests >= 10 then add(30, MT("questsDone", int(a.quests))) end
   tsort(ph, function(x, y)
@@ -1455,7 +1462,7 @@ local function buildMarkers(J)
   end
   for _, h in ipairs(J.hs) do
     local b = plain(h.bind)
-    put(marker(J, "hearth", h.t, h.map, h.x, h.y, levelAt(J, h.t), MT.hearthTitle, b and MT("hearthTo", b) or MT.hearthOwn))
+    put(marker(J, "hearth", h.t, h.map, h.x, h.y, levelAt(J, h.t), MT.hearthTitle, b and placeCall(MT, "hearthTo", { [1] = "point" }, b) or MT.hearthOwn))
   end
   for _, f in ipairs(J.fp) do
     local n = npcName(J, f.npc, f.name)
@@ -1513,7 +1520,7 @@ local function finishFlights(J)
     local title = MT.flight
     if tf then
       local from, to = plain(tf.from), plain(tf.to)
-      if from and to then title = MT("flightFromTo", from, to) end
+      if from and to then title = placeCall(MT, "flightFromTo", { [1] = "point", [2] = "point" }, from, to) end
     end
     f.zoneFrom, f.zoneTo = zoneOf(J, f.from.mapID), zoneOf(J, f.to.mapID)
     f.contFrom, f.contTo = continentOf(J, f.from.mapID), continentOf(J, f.to.mapID)

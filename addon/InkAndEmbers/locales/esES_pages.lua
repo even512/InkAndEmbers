@@ -16,6 +16,7 @@ L.add("esES", "p.Chronik", {
   toMates = "Compañeros", toMatesTip = "Ver compañeros", toMatesTip2 = "Quién viajó contigo",
   toProfile = "Perfil", toProfileTip = "Perfil, flujo de niveles y extracto del diario",
   toMilestones = "Hitos", toMilestonesTip = "Ver hitos", toMilestonesTip2 = "Cada diez niveles, un recuento del viaje; en el nivel 60, la página final",
+  toRecap = "Antes, en tu viaje", toRecapTip = "Ver el resumen", toRecapTip2 = "Lo que pasó últimamente y lo que viene después",
 })
 
 -- journal/pages/ChronikViews.lua
@@ -351,3 +352,25 @@ L.add("esES", "p.SchaetzeAuktion", {
   noPrice = "–",
 })
 
+-- journal/pages/ChronikRueckblick.lua
+L.add("esES", "p.ChronikRueckblick", {
+  page = "RESUMEN", brand = "INK & EMBERS", title = "Antes, en tu viaje", date = "{d}/{m}/{y}",
+  dateRange = "{from} – {to}", preview = "Vista previa", sessions_one = "%s sesión", sessions_other = "%s sesiones",
+  standHead = "Dónde estás", openHead = "Lo que sigue abierto", noteHead = "Al margen", standNone = "Todavía no hay nada anotado.",
+  openNone = "Ahora mismo no hay nada abierto.", pin = "Fijada: %s", progress = "%s (%s de %s)", picCaption = "%s",
+  picCaptionDate = "%s · %s", picTipHead = "La última ruta", picTipRange = "%s al %s", building = "La crónica todavía está ordenando. Vuelve a mirar en un momento.",
+  empty = "Todavía ha pasado muy poco para un resumen.", notReady = "El resumen aún no está listo.",
+  doneHead = "Completado hace poco",
+  quoted = "«%s»",
+  bestLine = "Mejor hallazgo: %s",
+  moreTip = "Todo lo pendiente",
+  picTipQuests_one = "%s misión entregada",
+  picTipQuests_other = "%s misiones entregadas",
+  picTipAccepts_one = "%s misión aceptada",
+  picTipAccepts_other = "%s misiones aceptadas",
+  openHere = "Por aquí",
+  openAway = "En otra parte",
+  clickTip = "Clic: mostrar en el registro de misiones",
+  questCombat = "El registro de misiones no se abre en combate. Inténtalo después.",
+  questFailed = "Ahora mismo no se puede abrir el registro de misiones.",
+})

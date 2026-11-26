@@ -16,6 +16,7 @@ L.add("itIT", "p.Chronik", {
   toMates = "Compagni", toMatesTip = "Guarda i compagni", toMatesTip2 = "Chi ha viaggiato con te",
   toProfile = "Profilo", toProfileTip = "Profilo, andamento dei livelli ed estratto del diario",
   toMilestones = "Tappe", toMilestonesTip = "Guarda le tappe", toMilestonesTip2 = "Ogni dieci livelli un bilancio del viaggio, al livello 60 la pagina finale",
+  toRecap = "Prima, nel tuo viaggio", toRecapTip = "Vedi il riepilogo", toRecapTip2 = "Cosa è successo di recente e cosa viene dopo",
 })
 
 -- journal/pages/ChronikViews.lua
@@ -351,3 +352,25 @@ L.add("itIT", "p.SchaetzeAuktion", {
   noPrice = "–",
 })
 
+-- journal/pages/ChronikRueckblick.lua
+L.add("itIT", "p.ChronikRueckblick", {
+  page = "RIEPILOGO", brand = "INK & EMBERS", title = "Prima, nel tuo viaggio", date = "{d}/{m}/{y}",
+  dateRange = "{from} – {to}", preview = "Anteprima", sessions_one = "%s sessione", sessions_other = "%s sessioni",
+  standHead = "A che punto sei", openHead = "Cosa è ancora aperto", noteHead = "A margine", standNone = "Ancora niente annotato.",
+  openNone = "Al momento non c'è nulla di aperto.", pin = "Fissata: %s", progress = "%s (%s su %s)", picCaption = "%s",
+  picCaptionDate = "%s · %s", picTipHead = "L'ultimo percorso", picTipRange = "%s al %s", building = "La cronaca sta ancora riordinando. Riguarda tra un attimo.",
+  empty = "È successo ancora troppo poco per un riepilogo.", notReady = "Il riepilogo non è ancora pronto.",
+  doneHead = "Completato di recente",
+  quoted = "«%s»",
+  bestLine = "Miglior ritrovamento: %s",
+  moreTip = "Tutto ciò che è aperto",
+  picTipQuests_one = "%s missione consegnata",
+  picTipQuests_other = "%s missioni consegnate",
+  picTipAccepts_one = "%s missione accettata",
+  picTipAccepts_other = "%s missioni accettate",
+  openHere = "Da queste parti",
+  openAway = "Altrove",
+  clickTip = "Clic: mostra nel registro missioni",
+  questCombat = "Il registro missioni non si apre in combattimento. Riprova dopo.",
+  questFailed = "Il registro missioni non si può aprire in questo momento.",
+})

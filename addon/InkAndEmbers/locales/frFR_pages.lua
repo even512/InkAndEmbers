@@ -16,6 +16,7 @@ L.add("frFR", "p.Chronik", {
   toMates = "Compagnons", toMatesTip = "Voir les compagnons", toMatesTip2 = "Qui a voyagé avec toi",
   toProfile = "Profil", toProfileTip = "Profil, déroulé des niveaux et extrait du journal",
   toMilestones = "Étapes", toMilestonesTip = "Voir les étapes", toMilestonesTip2 = "Tous les dix niveaux, un bilan du voyage, au niveau 60 la page finale",
+  toRecap = "Auparavant, dans ton voyage", toRecapTip = "Voir le récapitulatif", toRecapTip2 = "Ce qui s'est passé récemment et ce qui vient ensuite",
 })
 
 -- journal/pages/ChronikViews.lua
@@ -351,3 +352,25 @@ L.add("frFR", "p.SchaetzeAuktion", {
   noPrice = "–",
 })
 
+-- journal/pages/ChronikRueckblick.lua
+L.add("frFR", "p.ChronikRueckblick", {
+  page = "RÉCAPITULATIF", brand = "INK & EMBERS", title = "Auparavant, dans ton voyage", date = "{d}/{m}/{y}",
+  dateRange = "{from} – {to}", preview = "Aperçu", sessions_one = "%s session", sessions_other = "%s sessions",
+  standHead = "Où tu en es", openHead = "Ce qui est en cours", noteHead = "En marge", standNone = "Rien de noté pour l'instant.",
+  openNone = "Rien n'est en cours pour le moment.", pin = "Épinglée : %s", progress = "%s (%s sur %s)", picCaption = "%s",
+  picCaptionDate = "%s · %s", picTipHead = "Le dernier trajet", picTipRange = "%s au %s", building = "La chronique trie encore. Regarde de nouveau dans un instant.",
+  empty = "Il ne s'est pas encore passé assez de choses pour un récapitulatif.", notReady = "Le récapitulatif n'est pas encore prêt.",
+  doneHead = "Terminé récemment",
+  quoted = "« %s »",
+  bestLine = "Meilleure trouvaille : %s",
+  moreTip = "Tout ce qui reste ouvert",
+  picTipQuests_one = "%s quête rendue",
+  picTipQuests_other = "%s quêtes rendues",
+  picTipAccepts_one = "%s quête acceptée",
+  picTipAccepts_other = "%s quêtes acceptées",
+  openHere = "Dans les environs",
+  openAway = "Ailleurs",
+  clickTip = "Clic : afficher dans le journal de quêtes",
+  questCombat = "Le journal de quêtes ne s'ouvre pas en combat. Réessaie ensuite.",
+  questFailed = "Le journal de quêtes ne peut pas s'ouvrir pour le moment.",
+})

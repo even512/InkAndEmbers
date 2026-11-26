@@ -16,6 +16,7 @@ L.add("ruRU", "p.Chronik", {
   toMates = "Спутники", toMatesTip = "Смотреть спутников", toMatesTip2 = "Кто путешествовал с вами",
   toProfile = "Профиль", toProfileTip = "Профиль, ход уровней и отрывок из дневника",
   toMilestones = "Вехи", toMilestonesTip = "Смотреть вехи", toMilestonesTip2 = "Каждые десять уровней – итоги пути, на 60 уровне – последняя страница",
+  toRecap = "Ранее в вашем путешествии", toRecapTip = "Открыть сводку", toRecapTip2 = "Что было недавно и что впереди",
 })
 
 -- journal/pages/ChronikViews.lua
@@ -351,3 +352,25 @@ L.add("ruRU", "p.SchaetzeAuktion", {
   noPrice = "–",
 })
 
+-- journal/pages/ChronikRueckblick.lua
+L.add("ruRU", "p.ChronikRueckblick", {
+  page = "СВОДКА", brand = "INK & EMBERS", title = "Ранее в вашем путешествии", date = "{d}.{m}.{y}",
+  dateRange = "{from} – {to}", preview = "Предпросмотр", sessions_one = "%s сеанс", sessions_other = "сеансов: %s",
+  standHead = "Где вы сейчас", openHead = "Что ещё открыто", noteHead = "На полях", standNone = "Пока ничего не записано.",
+  openNone = "Сейчас ничего не открыто.", pin = "Закреплено: %s", progress = "%s (%s из %s)", picCaption = "%s",
+  picCaptionDate = "%s · %s", picTipHead = "Последний маршрут", picTipRange = "%s – %s", building = "Хроника ещё сортирует записи. Загляните чуть позже.",
+  empty = "Для сводки пока произошло слишком мало.", notReady = "Сводка ещё не готова.",
+  doneHead = "Недавно выполнено",
+  quoted = "«%s»",
+  bestLine = "Лучшая находка: %s",
+  moreTip = "Всё, что ещё открыто",
+  picTipQuests_one = "Сдано заданий: %s",
+  picTipQuests_other = "Сдано заданий: %s",
+  picTipAccepts_one = "Взято заданий: %s",
+  picTipAccepts_other = "Взято заданий: %s",
+  openHere = "Здесь, поблизости",
+  openAway = "В других местах",
+  clickTip = "Щелчок: показать в журнале заданий",
+  questCombat = "В бою журнал заданий не открывается. Попробуй позже.",
+  questFailed = "Журнал заданий сейчас не открыть.",
+})

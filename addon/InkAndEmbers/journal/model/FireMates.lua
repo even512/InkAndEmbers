@@ -322,6 +322,13 @@ function FireMates.who(round)
 end
 
 -- recognition: first person of the round already known from an earlier fire (zone of the last shared fire)
+-- text with place names: "in {zone}" gets preposition + article from the core Grammar (Grammar.lua)
+local function placeText(key, args, places)
+  local G = ns.Grammar
+  if G then return G.fmt(TX[key], args, places) end
+  return TX(key, args)
+end
+
 function FireMates.again(round, voice)
   if type(round) ~= "table" then return nil end
   for _, p in ipairs(round.people or {}) do
@@ -330,7 +337,7 @@ function FireMates.again(round, voice)
     if name then
       local zone = shown(past.lastZone, 40)
       local key = (voice == "ich" and "againMe" or "againYou") .. (zone and "Zone" or "")
-      return TX(key, { name = name, zone = zone })
+      return placeText(key, { name = name, zone = zone }, { zone = "zone" })
     end
   end
   return nil

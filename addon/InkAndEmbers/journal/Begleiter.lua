@@ -2,6 +2,10 @@
 -- journal/Toast.lua queue. Data comes from the core (ns.Welcome, ns.Rest, ns.Plans); this file only picks and words.
 -- All foreign text goes through Sanitize.display before SetText, numbers through format("%d"). The welcome greeting never
 -- shows on /reload or in combat; the recap only if ns.Rest.shouldShow allows it.
+-- Welcome-back (Begrüßung neu): the core decides WHAT (ns.Welcome.plan: tier none | note | recap, finished sentences, the late
+-- note); this file decides HOW: after a break of an hour up to three days a short note with one or two narrated sentences, after
+-- three days the book opens by itself on "Zuvor auf Eurer Reise" (journal/pages/ChronikRueckblick.lua) - quietly, only with a
+-- ready index, within AUTO_MAX seconds, never in combat/instance/tutorial (then the note "Lange nicht gesehen ..." with a click).
 local _, ns = ...
 
 local Journal = ns.Journal or {}
@@ -14,8 +18,13 @@ local floor, format = math.floor, string.format
 
 Begleiter.NAME_MAX = 40
 Begleiter.LINE_MAX = 90
+Begleiter.SENTENCE_MAX = 240 -- bytes of one narrated sentence of the note
 Begleiter.RETRY = 10
 Begleiter.TRIES = 3
+Begleiter.AUTO_MAX = 60      -- s: the book opens by itself only if the index is ready within this time (then the late note shows)
+Begleiter.AUTO_RETRY = 5     -- s between two looks at the index
+Begleiter.PENDING_MAX = 900  -- s: a greeting that waited longer (very long fight) is dropped
+Begleiter.REGEN_DELAY = 2    -- s after the end of a fight until a waiting greeting shows
 
 Begleiter.TEXT = ns.Locale.ns("Begleiter", {
   welcomePre = "Willkommen zurück, ",
@@ -26,20 +35,6 @@ Begleiter.TEXT = ns.Locale.ns("Begleiter", {
   firstLine1 = "Eure Reise beginnt hier.",
   firstLine2 = "Die Chronik schreibt ab jetzt mit.",
   firstLine3 = "Das Buch öffnet Ihr über den Knopf an der Minimap oder mit /chronik.",
-  lastSeenPre = "Zuletzt: ",
-  lastSeenSep = " · ",
-  lastSeenAgo = "Zuletzt gesehen %s",
-  openOne = "1 offene Quest",
-  openMany = "%d offene Quests",
-  rested = "Ruhebonus %d %%",
-  restedPlain = "Ruhebonus",
-  sep = " · ",
-  noQuests = "Keine offenen Quests",
-  nearbyPre = "To Do in der Nähe: ",
-  acceptedPre = "Zuletzt angenommen: „",
-  acceptedPost = "“",
-  tipTitle = "Offene Quests",
-  tipMore = "… und %d weitere",
   restHeadFire = "Am Lagerfeuer",
   restHeadInn = "Im Gasthaus",
   restHead = "Rast",
@@ -73,6 +68,10 @@ Begleiter.TEXT = ns.Locale.ns("Begleiter", {
   planNoneOpen = "Keine offenen To Dos mehr",
   welcomeUsage = "/chronik willkommen zeigt den Willkommen-Gruß als Vorschau.",
   welcomeNotReady = "Der Willkommen-Gruß ist noch nicht bereit.",
+  welcomeNothing = "Gerade gibt es nichts zu erzählen: Der Zettel erscheint nur, wenn es etwas zu sagen gibt.",
+  recapCombat = "Das Buch öffnet sich nicht im Kampf. Der Rückblick wartet.",
+  recapFail = "Der Rückblick lässt sich noch nicht öffnen. Gleich noch einmal versuchen.",
+  recapNotReady = "Der Rückblick ist noch nicht bereit.",
   restUsage = "/chronik rast zeigt den Rückblick als Vorschau.",
   welcomeOn = "Willkommen-Gruß eingeschaltet.",
   welcomeOff = "Willkommen-Gruß ausgeschaltet.",
@@ -111,24 +110,9 @@ function Begleiter.setWelcome(on) return setSetting("welcome", on) end
 -- the old names stay as aliases so nothing that still calls them breaks
 Begleiter.slipOn = Begleiter.welcomeOn
 Begleiter.setSlip = Begleiter.setWelcome
--- "Show after an absence of": seconds (0 = at every login, not on /reload); default 1 hour
-Begleiter.AFTER = { 0, 3600, 7200, 14400, 28800, 86400 }
-Begleiter.AFTER_DEFAULT = 3600
-function Begleiter.afterSeconds()
-  local P = Pages()
-  local v = P and type(P.setting) == "function" and P.setting("welcomeAfter") or nil
-  if type(v) ~= "number" then return Begleiter.AFTER_DEFAULT end
-  return v
-end
-function Begleiter.setAfter(seconds)
-  local P = Pages()
-  return P ~= nil and P.setSetting("welcomeAfter", seconds) or false
-end
--- info lines of the return note: seen (zone + how long ago), quests (open quests), rested (rested bonus), plan (to-do nearby / last accepted quest)
-Begleiter.INFOS = { "seen", "quests", "rested", "plan" }
-local INFO_KEY = { seen = "welcomeSeen", quests = "welcomeQuests", rested = "welcomeRested", plan = "welcomePlan" }
-function Begleiter.infoOn(info) return INFO_KEY[info] ~= nil and setting(INFO_KEY[info]) end
-function Begleiter.setInfo(info, on) return INFO_KEY[info] ~= nil and setSetting(INFO_KEY[info], on) end
+-- "Recap after a long break" (setting welcomeRecap, default on): off = after three days only the short note
+function Begleiter.recapOn() return setting("welcomeRecap") end
+function Begleiter.setRecap(on) return setSetting("welcomeRecap", on) end
 function Begleiter.restOn() return setting("restReview") end
 
 -- Narrator of the welcome card (portrait in the ring, Theme.NARRATORS): setting "narrator" = "own" (default, race of the
@@ -289,7 +273,56 @@ local function fitted(kind, prefix, name, suffix)
   return prefix .. name .. (suffix or "")
 end
 
-function Begleiter.welcomeItem(s)
+-- the two-line title of the note ("Willkommen zurück," / name): the name only via Sanitize.display
+local function greetTitle(s)
+  local T = Begleiter.TEXT
+  local nm = shown(s.name, Begleiter.NAME_MAX)
+  if not nm then return s.first and T.firstNoName or T.welcomeNoName end
+  local pre = s.first and T.firstPre or T.welcomePre
+  return (pre:gsub("%s+$", "")) .. "\n" .. nm .. T.namePost
+end
+
+-- core plan for a summary (ns.Welcome.plan, journal/model/Welcome.lua) or nil if the core does not offer it / fails
+function Begleiter.planFor(s, opts)
+  local W = ns.Welcome
+  if type(s) ~= "table" or not W or type(W.plan) ~= "function" then return nil end
+  local ok, plan = pcall(W.plan, s, opts)
+  if ok and type(plan) == "table" then return plan end
+  if not ok and ns.Core and ns.Core.coreError then ns.Core.coreError(plan) end
+  return nil
+end
+
+-- sentence variants of a note { sentences, variants } -> { { "s1 s2" }, { "s1" } } (fullest first; a variant is ONE line that the
+-- text field wraps like a paragraph); every sentence only via Sanitize.display. nil without any sentence.
+function Begleiter.noteVariants(note)
+  if type(note) ~= "table" then return nil end
+  local sources = {}
+  if type(note.variants) == "table" then
+    for _, v in ipairs(note.variants) do
+      if type(v) == "table" then sources[#sources + 1] = v end
+    end
+  end
+  if #sources == 0 and type(note.sentences) == "table" then sources[1] = note.sentences end
+  local out, seen = {}, {}
+  for _, v in ipairs(sources) do
+    local parts = {}
+    for _, sentence in ipairs(v) do
+      local t = shown(sentence, Begleiter.SENTENCE_MAX)
+      if t then parts[#parts + 1] = t end
+    end
+    local line = table.concat(parts, " ")
+    if line ~= "" and not seen[line] then
+      seen[line] = true
+      out[#out + 1] = { line }
+    end
+  end
+  if #out == 0 then return nil end
+  return out
+end
+
+-- Toast-queue card with the greeting text (first session: the three first-time lines; later: the sentences of the plan's note).
+-- The big card is not shown at a login any more (the greeting is the note); this stays for the card machinery and its tests.
+function Begleiter.welcomeItem(s, plan)
   if type(s) ~= "table" then return nil end
   local T = Begleiter.TEXT
   local name = shown(s.name, Begleiter.NAME_MAX)
@@ -302,53 +335,9 @@ function Begleiter.welcomeItem(s)
     return item
   end
   item.title = name and fitted("title", T.welcomePre, name, T.namePost) or T.welcomeNoName
-  -- the player picks which info lines show (options); a deselected part is left out, the order stays
-  local wantSeen, wantQuests = Begleiter.infoOn("seen"), Begleiter.infoOn("quests")
-  local wantRested, wantPlan = Begleiter.infoOn("rested"), Begleiter.infoOn("plan")
-  local zone = shown(s.lastZone)
-  local ago = Begleiter.agoShort(s.lastSeenAgo)
-  if wantSeen then
-    if zone and ago then
-      lines[#lines + 1] = fitted("line", T.lastSeenPre, zone, T.lastSeenSep .. ago)
-    elseif zone then
-      lines[#lines + 1] = fitted("line", T.lastSeenPre, zone, "")
-    elseif ago then
-      lines[#lines + 1] = format(T.lastSeenAgo, ago)
-    end
-  end
-  local q = type(s.openQuests) == "table" and s.openQuests or nil
-  local count = q and num(q.count) or 0
-  local parts = {}
-  if wantQuests and count >= 1 then
-    parts[#parts + 1] = floor(count) == 1 and T.openOne or format(T.openMany, floor(count))
-  end
-  local pct = num(s.restedPct)
-  if wantRested then
-    if pct and pct > 0 then
-      parts[#parts + 1] = format(T.rested, floor(pct))
-    elseif num(s.restedXP) and s.restedXP > 0 then
-      parts[#parts + 1] = T.restedPlain
-    end
-  end
-  if #parts > 0 then lines[#lines + 1] = table.concat(parts, T.sep) end
-  local near = type(s.vorhabenNearby) == "table" and s.vorhabenNearby or {}
-  local plan = wantPlan and #near > 0 and shown(near[1] and near[1].text, Begleiter.LINE_MAX) or nil
-  local accepted = wantPlan and q and shown(q.lastAccepted, Begleiter.LINE_MAX) or nil
-  if plan then
-    lines[#lines + 1] = fitted("line", T.nearbyPre, plan, "")
-  elseif accepted then
-    lines[#lines + 1] = fitted("line", T.acceptedPre, accepted, T.acceptedPost)
-  end
-  -- the "no open quests" placeholder only stands in for the quest info; with it deselected the greeting stands alone
-  if #lines == 0 and wantQuests then lines[1] = T.noQuests end
-  local names = {}
-  for i = 1, math.min(5, q and type(q.names) == "table" and #q.names or 0) do
-    local n = shown(q.names[i])
-    if n then names[#names + 1] = n end
-  end
-  if wantQuests and count >= 1 and #names > 0 then
-    item.tooltip = { title = T.tipTitle, lines = names, more = floor(count) > #names and format(T.tipMore, floor(count) - #names) or nil }
-  end
+  plan = plan or Begleiter.planFor(s)
+  local variants = plan and Begleiter.noteVariants(plan.note) or nil
+  if variants then lines[1] = variants[1][1] end
   return item
 end
 
@@ -388,6 +377,9 @@ function Begleiter.restItem(sum, kind)
   end
   local best = type(sum.loot) == "table" and sum.loot.best or nil
   local name = type(best) == "table" and shown(best.name, 50) or nil
+  -- the find in its quality colour (Widgets.linkItem: only the sanitized name, colour from the checked quality)
+  local Wd = Journal.Widgets
+  if name and Wd and Wd.linkItem then name = (Wd.linkItem(name, best.name, nil, best.quality)) end
   if name and #lines < Toast().CARD.maxLines then lines[#lines + 1] = format(T.restBest, name) end
   if #lines == 0 then lines[1] = T.restNothing end
   return item
@@ -437,7 +429,7 @@ function Begleiter.planItem(plan)
   local how = plan.how
   local need = tonumber(plan.need)
   if how == "place" then
-    lines[1] = zone and format(T.planPlaceIn, zone) or T.planPlace
+    lines[1] = zone and (ns.Grammar and ns.Grammar.format(T.planPlaceIn, { [1] = "zone" }, zone) or format(T.planPlaceIn, zone)) or T.planPlace
   elseif how == "kill" and need then
     lines[1] = need == 1 and T.planKillOne or format(T.planKill, floor(need))
   elseif how == "item" and need then
@@ -483,7 +475,7 @@ end
 -- Welcome-back note, "all of one piece": Media/WelcomeBack.tga (art/toast/welcome_back_v2.jpg: round wood-bronze frame with lantern and
 -- quill, parchment with red bookmark) IS the whole note. The narrator portrait (the main element, same narratorIcon() as the card) lies
 -- UNDER the frame, exactly in the frame's transparent circle. It glides in from the LEFT screen edge and back out. Only after a longer
--- break (more than the chosen absence, Begleiter.afterSeconds(), default 1 hour; "at once" = every login), 3 s after the area text has gone. Not on /reload (the login
+-- break (the core's plan ns.Welcome.plan: tier "note" from one hour on), 3 s after the area text has gone. Not on /reload (the login
 -- hook does not run there). On a character's very first session the same note greets with the first-time text ("Willkommen, <name>.").
 -- Its place, size and opacity come from the edit-mode element "slip" (Begleiter.slipSpot).
 -- Measures: texture crop 2584 x 1430 source px shown at w x h = 420 x 232 (scale 420 / 2584, measures in scripts/render-media.mjs ->
@@ -738,16 +730,6 @@ function Begleiter.slipShown()
   return slip.frame ~= nil and slip.frame:IsShown() and true or false
 end
 
--- is the break long enough? s.lastSeenAgo = seconds since the character's last session (nil: unknown -> no note). With the
--- choice "at once" (0) every real login qualifies (the login hook does not run on /reload).
-function Begleiter.slipDue(s)
-  if type(s) ~= "table" then return false end
-  local pause = Begleiter.afterSeconds()
-  if pause <= 0 then return true end
-  local ago = num(s.lastSeenAgo)
-  return ago ~= nil and ago > pause
-end
-
 local function inCombat()
   if type(InCombatLockdown) ~= "function" then return false end
   local ok, v = pcall(InCombatLockdown)
@@ -910,44 +892,241 @@ function Begleiter.runWaiting()
   end
 end
 
--- show the note now (force: also for the preview /chronik willkommen zettel). Waits in combat and tries again a few times.
-function Begleiter.showSlip(s, tries, force)
+local function print_(msg)
+  if ns.Core and ns.Core.print then ns.Core.print(msg) end
+end
+
+local function nowT()
+  if type(GetTime) == "function" then
+    local ok, t = pcall(GetTime)
+    if ok and num(t) then return t end
+  end
+  return 0
+end
+
+local function after(sec, fn)
+  if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+    C_Timer.After(sec, function()
+      local ok, err = pcall(fn)
+      if not ok and ns.Core and ns.Core.coreError then ns.Core.coreError(err) end
+    end)
+    return true
+  end
+  return false
+end
+
+-- true inside an instance or battleground (the call may answer a secret value: then it counts as "no")
+local function inInstance()
+  if type(IsInInstance) ~= "function" then return false end
+  local ok, v = pcall(IsInInstance)
+  return ok and not isSecret(v) and v == true
+end
+
+-- the recap view of the book exists (journal/pages/ChronikRueckblick.lua, journal/model/Recap.lua)
+function Begleiter.recapAvailable()
+  local page, R = Journal.ChronikPage, Journal.Recap
+  return page ~= nil and type(page.OpenRecap) == "function" and Journal.RecapView ~= nil and R ~= nil and type(R.get) == "function"
+end
+
+-- Opens the book on "Zuvor auf Eurer Reise" (the click on the note, /chronik rueckblick, the automatic opening). Like
+-- Meilenstein.openBook: in combat the book stays shut (chat hint unless opts.silent) and the note stays. opts: silent (no chat
+-- text), recap (the recap to show), fresh (build the recap now, as the real recap of the long break), mark (remember it as shown),
+-- preview (the page builds a fresh preview instead of the last recap). -> true if the page is open
+function Begleiter.openRecap(opts)
+  opts = type(opts) == "table" and opts or {}
+  local T = Begleiter.TEXT
+  local function say(text) if not opts.silent then print_(text) end end
+  if inCombat() then
+    say(T.recapCombat)
+    return false
+  end
+  local page = Journal.ChronikPage
+  if not Begleiter.recapAvailable() then
+    say(T.recapNotReady)
+    return false
+  end
+  local recap = opts.recap
+  local R = Journal.Recap
+  if recap == nil and opts.fresh and R and type(R.get) == "function" then
+    local ok, r = pcall(R.get, {})
+    if ok and type(r) == "table" then recap = r end
+  end
+  local A, F, P = Journal.Access, Journal.Frame, Journal.Pages
+  local ok = pcall(function()
+    if P and type(P.guest) == "function" and P.guest() and type(P.setGuest) == "function" then P.setGuest(nil) end
+    if A and type(A.isOpen) == "function" and not A.isOpen() and type(A.open) == "function" then A.open() end
+  end)
+  local shown_ = ok and F and type(F.showPage) == "function" and F.showPage("chronik")
+  if shown_ then
+    local okOpen, err = pcall(page.OpenRecap, page, { recap = recap, preview = opts.preview })
+    if not okOpen and ns.Core and ns.Core.coreError then ns.Core.coreError(err) end
+  end
+  local view = page.recapView
+  if not (shown_ and view and page.sub == view and type(view.IsOpen) == "function" and view:IsOpen()) then
+    say(T.recapFail)
+    return false
+  end
+  if (opts.mark or opts.fresh) and recap and R and type(R.markShown) == "function" then
+    local okMark, err = pcall(R.markShown, recap)
+    if not okMark and ns.Core and ns.Core.coreError then ns.Core.coreError(err) end
+  end
+  return true
+end
+
+-- Draws the welcome note for a returning character. plan = ns.Welcome.plan(summary); late = the note "Lange nicht gesehen ..."
+-- (plan.lateNote) instead of the narrated sentences (plan.note). A click opens the recap page (when the book has it).
+-- force (preview /chronik willkommen): also without a plan (the title alone and a chat hint). -> true if shown
+local function returnNote(s, plan, late, force)
+  local variants, narrated
+  if type(plan) == "table" then
+    if late then
+      local text = shown(plan.lateNote, Begleiter.SENTENCE_MAX)
+      variants = text and { { text } } or nil
+    end
+    if not variants then
+      variants = Begleiter.noteVariants(plan.note)
+      narrated = variants ~= nil
+    end
+    if not variants and not late then
+      local text = shown(plan.lateNote, Begleiter.SENTENCE_MAX)
+      variants = force and text and { { text } } or nil
+    end
+  end
+  if not variants then
+    if not force then return false end
+    print_(Begleiter.TEXT.welcomeNothing)
+    variants = { {} }
+  end
+  local content = { kind = "welcome", title = greetTitle(s), variants = variants }
+  if Begleiter.recapAvailable() then
+    content.onClick = function() return Begleiter.openRecap({ fresh = late == true }) end
+  end
+  local ok = Begleiter.showNote(content)
+  -- a real (not previewed) note with narrated sentences counts for the reminder rhythm of the core ("Heute vor 14 Tagen ...")
+  local W = ns.Welcome
+  if ok and narrated and not force and type(W) == "table" and type(W.noteShown) == "function" then
+    local okCall, err = pcall(W.noteShown, plan)
+    if not okCall and ns.Core and ns.Core.coreError then ns.Core.coreError(err) end
+  end
+  return ok
+end
+
+-- show the note now (force: also for the preview /chronik willkommen). Waits in combat and tries again a few times (the first
+-- visit and the preview; the return of a character waits for the end of the fight, see runGreeting).
+function Begleiter.showSlip(s, tries, force, plan, late)
   local S = Begleiter.SLIP
   if type(s) ~= "table" then return false end
   if not force and not setting("welcome") then return false end
   if inCombat() then
     if (tries or 1) < S.tries and type(C_Timer) == "table" then
-      C_Timer.After(S.retry, function() Begleiter.showSlip(s, (tries or 1) + 1, force) end)
+      C_Timer.After(S.retry, function() Begleiter.showSlip(s, (tries or 1) + 1, force, plan, late) end)
     end
     return false
   end
+  if not s.first then return returnNote(s, plan or Begleiter.planFor(s, force and { force = true } or nil), late, force) end
+  -- the first visit: the three first-time lines; if they do not fit the parchment, the second one goes first, then the third
   local item = Begleiter.welcomeItem(s)
   if not item then return false end
-  -- title on two lines ("Willkommen zurück," / name)
-  local title = item.title or ""
-  local nm = shown(s.name, Begleiter.NAME_MAX)
-  if nm then
-    local pre = s.first and Begleiter.TEXT.firstPre or Begleiter.TEXT.welcomePre
-    title = (pre:gsub("%s+$", "")) .. "\n" .. nm .. Begleiter.TEXT.namePost
-  end
-  -- up to three lines (the first visit: the three first-time lines, the last one says how to open the book; the return: the info
-  -- lines the player picked); if they do not fit the parchment, the first visit drops the second line first, the return its last
   local lines = {}
-  for i = 1, math.min(s.first and S.maxLinesFirst or S.maxLines, #item.lines) do lines[#lines + 1] = item.lines[i] end
+  for i = 1, math.min(S.maxLinesFirst, #item.lines) do lines[#lines + 1] = item.lines[i] end
   local variants = {}
   while true do
     local copy = {}
     for i, l in ipairs(lines) do copy[i] = l end
     variants[#variants + 1] = copy
     if #lines <= 1 then break end
-    table.remove(lines, (s.first and #lines >= 3) and 2 or #lines)
+    table.remove(lines, #lines >= 3 and 2 or #lines)
   end
-  return Begleiter.showNote({ kind = "welcome", title = title, variants = variants })
+  return Begleiter.showNote({ kind = "welcome", title = greetTitle(s), variants = variants })
+end
+
+-- The returning greeting waits here until it may show (Begleiter.greeting = { summary, plan, at, combat, polling, deadline }).
+-- Combat: nothing shows, PLAYER_REGEN_ENABLED picks it up again (then as the late note when the book was to open).
+local greetingId = 0
+
+local function blocked()
+  if inCombat() or inInstance() then return true end
+  local Tu, A = Journal.Tutorial, Journal.Access
+  if Tu and type(Tu.isShown) == "function" and Tu.isShown() then return true end
+  return A ~= nil and type(A.isOpen) == "function" and A.isOpen() == true
+end
+
+local function finishGreeting(g, late)
+  if Begleiter.greeting == g then Begleiter.greeting = nil end
+  return returnNote(g.summary, g.plan, late, false)
+end
+
+local function pollRecap(g)
+  if Begleiter.greeting ~= g or not g.polling then return false end
+  if inCombat() then
+    g.combat, g.polling = true, false -- PLAYER_REGEN_ENABLED: the late note
+    return true
+  end
+  if blocked() then
+    g.polling = false
+    return finishGreeting(g, true)
+  end
+  local R = Journal.Recap
+  local ok, recap, why = pcall(R.get, {})
+  if not ok then
+    if ns.Core and ns.Core.coreError then ns.Core.coreError(recap) end
+    g.polling = false
+    return finishGreeting(g, false)
+  end
+  if type(recap) == "table" then
+    g.polling = false
+    Begleiter.greeting = nil
+    if Begleiter.openRecap({ recap = recap, silent = true, mark = true }) then return true end
+    return returnNote(g.summary, g.plan, true, false)
+  end
+  if why == "baut" or why == "keine-daten" then
+    if g.timer then return true end -- one chain of looks at a time (onReady may call in as well)
+    if nowT() < g.deadline and after(Begleiter.AUTO_RETRY, function() g.timer = false pollRecap(g) end) then
+      g.timer = true
+      return true
+    end
+    g.polling = false
+    return finishGreeting(g, true) -- the index is not ready in time: the note, the click opens the recap later
+  end
+  g.polling = false -- "leer" / "kein-charakter": nothing to look back on: the short note if there is one
+  return finishGreeting(g, false)
+end
+
+local function autoRecap(g)
+  g.polling, g.deadline = true, nowT() + Begleiter.AUTO_MAX
+  local R = Journal.Recap
+  local called = false
+  if type(R.onReady) == "function" then pcall(R.onReady, function() called = true pollRecap(g) end) end
+  if called then return true end -- the core answered at once (index ready): that look was the first one
+  return pollRecap(g)
+end
+
+-- the greeting is due: note or (long break) the book on the recap page. true = shown, started or still waiting
+function Begleiter.runGreeting()
+  local g = Begleiter.greeting
+  if not g then return false end
+  if not setting("welcome") or nowT() - g.at > Begleiter.PENDING_MAX then
+    Begleiter.greeting = nil
+    return false
+  end
+  if g.polling then return true end
+  if inCombat() then
+    g.combat = true
+    return true
+  end
+  -- another note on screen (e.g. a milestone): behind it
+  if Begleiter.slipKind() and Begleiter.afterSlip(function() Begleiter.runGreeting() end, { note = true, key = "greeting" }) then
+    return true
+  end
+  local wantRecap = type(g.plan) == "table" and g.plan.tier == "recap" and Begleiter.recapOn() and Begleiter.recapAvailable()
+  if wantRecap and not g.combat and not blocked() then return autoRecap(g) end
+  return finishGreeting(g, wantRecap and true or false)
 end
 
 -- First login of the account: only the introduction (journal/Tutorial.lua); no card, no area pop-up while it is open.
--- Every later login: the note with the first-time text for a character's first session, otherwise the welcome-back note after a
--- long break. The big welcome card is gone (it only remains for the campfire recap, key "rest:").
+-- Every later login: the note with the first-time text for a character's first session, otherwise - after a break of an hour or
+-- more and only if the core has something to say (ns.Welcome.plan) - the short note or, after three days, the recap in the book.
+-- The big welcome card is gone (it only remains for the campfire recap, key "rest:").
 function Begleiter.onWelcome(summary)
   handled = true
   local Tu = Journal.Tutorial
@@ -962,14 +1141,20 @@ function Begleiter.onWelcome(summary)
     return true
   end
   if not setting("welcome") then return false end
-  -- one switch covers both: the first greeting of a character and the return after the chosen absence
-  local firstSession = type(summary) == "table" and summary.first == true
-  if not firstSession and not Begleiter.slipDue(summary) then return false end
-  if type(C_Timer) == "table" then
-    C_Timer.After(Begleiter.SLIP.delay, function() Begleiter.showSlip(summary, 1) end)
-    return true
+  -- one switch covers both: the first greeting of a character and the return
+  if type(summary) == "table" and summary.first == true then
+    if type(C_Timer) == "table" then
+      C_Timer.After(Begleiter.SLIP.delay, function() Begleiter.showSlip(summary, 1) end)
+      return true
+    end
+    return Begleiter.showSlip(summary, 1)
   end
-  return Begleiter.showSlip(summary, 1)
+  local plan = Begleiter.planFor(summary)
+  if not plan or (plan.tier ~= "note" and plan.tier ~= "recap") then return false end
+  greetingId = greetingId + 1
+  Begleiter.greeting = { id = greetingId, summary = summary, plan = plan, at = nowT() }
+  if after(Begleiter.SLIP.delay, function() Begleiter.runGreeting() end) then return true end
+  return Begleiter.runGreeting()
 end
 
 -- recap; the index may still be building right after login: retry a few times
@@ -1013,12 +1198,15 @@ end
 function Begleiter.slash(cmd, rest)
   local print_ = ns.Core and ns.Core.print or function() end
   local T = Begleiter.TEXT
-  if cmd == "willkommen" then
+  if cmd == "rueckblick" then
+    Begleiter.openRecap({ preview = true })
+    return true
+  elseif cmd == "willkommen" then
     if not ns.Welcome or type(ns.Welcome.summary) ~= "function" then
       print_(T.welcomeNotReady)
       return true
     end
-    -- the big welcome card no longer exists: the preview always shows the note ("zettel" / "note" stay as an optional word)
+    -- the big welcome card no longer exists: the preview always shows the note (with the current sentences of the core)
     Begleiter.showSlip(ns.Welcome.summary(), 1, true)
     return true
   elseif cmd == "rast" then
@@ -1050,3 +1238,10 @@ end
 if type(ns.onLoginWelcome) == "function" then ns.onLoginWelcome(safeHook(Begleiter.onWelcome)) end
 if type(ns.onRestStart) == "function" then ns.onRestStart(safeHook(Begleiter.onRest)) end
 if type(ns.onPlanDone) == "function" then ns.onPlanDone(safeHook(Begleiter.onPlanDone)) end
+-- a greeting that waited for the end of a fight shows now (as the late note when the book was to open)
+if ns.Core and type(ns.Core.on) == "function" then
+  ns.Core.on("PLAYER_REGEN_ENABLED", function()
+    local g = Begleiter.greeting
+    if g and g.combat then after(Begleiter.REGEN_DELAY, function() Begleiter.runGreeting() end) end
+  end)
+end

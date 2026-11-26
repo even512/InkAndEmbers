@@ -201,6 +201,158 @@ function Widgets.hideTip(owner)
   if tt and tt.GetOwner and tt:GetOwner() == owner then tt:Hide() end
 end
 
+-- Item links (change "Rückblick aussagekräftiger", R2.4): an item in its quality colour with the original game tooltip on hover.
+--   Widgets.itemString(v) -> "item:..." | nil      v = item string, chat link ("|Hitem:...|h"), storage key ("123.s5") or itemID
+--   Widgets.itemQuality(link, quality) -> 0..8 | nil   the given quality, else the client's (C_Item / GetItemInfo, secret-safe)
+--   Widgets.itemMarkup(name, link, quality) -> text | nil   sanitized name in the paper colour of its quality; with a link as a
+--     hyperlink ("|Hitem:..|h<name>|h") that a frame with Widgets.enableItemLinks shows as the item tooltip on hover
+--   Widgets.linkItem(text, name, link, quality) -> text, found   the first occurrence of the (display) name in an already
+--     sanitized display text becomes the markup
+--   Widgets.enableItemLinks(frame)   hyperlinks of the frame's FontStrings: OnHyperlinkEnter -> item tooltip, OnHyperlinkLeave -> hide
+--   Widgets.NewItemLink(parent, opts) -> obj   a single item line (Button + FontString): obj:Set(item) / obj:Clear();
+--     item = { name, link | key | itemID, quality }; OnEnter -> item tooltip (fallback: the name), OnLeave -> hide
+local ITEM_LINK = "^item:%d+[%d:%-]*$"
+
+local function plainNum(v)
+  if type(v) ~= "number" or v ~= v or v == math.huge or v == -math.huge then return nil end
+  if type(issecretvalue) == "function" and issecretvalue(v) == true then return nil end
+  return v
+end
+
+local function secret(v) return type(issecretvalue) == "function" and issecretvalue(v) == true end
+
+function Widgets.itemString(v)
+  if v == nil or secret(v) then return nil end
+  local Tx = Journal.Texts
+  if type(v) == "number" then
+    return Tx and type(Tx.itemString) == "function" and Tx.itemString(v) or nil
+  end
+  if type(v) ~= "string" or #v > 400 then return nil end
+  local inner = string.match(v, "|H(item:[%d:%-]+)|h")
+  if inner then v = inner end
+  if #v <= 300 and string.find(v, ITEM_LINK) then return v end
+  if Tx and type(Tx.itemString) == "function" then
+    local ok, s = pcall(Tx.itemString, v)
+    if ok and type(s) == "string" and string.find(s, ITEM_LINK) then return s end
+  end
+  return nil
+end
+
+function Widgets.itemQuality(link, quality)
+  local q = plainNum(tonumber(quality))
+  if q and q >= 0 and q <= 8 then return math.floor(q) end
+  local id = type(link) == "string" and tonumber(string.match(link, "^item:(%d+)")) or nil
+  if not id then return nil end
+  local function try(fn, pick)
+    if type(fn) ~= "function" then return nil end
+    local res = { pcall(fn, id) }
+    if not res[1] then return nil end
+    local v = plainNum(res[pick + 1])
+    if v and v >= 0 and v <= 8 then return math.floor(v) end
+    return nil
+  end
+  local CI = rawget(_G, "C_Item")
+  return (type(CI) == "table" and try(CI.GetItemQualityByID, 1)) or try(rawget(_G, "GetItemInfo"), 3)
+end
+
+local function qualityHex(q)
+  local F = Journal.Fmt
+  local h = q and F and type(F.qualityHex) == "function" and F.qualityHex(q) or nil
+  if type(h) == "string" and string.match(h, "^%x%x%x%x%x%x$") then return h end
+  return nil
+end
+
+function Widgets.itemMarkup(name, link, quality)
+  local S = ns.Sanitize
+  local shown = S and S.display(name, 80) or nil
+  if not shown then return nil end
+  link = Widgets.itemString(link)
+  local text = shown
+  if link then text = "|H" .. link .. "|h" .. shown .. "|h" end
+  local hex = qualityHex(Widgets.itemQuality(link, quality))
+  if hex then text = "|cff" .. hex .. text .. "|r" end
+  return text
+end
+
+function Widgets.linkItem(text, name, link, quality)
+  if type(text) ~= "string" or text == "" then return text, false end
+  local S = ns.Sanitize
+  local shown = S and S.display(name, 80) or nil
+  if not shown or (not Widgets.itemString(link) and not Widgets.itemQuality(nil, quality)) then return text, false end
+  local a, b = string.find(text, shown, 1, true)
+  if not a then return text, false end
+  local mark = Widgets.itemMarkup(name, link, quality)
+  if not mark then return text, false end
+  return string.sub(text, 1, a - 1) .. mark .. string.sub(text, b + 1), true
+end
+
+function Widgets.enableItemLinks(frame)
+  if not frame or type(frame.SetScript) ~= "function" then return false end
+  if frame.SetHyperlinksEnabled then pcall(frame.SetHyperlinksEnabled, frame, true) end
+  frame:SetScript("OnHyperlinkEnter", function(f, link)
+    local s = Widgets.itemString(link)
+    if s then Widgets.itemTip(f, s) end
+  end)
+  frame:SetScript("OnHyperlinkLeave", function(f) Widgets.hideTip(f) end)
+  return true
+end
+
+local ItemLink = {}
+ItemLink.__index = ItemLink
+
+function Widgets.NewItemLink(parent, opts)
+  opts = type(opts) == "table" and opts or {}
+  local b = CreateFrame("Button", nil, parent)
+  local w, h = tonumber(opts.width) or 200, tonumber(opts.height) or 18
+  b:SetSize(w, h)
+  local fs = Widgets.font(b, opts.font or "text", opts.size or 13, opts.color or "ink")
+  fs:SetPoint("LEFT", b, "LEFT", 0, 0)
+  fs:SetJustifyH("LEFT")
+  fs:SetWordWrap(false)
+  local self = setmetatable({ frame = b, text = fs, width = w, prefix = opts.prefix }, ItemLink)
+  b:SetScript("OnEnter", function(x)
+    local item = self.item
+    if not item then return end
+    if not (item.link and Widgets.itemTip(x, item.link)) and item.plain then Widgets.tip(x, { item.plain }) end
+  end)
+  b:SetScript("OnLeave", function(x) Widgets.hideTip(x) end)
+  b:Hide()
+  return self
+end
+
+-- item = { name, link | key | itemID, quality }; prefix (opts.prefix, finished text "Bester Fund: %s") stands before it. -> shown
+function ItemLink:Set(item)
+  self.item = nil
+  if type(item) ~= "table" then return self:Clear() end
+  local link = Widgets.itemString(item.link or item.key or item.itemID)
+  local S = ns.Sanitize
+  local plain = S and S.display(item.name, 80) or nil
+  if not plain then return self:Clear() end
+  local q = Widgets.itemQuality(link, item.quality)
+  local hex = qualityHex(q)
+  local text = hex and ("|cff" .. hex .. plain .. "|r") or plain
+  if type(self.prefix) == "string" then text = Journal.Widgets.prefixed(self.prefix, text) end
+  self.item = { link = link, plain = plain }
+  self.text:SetText(text)
+  Widgets.fitLine(self.text, self.width, 10)
+  self.frame:Show()
+  return true
+end
+
+function ItemLink:Clear()
+  self.item = nil
+  self.text:SetText("")
+  Widgets.hideTip(self.frame)
+  self.frame:Hide()
+  return false
+end
+
+-- "Bester Fund: %s" with an already finished (coloured) part; a broken format string keeps the part alone
+function Widgets.prefixed(fmt, part)
+  local ok, s = pcall(string.format, fmt, part)
+  return ok and s or part
+end
+
 -- width/height with fallback: before the first layout the client returns 0
 function Widgets.size(frame, w, h)
   local fw = frame.GetWidth and frame:GetWidth()

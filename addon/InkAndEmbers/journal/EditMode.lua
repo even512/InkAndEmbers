@@ -67,7 +67,7 @@ EditMode.TEXT = ns.Locale.ns("EditMode", {
   cardLines = { "2 Std. unterwegs, 5 km", "12 Kills · 3 Quests abgegeben" },
   slipTitle = "Willkommen zurück,",
   slipName = "Reisende.",
-  slipLines = { "Zuletzt: Tirisfal · vor 9 Std.", "3 offene Quests · Ruhebonus 40 %" },
+  slipLines = { "Ihr habt in Tirisfal aufgehört, mitten in der Jagd auf Skelette.", "Als Nächstes wartet die angepinnte Quest." },
   todoSamples = {
     { kind = "item", text = "Hasenpfoten sammeln", extra = "4/10" },
     { kind = "place", text = "Den Leuchtturm besuchen", extra = "120 m" },

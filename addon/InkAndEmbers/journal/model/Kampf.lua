@@ -6,6 +6,13 @@
 -- never go out raw.
 local _, ns = ...
 
+-- Locale call with place names (core Grammar.lua): "in %s" -> "im Brachland" / "in the Barrens"
+local function placeCall(TT, key, places, ...)
+  local G = ns.Grammar
+  if G then return G.call(TT, key, places, ...) end
+  return TT(key, ...)
+end
+
 local Journal = ns.Journal or {}
 ns.Journal = Journal
 
@@ -92,7 +99,7 @@ local TEXT = Loc.ns("m.Kampf", {
   deaths_other = "%s Tode",
   ghost = "im Schnitt %s bis zurück ins Leben",
   fightVs = "Kampf gegen %s Gegner",
-  fightAt = "Kampf bei %s, Tag %s",
+  fightAt = "Kampf in %s, Tag %s",
   fightAtUnknown = "Kampf bei unbekanntem Ort, Tag %s",
   hpEnd = "Leben am Kampfende %s %%",
   hpEndUnknown = "Leben am Kampfende nicht lesbar",
@@ -364,9 +371,9 @@ local function huntedItem(st, mapID, here, id, e, n)
     parts[#parts + 1] = zone
   end
   if levels then parts[#parts + 1] = levels end
-  local tip = { name, here and TEXT("huntedTipIn", STAMP_WORD[stamp], int(n), here) or TEXT("huntedTip", STAMP_WORD[stamp], int(n)) }
+  local tip = { name, here and placeCall(TEXT, "huntedTipIn", { [3] = "zone" }, STAMP_WORD[stamp], int(n), here) or TEXT("huntedTip", STAMP_WORD[stamp], int(n)) }
   if mapID and n ~= e.n then tip[#tip + 1] = TEXT("huntedTotal", int(e.n)) end
-  if zone and not mapID then tip[#tip + 1] = TEXT("huntedMostly", zone) end
+  if zone and not mapID then tip[#tip + 1] = placeCall(TEXT, "huntedMostly", { [1] = "zone" }, zone) end
   if levels then tip[#tip + 1] = levels end
   if (e.group or 0) > 0 then tip[#tip + 1] = TEXT("huntedGroup", int(e.group)) end
   return { id = id, name = name, zone = zone, levels = levels, meta = table.concat(parts, " · "), count = n,
@@ -620,7 +627,7 @@ local function buildClose(index, st, onlyMap)
       if kn and kn > 1 then
         name = TEXT("fightVs", int(kn)) .. (where and (" · " .. where) or "")
       elseif where then
-        name = TEXT("fightAt", where, int(Idx.dayOf(index, r.t)))
+        name = placeCall(TEXT, "fightAt", { [1] = "zone" }, where, int(Idx.dayOf(index, r.t)))
       else
         name = TEXT("fightAtUnknown", int(Idx.dayOf(index, r.t)))
       end
@@ -678,7 +685,7 @@ local function buildZoneView(index, st, mapID)
   local zv = { mapID = mapID }
   local name = zoneName(st, mapID)
   zv.summary = { total = total, totalText = int(total), label = TEXT.killsHere,
-    tip = { TEXT("zoneTip", name, int(total)), TEXT.tipAll } }
+    tip = { placeCall(TEXT, "zoneTip", { [1] = "zone" }, name, int(total)), TEXT.tipAll } }
   zv.tally = Kampf.tally(total)
   zv.stamps = buildStamps({ stamp = by, group = 0 })
   zv.rare = buildRare(index, st, kills, mapID)

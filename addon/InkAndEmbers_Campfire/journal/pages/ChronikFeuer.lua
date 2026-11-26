@@ -3,6 +3,13 @@
 -- Journal.ChronikViewsKit (core). All foreign text goes through Sanitize.display. No ticker, no OnUpdate; frames are built on first open.
 local _, ns = ...
 
+-- Locale call with place names (core Grammar.lua): "in %s" -> "im Brachland" / "in the Barrens"
+local function placeCall(TT, key, places, ...)
+  local G = ns.Grammar
+  if G then return G.call(TT, key, places, ...) end
+  return TT(key, ...)
+end
+
 local Journal = ns.Journal
 local W, Pages = Journal and Journal.Widgets, Journal and Journal.Pages
 local D = W and W.Diary
@@ -112,7 +119,7 @@ function Fire:Lines(p)
       level = levelOf(p),
       kind = Fire.kindText(p),
       fires = Fire.fireCount(p.n),
-      last = (lz and T("liveIn", lz) or T.live) .. (p.liveSim and T.probe or ""),
+      last = (lz and placeCall(T, "liveIn", { [1] = "zone" }, lz) or T.live) .. (p.liveSim and T.probe or ""),
       lastZone = lz,
       lastText = T.live .. (p.liveSim and T.probe or ""),
     }
@@ -124,7 +131,7 @@ function Fire:Lines(p)
     level = levelOf(p),
     kind = Fire.kindText(p),
     fires = Fire.fireCount(p.n),
-    last = (zone and Fire.TEXT("lastIn", zone, self:DateText(p.lastT)) or Fire.TEXT("lastAt", self:DateText(p.lastT))) .. probe,
+    last = (zone and placeCall(Fire.TEXT, "lastIn", { [1] = "zone" }, zone, self:DateText(p.lastT)) or Fire.TEXT("lastAt", self:DateText(p.lastT))) .. probe,
     lastZone = zone,
     lastText = self:DateText(p.lastT) .. (zone and (", " .. zone) or "") .. probe,
   }

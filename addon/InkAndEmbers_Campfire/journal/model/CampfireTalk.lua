@@ -85,17 +85,33 @@ end
 
 -- fill placeholders. vars1/vars2: name -> text tables; nil if one is missing. Replacement via function:
 -- "%" in the replacement has no special meaning and replaced text is not evaluated again.
+-- placeholders that hold place names: "in {zone}" -> "im Brachland" / "in the Barrens" (core Grammar.fill)
+CampfireTalk.PLACES = { zone = "zone", neuzone = "zone", todort = "zone", altzone = "zone", unterzone = "zone" }
+
 function CampfireTalk.fill(template, vars1, vars2)
   if type(template) ~= "string" then return nil end
   local missing = false
-  local out = gsub(template, "{(%a+)}", function(k)
+  local function value(k)
     local v = (vars1 and vars1[k]) or (vars2 and vars2[k])
     if type(v) ~= "string" or isSecret(v) then
       missing = true
       return ""
     end
     return v
-  end)
+  end
+  local out
+  local Grammar = ns.Grammar
+  if Grammar then
+    out = Grammar.fill(template, function(k, eq)
+      if eq then
+        missing = true
+        return ""
+      end
+      return value(k)
+    end, CampfireTalk.PLACES)
+  else
+    out = gsub(template, "{(%a+)}", value)
+  end
   if missing then return nil end
   return out
 end
@@ -515,6 +531,43 @@ local function sessionZone(session, index)
   return nil
 end
 
+-- capitals and big towns (uiMapIDs, Classic/Forever and Retail): "the nearest town" makes no sense there
+CampfireTalk.CITY_MAPS = {
+  [1453] = true, [1455] = true, [1457] = true, [1454] = true, [1456] = true, [1458] = true, -- Classic: SW, IF, Darn, Org, TB, UC
+  [84] = true, [87] = true, [89] = true, [85] = true, [88] = true, [90] = true, [103] = true, [110] = true, -- Retail capitals
+  [111] = true, [125] = true, [627] = true, [1161] = true, [1165] = true, [2112] = true, [2339] = true, -- Shattrath, Dalaran, ...
+}
+
+local function flagCall(fn)
+  if type(fn) ~= "function" then return nil end
+  local ok, v = pcall(fn)
+  if not ok or isSecret(v) then return nil end
+  return v
+end
+
+-- where the fire burns: town (capital list, also via the main zone), resting area, instance; opts.where overrides (tests)
+local function whereOf(session, opts)
+  if type(opts.where) == "table" then return opts.where end
+  local w = {}
+  local map = session and finite(session.mapID) and session.mapID or nil
+  if not map and type(C_Map) == "table" and type(C_Map.GetBestMapForUnit) == "function" then
+    local ok, id = pcall(C_Map.GetBestMapForUnit, "player")
+    if ok and finite(id) then map = id end
+  end
+  if map then
+    w.city = CampfireTalk.CITY_MAPS[map] == true
+    local Geo = Journal.Geo
+    if not w.city and Geo and type(Geo.mainZoneOf) == "function" then
+      local ok, z = pcall(Geo.mainZoneOf, map)
+      if ok and finite(z) and CampfireTalk.CITY_MAPS[z] then w.city = true end
+    end
+  end
+  w.rest = flagCall(IsResting) == true
+  w.instance = flagCall(IsInInstance) == true
+  return w
+end
+CampfireTalk.whereOf = whereOf
+
 local function chooseForm(address, rnd)
   if address == "ihr" then return "ihr" end
   if address == "mix" then return rnd() < 0.5 and "du" or "ihr" end
@@ -571,6 +624,8 @@ function CampfireTalk.pick(session, index, state, opts)
     farewell = opts.farewell == true or (sinceStart ~= nil and sinceStart >= CampfireTalk.FAREWELL_AFTER),
     facts = facts,
   }
+  local where = whereOf(sess, opts)
+  ctx.city, ctx.rest, ctx.instance = where.city == true, where.rest == true, where.instance == true
 
   -- shared placeholders (foreign texts already checked)
   local zone = sessionZone(sess, index)

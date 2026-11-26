@@ -434,6 +434,26 @@ function Meilensteine.find(res, key)
   return nil
 end
 
+-- Building blocks for the recap (model/Recap.lua): the counting rules of the sections for any window [t0, t1), exported instead of
+-- copied. -> { zonesNew, zoneNames, zoneNamesAll, quests, dungeons = { runs, bosses }, kills, killsExact, best }
+function Meilensteine.windowSummary(index, t0, t1)
+  if type(index) ~= "table" or not finite(t0) or not finite(t1) or t1 <= t0 then return nil end
+  local runs = {}
+  local D = Journal.Dungeons
+  if D and type(D.build) == "function" then
+    local ok, res = pcall(D.build, index)
+    if ok and type(res) == "table" and type(res.runs) == "table" then runs = res.runs end
+  end
+  local sec = {}
+  windowCounts(index, sec, t0, t1, runs)
+  sec.best = bestFind(index, t0, t1, { combat = inCombat() })
+  sec.runs = runs
+  return sec
+end
+
+-- raw name of a map (snapshots.maps, else the book's zone table); nil when unknown
+Meilensteine.mapNameOf = mapName
+
 -- tests: forget the cached results
 function Meilensteine.clear()
   for k in pairs(cache) do cache[k] = nil end

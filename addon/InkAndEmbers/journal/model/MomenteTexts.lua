@@ -24,7 +24,7 @@ add("moment", "mo_level_1", "Stufe {=level}. Die Reise ist noch lang.", kind("le
 add("moment", "mo_level_2", "Wieder ein Stück weiter: Stufe {=level}.", kind("level"))
 add("moment", "mo_level_3", "Der Ring füllt sich: Stufe {=level}.", kind("level"))
 add("moment", "mo_level_4", "Hier in {zone} wurde ich Stufe {=level}.", kind("level", function(c) return c.zone ~= nil end), 2)
-add("moment", "mo_level_5", "Stufe {=level} – und {zone} sieht schon anders aus.", kind("level", function(c) return c.zone ~= nil end))
+add("moment", "mo_level_5", "Stufe {=level} – und in {zone} sieht alles schon anders aus.", kind("level", function(c) return c.zone ~= nil end))
 add("moment", "mo_level_6", "Stufe {=level}! Das muss gefeiert werden.", kind("level", function(c) return c.milestone == true end), 3)
 add("moment", "mo_level_7", "Ein runder Meilenstein: Stufe {=level}.", kind("level", function(c) return c.milestone == true end), 3)
 
@@ -32,10 +32,10 @@ add("moment", "mo_death_1", "Der erste Tod – lehrreich, wenn auch unschön.", 
 add("moment", "mo_death_2", "Hier endete mein erster Lauf.", kind("first_death"))
 add("moment", "mo_death_3", "Lehrgeld gezahlt, in {zone}.", kind("first_death", function(c) return c.zone ~= nil end), 2)
 
-add("moment", "mo_kill_1", "Ein Seltener fiel: {npc}.", kind("kill", function(c) return c.npc ~= nil end), 2)
+add("moment", "mo_kill_1", "Ein seltener Gegner fiel: {npc}.", kind("kill", function(c) return c.npc ~= nil end), 2)
 add("moment", "mo_kill_2", "{npc} – nun nur noch eine Geschichte.", kind("kill", function(c) return c.npc ~= nil end))
 add("moment", "mo_kill_3", "Das war ein harter Brocken.", kind("kill"))
-add("moment", "mo_first_rare_1", "Mein erster Seltener: {npc}.", kind("first_rare", function(c) return c.npc ~= nil end), 2)
+add("moment", "mo_first_rare_1", "Mein erster seltener Gegner: {npc}.", kind("first_rare", function(c) return c.npc ~= nil end), 2)
 add("moment", "mo_first_rare_2", "Zum ersten Mal etwas Seltenes erlegt.", kind("first_rare"))
 add("moment", "mo_first_elite_1", "Der erste Elite-Gegner liegt am Boden.", kind("first_elite"))
 add("moment", "mo_first_boss_1", "Der erste Boss – und ich stehe noch.", kind("first_boss"))

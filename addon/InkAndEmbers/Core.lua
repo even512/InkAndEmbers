@@ -55,6 +55,7 @@ local T = ns.Locale.ns("Core", {
   helpSound = "/chronik ton - Ton der Einblendungen ein-/ausschalten",
   helpWelcome = "/chronik willkommen - Willkommen-Gruß als Vorschau zeigen",
   helpRest = "/chronik rast - Rückblick \"Seit der letzten Rast\" als Vorschau zeigen",
+  helpRueckblick = "/chronik rueckblick - Rückblick \"Zuvor auf Eurer Reise\" im Buch als Vorschau öffnen",
   helpMeter = "/chronik messer - Schadensanzeige automatisch einschalten: \"messer an\" oder \"messer aus\" (auch in den Einstellungen)",
   helpTodo = "/chronik todo - offene To Dos am Bildschirmrand ein-/ausblenden (\"todo reset\" setzt Lage und Größe zurück)",
   helpQuests = "/chronik quests an|aus - eigenen Quest-Tracker ein-/ausschalten, blendet Questie- und Blizzard-Tracker aus (nur WoW Forever); \"quests hinweis [fertig]\" zeigt zur Probe den Fortschritts-Hinweis am Griff",
@@ -291,7 +292,7 @@ _G.InkAndEmbers = API
 -- English command names -> the German ones the modules know (the German ones stay valid)
 local COMMAND_ALIASES = {
   options = "optionen", settings = "optionen", einstellungen = "optionen", config = "optionen",
-  welcome = "willkommen", rest = "rast", sound = "ton", meter = "messer", note = "notiz",
+  welcome = "willkommen", rest = "rast", recap = "rueckblick", ["rückblick"] = "rueckblick", sound = "ton", meter = "messer", note = "notiz",
   language = "sprache", lang = "sprache", save = "sichern", backup = "sicherung", campfire = "feuer", lagerfeuer = "feuer",
   open = "offene", quests = "offene", auras = "auren", buffs = "auren", coins = "muenzen", ["münzen"] = "muenzen",
   training = "lehrplan", trainer = "lehrplan", lehrer = "lehrplan", level = "stufe", milestone = "meilenstein",
@@ -1091,7 +1092,7 @@ end
 
 -- help lines in display order (empty texts are skipped)
 local HELP = {
-  "helpTitle", "helpToggle", "helpShort", "helpStatus", "helpOptions", "helpMinimap", "helpToast", "helpSound", "helpWelcome", "helpTutorial", "helpRest",
+  "helpTitle", "helpToggle", "helpShort", "helpStatus", "helpOptions", "helpMinimap", "helpToast", "helpSound", "helpWelcome", "helpTutorial", "helpRest", "helpRueckblick",
   "helpMeter", "helpTodo", "helpQuests", "helpNote", "helpOpen", "helpOpenTest", "helpTrain", "helpLevelSlip", "helpMilestone", "helpLanguage", "helpReset", "helpSave", "helpBackup", "helpHelp", "helpAliases", "helpDebug", "helpDiag",
   "helpDiagQuests", "helpCampfire", "helpSim", "helpAuras", "helpCoins",
 }
@@ -1617,7 +1618,7 @@ function Core.slash(msg)
     access.reset()
   elseif (cmd == "toast" or cmd == "zettel" or cmd == "ton") and toast then
     toast.slash(cmd, rest)
-  elseif (cmd == "willkommen" or cmd == "rast") and ns.Journal and ns.Journal.Begleiter then
+  elseif (cmd == "willkommen" or cmd == "rast" or cmd == "rueckblick") and ns.Journal and ns.Journal.Begleiter then
     ns.Journal.Begleiter.slash(cmd, rest)
   elseif cmd == "todo" and ns.Journal and ns.Journal.TodoTracker then
     ns.Journal.TodoTracker.slash(rest)

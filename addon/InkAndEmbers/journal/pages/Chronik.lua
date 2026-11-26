@@ -2,7 +2,8 @@
 -- (display-ready texts); only frames and layout here.
 -- The sub-views "Tagebuch", "Weggefährten" (with the switch "Gruppe | Am Feuer") and "Meilensteine" (pages/ChronikViews.lua,
 -- pages/ChronikMeilensteine.lua; Meilensteine only in WoW Forever) open via Page.subs (the dungeon runs moved to the tab Dungeons,
--- pages/Dungeons.lua, I12); the overview
+-- pages/Dungeons.lua, I12). The recap "Zuvor auf Eurer Reise" (pages/ChronikRueckblick.lua) has no bookmark: a button on the
+-- right page opens it (Page.OpenRecap); Esc / the profile bookmark lead back. The overview
 -- sits in its own holders (mainL/mainR), which get hidden. No ticker, no OnUpdate; frames are created in Build, pools
 -- are bounded.
 local _, ns = ...
@@ -75,6 +76,7 @@ Page.TEXT = ns.Locale.ns("p.Chronik", {
   toDiary = "Tagebuch", toDiaryTip = "Das Tagebuch lesen", toDiaryTip2 = "Jeder Spieltag als Eintrag, Tag für Tag",
   toMates = "Weggefährten", toMatesTip = "Weggefährten ansehen", toMatesTip2 = "Wer mit Euch gereist ist",
   toProfile = "Steckbrief", toProfileTip = "Steckbrief, Stufenfluss und Tagebuch-Auszug",
+  toRecap = "Zuvor auf Eurer Reise", toRecapTip = "Rückblick ansehen", toRecapTip2 = "Was zuletzt geschah und was als Nächstes ansteht",
   toMilestones = "Meilensteine", toMilestonesTip = "Meilensteine ansehen", toMilestonesTip2 = "Alle zehn Stufen eine Bilanz der Reise, bei Stufe 60 der Abschluss",
 })
 
@@ -396,6 +398,12 @@ local function buildRight(self, right)
   local lg = font(right, "label", SZ.xs, "sepia", "RIGHT")
   lg:SetPoint("TOPRIGHT", right, "TOPLEFT", SR.x + SR.w, -(top + FLOW_H + 24))
   u.legend = lg
+  -- entry to the recap (sub-view without a bookmark of its own): right of the section head, only in the own book
+  u.recapBtn = D.NewOpenLink(right, T.toRecap, function()
+    local ok, err = pcall(Page.OpenRecap, self)
+    if not ok then Pages.fail("chronik", err) end
+  end, { tip = function() return { T.toRecapTip, T.toRecapTip2 } end })
+  u.recapBtn:SetPoint("TOPRIGHT", right, "TOPLEFT", SR.x + SR.w, -(G.slots.title.y - 2))
 
   -- diary: section head with the day as text (u.diaryTitle is its font), paging pair to its right
   local diaryY = top + FLOW_H + 22 + 2 * G.line.text + 4
@@ -448,7 +456,14 @@ local function buildRight(self, right)
     fill = function(row, entry)
       row.entry = entry
       set(row.time, entry.clock)
-      set(row.label, Chronik.entryText(self.view, entry))
+      -- finds: the item name in its quality colour (the hover shows the original item tooltip)
+      local text = Chronik.entryText(self.view, entry)
+      local ctx = type(entry.ctx) == "table" and entry.ctx or nil
+      if ctx and ctx.kind == "loot" and type(text) == "string" and Widgets.linkItem then
+        local q = Widgets.itemQuality(ctx.link, ctx.quality) or (ctx.epic and 4) or nil
+        if q then text = (Widgets.linkItem(text, ctx.item, nil, q)) end
+      end
+      set(row.label, text)
     end,
     clear = function(row)
       row.entry = nil
@@ -789,6 +804,12 @@ function Page.OpenCompanions(self) openSub(self, "matesView", "CompanionsView") 
 function Page.OpenFire(self) openSub(self, "fireView", "FireMatesView") end -- inside "Weggefährten" (switch "Am Feuer")
 function Page.OpenMilestones(self) openSub(self, "milestonesView", "MilestonesView") end
 function Page.OpenVermaechtnis(self) openSub(self, "vermaechtnisView", "VermaechtnisView") end -- WoW Forever only (pages/ChronikVermaechtnis.lua)
+-- the recap "Zuvor auf Eurer Reise": want = { recap = the recap to show, preview = true } or nil (the view picks: last shown, else preview)
+function Page.OpenRecap(self, want)
+  self.recapWant = want
+  openSub(self, "recapView", "RecapView")
+  self.recapWant = nil
+end
 
 function Page:CloseSub()
   local was = self.sub
@@ -833,6 +854,11 @@ function Page:GetSub()
 end
 
 function Page:ShowSub(key)
+  -- the recap has no bookmark: GetSub() says "steckbrief" while it is open, so that key must still lead back (not a no-op)
+  if key == "steckbrief" and self.sub ~= nil and self.sub == self.recapView then
+    self:CloseSub()
+    return
+  end
   if key == self:GetSub() then return end
   if key == "tagebuch" then
     Page.OpenDiary(self)
@@ -851,6 +877,9 @@ function Page:Refresh(data)
   if not self.built then return end
   self.index, self.now = data.index, data.now
   self.guest = data.guest -- another character's book (read only) or nil
+  -- the recap is about the own character: not in another character's book
+  if self.guest and self.sub ~= nil and self.sub == self.recapView then self:CloseSub() end
+  if self.R.recapBtn then self.R.recapBtn:SetShown(not self.guest and Journal.RecapView ~= nil and Journal.Recap ~= nil) end
   if self.sub then self.sub:Refresh(data.index, data.now) end
   local view = Chronik.evaluate(data.index, { live = data.live, now = data.now })
   if not view then error("Chronik: keine Auswertung") end

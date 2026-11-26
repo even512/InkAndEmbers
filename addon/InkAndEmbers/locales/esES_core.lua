@@ -59,6 +59,7 @@ L.add("esES", "Core", {
   helpSound = "/chronik sound - activar/desactivar el sonido de los avisos",
   helpWelcome = "/chronik welcome - vista previa del saludo de bienvenida",
   helpRest = "/chronik rest - vista previa del resumen \"Desde tu último descanso\"",
+  helpRueckblick = "/chronik recap - abrir el resumen «Antes, en tu viaje» en el libro (vista previa)",
   helpMeter = "/chronik meter - activar el medidor de daño automáticamente: \"meter on\" o \"meter off\" (también en la configuración)",
   helpTodo = "/chronik todo - mostrar/ocultar las tareas pendientes al borde de la pantalla (\"todo reset\" restablece posición y tamaño)",
   helpQuests = "/chronik quests on|off - activar/desactivar el seguimiento de misiones propio; oculta los de Questie y Blizzard (solo WoW Forever); \"quests hint [done]\" muestra una vista previa del aviso de progreso en el tirador",

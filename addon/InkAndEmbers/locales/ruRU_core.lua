@@ -59,6 +59,7 @@ L.add("ruRU", "Core", {
   helpSound = "/chronik sound – включить/выключить звук уведомлений",
   helpWelcome = "/chronik welcome – предпросмотр приветствия",
   helpRest = "/chronik rest – предпросмотр сводки «С последнего привала»",
+  helpRueckblick = "/chronik recap – открыть сводку «Ранее в вашем путешествии» в книге (предпросмотр)",
   helpMeter = "/chronik meter – включать Счётчик урона автоматически: «meter on» или «meter off» (есть и в настройках)",
   helpTodo = "/chronik todo – показать/скрыть открытые дела у края экрана («todo reset» возвращает положение и размер)",
   helpQuests = "/chronik quests on|off – включить/выключить собственный журнал заданий, он скрывает трекеры Questie и Blizzard (только WoW Forever); «quests hint [done]» показывает подсказку о ходе выполнения у ручки",
